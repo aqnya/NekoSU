@@ -181,6 +181,19 @@ bool is_safe_mode() {
 
 bool has_magisk() { return !which("magisk").empty(); }
 
+void klog(const std::string &message) {
+  const int fd = ::open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
+  if (fd < 0)
+    return;
+
+  // /dev/kmsg expects each write() to carry one log record ending in a
+  // newline; the "ncore: " prefix keeps these greppable in dmesg output.
+  const std::string line = "ncore: " + message + "\n";
+  const ssize_t ignored = ::write(fd, line.data(), line.size());
+  (void)ignored;
+  ::close(fd);
+}
+
 void umask0() { ::umask(0); }
 
 void detach_process_group(bool use_init_pgrp) {

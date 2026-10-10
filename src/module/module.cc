@@ -246,20 +246,28 @@ void mark_all_modules(const std::string &flag) {
 void run_stage_internal(const std::string &stage, ScriptWait wait,
                         const Deadline &deadline) {
   utils::umask0();
+  utils::klog("stage start: " + stage);
 
   if (utils::has_magisk()) {
+    utils::klog("Magisk detected, skip stage: " + stage);
     std::cerr << "[module] Magisk detected, skip " << stage << std::endl;
     return;
   }
   if (utils::is_safe_mode()) {
+    utils::klog("safe mode, skip stage: " + stage);
     std::cerr << "[module] safe mode, skip " << stage << " scripts" << std::endl;
     return;
   }
 
+  utils::klog("stage " + stage + ": run common " + stage + ".d scripts");
   exec_common_scripts(stage + ".d", wait, deadline);
   // Metamodule stage scripts take priority over regular modules.
+  utils::klog("stage " + stage + ": run metamodule stage script");
   metamodule_exec_stage_script(stage, wait, deadline);
+  utils::klog("stage " + stage + ": run module stage scripts");
   exec_stage_script(stage, wait, deadline);
+
+  utils::klog("stage finished: " + stage);
 }
 
 } // namespace
@@ -615,9 +623,11 @@ static void ensure_ksu_dir_alias() {
 
 int on_post_fs_data() {
   utils::umask0();
+  utils::klog("post-fs-data stage start");
   ensure_ksu_dir_alias();
 
   if (utils::has_magisk()) {
+    utils::klog("Magisk detected, skip post-fs-data");
     std::cerr << "[module] Magisk detected, skip post-fs-data" << std::endl;
     return 0;
   }
@@ -628,56 +638,73 @@ int on_post_fs_data() {
                             std::chrono::seconds(defs::BOOT_STAGE_TIMEOUT_SEC);
 
   if (safe_mode) {
+    utils::klog("safe mode, skip common post-fs-data.d scripts");
     std::cerr << "[module] safe mode, skip common post-fs-data.d scripts"
               << std::endl;
   } else {
+    utils::klog("post-fs-data: run common post-fs-data.d scripts");
     exec_common_scripts("post-fs-data.d", wait, deadline);
   }
 
   if (safe_mode) {
+    utils::klog("safe mode, disable all modules");
     std::cerr << "[module] safe mode, disable all modules" << std::endl;
     disable_all_modules();
+    utils::klog("post-fs-data stage finished");
     return 0;
   }
 
+  utils::klog("post-fs-data: handle updated modules");
   handle_updated_modules();
+  utils::klog("post-fs-data: prune modules");
   prune_modules();
 
+  utils::klog("post-fs-data: regenerate preinit rc");
   if (!regenerate_preinit_rc())
     std::cerr << "[module] regenerate preinit rc failed" << std::endl;
 
   // Module SELinux rules must be live before any module script runs.
+  utils::klog("post-fs-data: load sepolicy rules");
   load_sepolicy_rule();
 
+  utils::klog("post-fs-data: run stage scripts");
   metamodule_exec_stage_script("post-fs-data", wait, deadline);
   exec_stage_script("post-fs-data", wait, deadline);
 
+  utils::klog("post-fs-data: load system prop");
   load_system_prop();
 
+  utils::klog("post-fs-data: metamodule mount");
   metamodule_exec_mount_script();
   run_stage_internal("post-mount", wait, deadline);
 
+  utils::klog("post-fs-data stage finished");
   ::chdir("/");
   return 0;
 }
 
 int on_services() {
+  utils::klog("service stage start");
   std::cout << "[module] on_services triggered" << std::endl;
   ensure_ksu_dir_alias();
   run_stage_internal("service", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
+  utils::klog("service stage finished");
   return 0;
 }
 
 int on_boot_completed() {
+  utils::klog("boot-completed stage start");
   std::cout << "[module] on_boot_completed triggered" << std::endl;
   ensure_ksu_dir_alias();
   run_stage_internal("boot-completed", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
+  utils::klog("boot-completed stage finished");
   return 0;
 }
 
 int run_stage(const std::string &stage) {
+  utils::klog("run stage (manual): " + stage);
   run_stage_internal(stage, ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
   return 0;

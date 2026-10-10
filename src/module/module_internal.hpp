@@ -88,6 +88,11 @@ bool is_safe_mode();
 bool has_magisk();
 std::string which(const std::string &name);
 
+// Write a single message to the kernel log (/dev/kmsg), prefixed with
+// "ncore: ". Best-effort: failures are ignored so host builds and restricted
+// kernels keep working without a kmsg device.
+void klog(const std::string &message);
+
 void umask0();
 void switch_cgroups();
 void detach_process_group(bool use_init_pgrp);
