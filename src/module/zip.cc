@@ -392,6 +392,11 @@ bool ZipArchive::read(const std::string &name, std::string &out,
 bool ZipArchive::extract_all(const std::string &dest_dir,
                              std::string *error) const {
   for (const Entry &entry : entries_) {
+    // installer.sh extracts with `-x 'META-INF/*'`; module packages do not keep
+    // their signing metadata in the installed directory.
+    if (entry.name.compare(0, 9, "META-INF/") == 0)
+      continue;
+
     std::vector<std::string> parts;
     if (!safe_components(entry.name, parts)) {
       set_error(error, "unsafe path in archive: " + entry.name);

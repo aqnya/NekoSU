@@ -1404,6 +1404,28 @@ bool copy_file(const std::string &from, const std::string &to) {
   return utils::read_file(from, data) && utils::write_file(to, data);
 }
 
+// Mirrors installer.sh's `grep -q '^SKIPUNZIP=1$' customize.sh`. A module that
+// declares it extracts its own payload with `unzip`, so the installer must not
+// pre-extract the whole archive: doing so leaves files that the module's own
+// extraction then trips over (for example a symlink it wants to create).
+bool declares_skipunzip(const std::string &customize) {
+  size_t start = 0;
+  while (start <= customize.size()) {
+    const size_t end = customize.find('\n', start);
+    std::string line =
+        customize.substr(start, end == std::string::npos ? std::string::npos
+                                                         : end - start);
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line == "SKIPUNZIP=1")
+      return true;
+    if (end == std::string::npos)
+      break;
+    start = end + 1;
+  }
+  return false;
+}
+
 // The legacy ARCH/ABI values installer.sh derives at runtime.
 struct ArchInfo {
   std::string arch;
@@ -1458,9 +1480,15 @@ std::string build_installer_script(const std::string &module_path,
   out << "export MODID MODNAME MODAUTH MAGISK_VER MAGISK_VER_CODE\n";
   out << "export API ABI ABI32 ARCH IS64BIT\n";
   out << kInstallerPrelude;
+  // A metainstall.sh is required by the metamodule contract to call
+  // install_module itself (KernelSU's installer.sh relies on this). Only run
+  // the default install when no metamodule hook overrides it, otherwise the
+  // module's customize.sh would run twice and fail on non-idempotent modules.
   if (!metainstall.empty())
     out << "\n" << metainstall << "\n";
-  out << "\ninstall_module\n";
+  else
+    out << "\ninstall_module\n";
+  out << "\nexit 0\n";
   return out.str();
 }
 
@@ -1546,11 +1574,31 @@ int install_module(const std::string &zip) {
     return 1;
   }
 
-  std::cout << "- Extracting module files" << std::endl;
-  if (!archive.extract_all(updated_dir, &error)) {
-    std::cerr << "[module] extraction failed: " << error << std::endl;
-    utils::remove_dir_all(updated_dir);
-    return 1;
+  // KernelSU's installer honours SKIPUNZIP=1 in customize.sh. Modules that set
+  // it (Zygisk Next, for example) extract their own payload, so pre-extracting
+  // the archive here would leave regular files where the module later expects
+  // to create symlinks. Only customize.sh itself is staged in that case.
+  std::string customize_content;
+  const bool has_customize =
+      archive.read("customize.sh", customize_content, nullptr);
+  const bool skip_unzip = has_customize && declares_skipunzip(customize_content);
+
+  if (has_customize) {
+    const std::string customize_path = utils::join(updated_dir, "customize.sh");
+    if (!utils::write_file(customize_path, customize_content)) {
+      std::cerr << "[module] failed to extract customize.sh" << std::endl;
+      utils::remove_dir_all(updated_dir);
+      return 1;
+    }
+  }
+
+  if (!skip_unzip) {
+    std::cout << "- Extracting module files" << std::endl;
+    if (!archive.extract_all(updated_dir, &error)) {
+      std::cerr << "[module] extraction failed: " << error << std::endl;
+      utils::remove_dir_all(updated_dir);
+      return 1;
+    }
   }
 
   const std::string module_system = utils::join(updated_dir, "system");
