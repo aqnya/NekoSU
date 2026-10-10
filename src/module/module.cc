@@ -1176,9 +1176,13 @@ int install() {
   if (::chmod(target.c_str(), 0755) != 0)
     std::cerr << "[module] chmod failed: " << std::strerror(errno) << std::endl;
 
-  // Best effort SELinux label so init can exec it. nksu's domain is
-  // unconfined, so a failure here is cosmetic.
-  const char con[] = "u:object_r:system_file:s0";
+  // Label the daemon as nksu_file. The kernel-injected init.rc execs this
+  // binary as `u:r:nksu:s0`, and the nksu policy only grants file access
+  // through `u:object_r:nksu_file:s0` (init -> nksu_file is allow-all, and the
+  // nksu domain has entrypoint on it). Leaving it at the inherited
+  // `adb_data_file` makes init's exec fail, so ncore never runs at boot.
+  // Best effort: nksu's domain is unconfined, a failure here is cosmetic.
+  const char con[] = "u:object_r:nksu_file:s0";
   ::setxattr(target.c_str(), "security.selinux", con, sizeof(con) - 1, 0);
 
   std::cout << "[module] installed " << target << std::endl;
