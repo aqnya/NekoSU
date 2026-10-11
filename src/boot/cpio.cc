@@ -90,15 +90,6 @@ void append_record(std::vector<uint8_t> &out, const cpio_entry &entry,
   out.resize(align4(out.size()), 0);
 }
 
-// Ramdisk archives name entries relative to the root, but some tools prefix
-// them with "./". Strip it so either spelling compares equal.
-std::string normalize(const std::string &name) {
-  std::string out = name;
-  while (out.rfind("./", 0) == 0)
-    out.erase(0, 2);
-  return out;
-}
-
 bool read_file(const std::string &path, std::vector<uint8_t> &out) {
   int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0)
@@ -231,21 +222,7 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
   for (size_t i = 0; i < entries.size(); ++i)
     index[entries[i].name] = i;
 
-  // Prefer the exact spelling; otherwise reuse an existing entry that only
-  // differs by the "./" prefix, so an archive that spells it the other way is
-  // still updated in place instead of gaining a duplicate.
-  std::string target_name = name;
-  if (index.find(target_name) == index.end()) {
-    const std::string key = normalize(name);
-    for (const cpio_entry &entry : entries) {
-      if (normalize(entry.name) == key) {
-        target_name = entry.name;
-        break;
-      }
-    }
-  }
-
-  ensure_parents(entries, index, target_name);
+  ensure_parents(entries, index, name);
 
   if (S_ISLNK(st.st_mode)) {
     char target[PATH_MAX];
@@ -253,8 +230,7 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
     if (len < 0)
       return false;
     std::vector<uint8_t> data(target, target + len);
-    replace_or_add(entries, index, target_name, S_IFLNK | 0777,
-                   std::move(data));
+    replace_or_add(entries, index, name, S_IFLNK | 0777, std::move(data));
     return true;
   }
 
@@ -262,7 +238,7 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
     std::vector<uint8_t> data;
     if (!read_file(host_path, data))
       return false;
-    replace_or_add(entries, index, target_name, S_IFREG | (st.st_mode & 07777),
+    replace_or_add(entries, index, name, S_IFREG | (st.st_mode & 07777),
                    std::move(data));
     return true;
   }
