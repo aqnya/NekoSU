@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
@@ -149,6 +150,71 @@ bool has_modules(const std::vector<cpio_entry> &entries) {
   return false;
 }
 
+// Whether some line of `text`, ignoring surrounding blanks, begins with
+// `needle`.
+bool has_line(const std::string &text, const std::string &needle) {
+  size_t pos = 0;
+  while (pos < text.size()) {
+    size_t end = text.find('\n', pos);
+    if (end == std::string::npos)
+      end = text.size();
+
+    size_t begin = pos;
+    while (begin < end && (text[begin] == ' ' || text[begin] == '\t'))
+      ++begin;
+    if (end - begin >= needle.size() &&
+        text.compare(begin, needle.size(), needle) == 0)
+      return true;
+
+    pos = end + 1;
+  }
+  return false;
+}
+
+// Append `line` to the text entry `name`, creating it (and no directory
+// handling) when missing. Nothing is done when a line already starts with one
+// of `needles`.
+void ensure_config(std::vector<cpio_entry> &entries, const std::string &name,
+                   std::initializer_list<const char *> needles,
+                   const std::string &line) {
+  const auto found = [&]() -> cpio_entry * {
+    for (cpio_entry &entry : entries)
+      if (entry.name == name)
+        return &entry;
+    return nullptr;
+  };
+
+  cpio_entry *entry = found();
+  if (entry == nullptr) {
+    cpio_entry fresh;
+    fresh.name = name;
+    fresh.mode = S_IFREG | 0644;
+    fresh.data.assign(line.begin(), line.end());
+    entries.push_back(std::move(fresh));
+    return;
+  }
+
+  std::string text(entry->data.begin(), entry->data.end());
+  for (const char *needle : needles)
+    if (has_line(text, needle))
+      return;
+
+  if (!text.empty() && text.back() != '\n')
+    text.push_back('\n');
+  text += line;
+  entry->data.assign(text.begin(), text.end());
+}
+
+// Register the module with the ramdisk's modprobe configuration so init loads
+// it: a bare name in modules.load and an (empty dependency) line in
+// modules.dep.
+void register_module(std::vector<cpio_entry> &entries) {
+  ensure_config(entries, "lib/modules/modules.load", {"nksu.ko"}, "nksu.ko\n");
+  ensure_config(entries, "lib/modules/modules.dep",
+                {"/lib/modules/nksu.ko:", "lib/modules/nksu.ko:"},
+                "/lib/modules/nksu.ko:\n");
+}
+
 } // namespace
 
 // Install `ko_path` as lib/modules/nksu.ko in the vendor ramdisk of
@@ -263,11 +329,13 @@ int patch(const std::string image_path, const std::string ko_path) {
       if (entry.ramdisk_size == 0)
         continue;
 
-      if (static_cast<int>(i) == module_target &&
-          !cpio_put(rds[i].entries, kNksuModule, ko_path)) {
-        std::cerr << "patch: failed to install " << ko_path << " into ramdisk "
-                  << i << std::endl;
-        return -1;
+      if (static_cast<int>(i) == module_target) {
+        if (!cpio_put(rds[i].entries, kNksuModule, ko_path)) {
+          std::cerr << "patch: failed to install " << ko_path << " into ramdisk "
+                    << i << std::endl;
+          return -1;
+        }
+        register_module(rds[i].entries);
       }
 
       std::vector<uint8_t> patched;
@@ -293,6 +361,7 @@ int patch(const std::string image_path, const std::string ko_path) {
       std::cerr << "patch: failed to install " << ko_path << std::endl;
       return -1;
     }
+    register_module(rd.entries);
 
     if (!store_ramdisk(rd, tmp, new_ramdisk))
       return -1;
