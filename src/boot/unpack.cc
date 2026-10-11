@@ -1,10 +1,12 @@
 #include "boot_internal.hpp"
 #include "bootimg.h"
 #include <cstring>
+#include <cerrno>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -308,25 +310,31 @@ void dump_vendor_boot(const vendor_boot_img_hdr_v4 &head,
   const size_t table_offset = dtb_offset + dtb_page * page;
   const size_t bootconfig_offset = table_offset + table_page * page;
 
-  write_section("vendor_ramdisk", image, vendor_ramdisk_offset,
-                head.vendor_ramdisk_size);
   write_section("vendor_dtb", image, dtb_offset, head.dtb_size);
   write_section("vendor_ramdisk_table", image, table_offset,
                 head.vendor_ramdisk_table_size);
   write_section("bootconfig", image, bootconfig_offset, head.bootconfig_size);
 
-  // A single-entry table describes exactly the whole section, so splitting it
-  // would only duplicate vendor_ramdisk; emit the per-ramdisk files only when
-  // there is more than one.
-  if (head.vendor_ramdisk_table_entry_num <= 1)
+  // A v4 vendor ramdisk is the concatenation of the ramdisks listed in the
+  // table. Dump each of them into a vendor_ramdisk/ directory instead of
+  // writing both the whole section and its parts, which would duplicate every
+  // byte of the ramdisk.
+  if (head.vendor_ramdisk_table_entry_num == 0) {
+    write_section("vendor_ramdisk", image, vendor_ramdisk_offset,
+                  head.vendor_ramdisk_size);
     return;
+  }
 
-  // Split the vendor ramdisk section into the individual ramdisks described
-  // by the ramdisk table.
   if (head.vendor_ramdisk_table_entry_size !=
       sizeof(vendor_ramdisk_table_entry_v4)) {
     std::cerr << "vendor_ramdisk_table: unexpected entry size "
               << head.vendor_ramdisk_table_entry_size << "\n";
+    return;
+  }
+
+  if (mkdir("vendor_ramdisk", 0755) != 0 && errno != EEXIST) {
+    std::cerr << "vendor_ramdisk: cannot create directory: "
+              << std::strerror(errno) << "\n";
     return;
   }
 
@@ -351,17 +359,20 @@ void dump_vendor_boot(const vendor_boot_img_hdr_v4 &head,
       continue;
     }
 
-    std::string name = "vendor_ramdisk.";
     const size_t name_len =
         strnlen(reinterpret_cast<const char *>(entry.ramdisk_name),
                 sizeof(entry.ramdisk_name));
-    if (name_len != 0)
-      name.append(reinterpret_cast<const char *>(entry.ramdisk_name),
-                  name_len);
-    else
-      name += std::to_string(i);
+    std::string file =
+        name_len != 0
+            ? std::string(reinterpret_cast<const char *>(entry.ramdisk_name),
+                          name_len)
+            : "ramdisk." + std::to_string(i);
+    for (char &c : file)
+      if (c == '/')
+        c = '_';
 
-    write_section(name.c_str(), image,
+    const std::string path = "vendor_ramdisk/" + file + ".cpio";
+    write_section(path.c_str(), image,
                   vendor_ramdisk_offset + entry.ramdisk_offset,
                   entry.ramdisk_size);
   }
