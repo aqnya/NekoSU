@@ -110,6 +110,12 @@ bool decompress_lz4_block(const char *filepath, const uint8_t *data,
     }
   }
 
+  // Some producers (for example Android's `lz4 -l`) omit the zero end marker
+  // and simply stop after the last block. Reaching the end of the input
+  // without an error is a successful decode.
+  if (p == end)
+    ok = true;
+
   if (fclose(out) != 0) {
     std::cerr << "LZ4 block: fclose failed: " << filepath << '\n';
     return false;
