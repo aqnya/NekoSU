@@ -136,35 +136,76 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   index[name] = entries.size() - 1;
 }
 
+std::string base_name(const std::string &path) {
+  const size_t slash = path.find_last_of('/');
+  return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+bool is_module_name(const std::string &name) {
+  return name.size() > 3 && name.compare(name.size() - 3, 3, ".ko") == 0;
+}
+
+// Create a 0755 directory entry for every missing parent of `name`.
+void ensure_parents(std::vector<cpio_entry> &entries,
+                    std::map<std::string, size_t> &index,
+                    const std::string &name) {
+  for (size_t pos = name.find('/'); pos != std::string::npos;
+       pos = name.find('/', pos + 1)) {
+    const std::string dir = name.substr(0, pos);
+    if (!dir.empty() && index.find(dir) == index.end())
+      replace_or_add(entries, index, dir, S_IFDIR | 0755, {});
+  }
+}
+
+// Destination of a host file inside the archive: modules are redirected to
+// `ko_dir` by their base name, everything else keeps its relative path.
+std::string target_name(const std::string &relative, const std::string &ko_dir) {
+  if (!ko_dir.empty() && is_module_name(base_name(relative)))
+    return ko_dir + "/" + base_name(relative);
+  return relative;
+}
+
 bool merge_tree(std::vector<cpio_entry> &entries,
                 std::map<std::string, size_t> &index, const std::string &root,
-                const std::string &relative);
+                const std::string &relative, const std::string &ko_dir,
+                bool skip_ko);
 
 bool merge_node(std::vector<cpio_entry> &entries,
                 std::map<std::string, size_t> &index, const std::string &root,
                 const std::string &relative, const std::string &full,
-                const struct stat &st) {
+                const struct stat &st, const std::string &ko_dir,
+                bool skip_ko) {
   if (S_ISDIR(st.st_mode)) {
     replace_or_add(entries, index, relative, S_IFDIR | 0755, {});
-    return merge_tree(entries, index, root, relative);
+    return merge_tree(entries, index, root, relative, ko_dir, skip_ko);
   }
 
   if (S_ISLNK(st.st_mode)) {
+    if (skip_ko && is_module_name(base_name(relative)))
+      return true;
     char target[PATH_MAX];
     const ssize_t len = ::readlink(full.c_str(), target, sizeof(target));
     if (len < 0)
       return false;
     std::vector<uint8_t> data(target, target + len);
-    replace_or_add(entries, index, relative, S_IFLNK | 0777, std::move(data));
+    const std::string name = target_name(relative, ko_dir);
+    if (name != relative)
+      ensure_parents(entries, index, name);
+    replace_or_add(entries, index, name, S_IFLNK | 0777, std::move(data));
     return true;
   }
 
   if (S_ISREG(st.st_mode)) {
+    if (skip_ko && is_module_name(base_name(relative)))
+      return true;
     std::vector<uint8_t> data;
     if (!read_file(full, data))
       return false;
-    replace_or_add(entries, index, relative,
-                   S_IFREG | (st.st_mode & 07777), std::move(data));
+    const std::string name = target_name(relative, ko_dir);
+    if (name != relative)
+      ensure_parents(entries, index, name);
+    replace_or_add(entries, index, name, S_IFREG | (st.st_mode & 07777),
+                   std::move(data));
     return true;
   }
 
@@ -175,7 +216,8 @@ bool merge_node(std::vector<cpio_entry> &entries,
 
 bool merge_tree(std::vector<cpio_entry> &entries,
                 std::map<std::string, size_t> &index, const std::string &root,
-                const std::string &relative) {
+                const std::string &relative, const std::string &ko_dir,
+                bool skip_ko) {
   const std::string full = relative.empty() ? root : root + "/" + relative;
 
   DIR *dir = ::opendir(full.c_str());
@@ -202,16 +244,12 @@ bool merge_tree(std::vector<cpio_entry> &entries,
     if (::lstat(child_full.c_str(), &st) != 0)
       return false;
 
-    if (!merge_node(entries, index, root, child_rel, child_full, st))
+    if (!merge_node(entries, index, root, child_rel, child_full, st, ko_dir,
+                    skip_ko))
       return false;
   }
 
   return true;
-}
-
-std::string base_name(const std::string &path) {
-  const size_t slash = path.find_last_of('/');
-  return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
 } // namespace
@@ -285,7 +323,8 @@ std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries) {
   return out;
 }
 
-bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path) {
+bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
+                const std::string &ko_dir, bool skip_ko) {
   struct stat st{};
   if (::lstat(path.c_str(), &st) != 0)
     return false;
@@ -295,9 +334,10 @@ bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path) {
     index[normalize(entries[i].name)] = i;
 
   if (S_ISDIR(st.st_mode))
-    return merge_tree(entries, index, path, "");
+    return merge_tree(entries, index, path, "", ko_dir, skip_ko);
 
-  return merge_node(entries, index, path, base_name(path), path, st);
+  return merge_node(entries, index, path, base_name(path), path, st, ko_dir,
+                    skip_ko);
 }
 
 } // namespace boot

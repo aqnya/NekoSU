@@ -12,6 +12,9 @@
 namespace boot {
 namespace {
 
+// Directory inside the ramdisk that kernel modules are installed to.
+constexpr const char *kModuleDir = "lib/modules";
+
 template <typename T>
 bool read_struct(const MMapFile &image, size_t offset, T &out) {
   if (offset > image.size() || sizeof(T) > image.size() - offset)
@@ -88,15 +91,22 @@ bool compress_to_vector(const char *format, const uint8_t *data, size_t size,
   return read;
 }
 
-// Unpack one compressed cpio blob, merge the patch path into it and repack it
-// using the blob's original encoding.
-bool patch_blob(const uint8_t *data, size_t size, const std::string &patch,
-                const std::string &tmp, std::vector<uint8_t> &out) {
-  const char *format = detect_format(data, size);
+// A loaded vendor ramdisk sub-image: its original encoding, the decompressed
+// cpio records, and where it sits in the source image.
+struct ramdisk {
+  size_t size = 0;
+  const char *format = nullptr;
+  std::vector<cpio_entry> entries;
+};
+
+bool load_ramdisk(const uint8_t *data, size_t size, const std::string &tmp,
+                  ramdisk &out) {
+  out.size = size;
+  out.format = detect_format(data, size);
 
   std::vector<uint8_t> raw;
-  if (format != nullptr) {
-    if (!decompress_to_vector(data, size, format, tmp, raw)) {
+  if (out.format != nullptr) {
+    if (!decompress_to_vector(data, size, out.format, tmp, raw)) {
       std::cerr << "patch: failed to decompress vendor ramdisk\n";
       return false;
     }
@@ -104,27 +114,42 @@ bool patch_blob(const uint8_t *data, size_t size, const std::string &patch,
     raw.assign(data, data + size);
   }
 
-  std::vector<cpio_entry> entries;
-  if (!cpio_parse(raw.data(), raw.size(), entries)) {
+  if (!cpio_parse(raw.data(), raw.size(), out.entries)) {
     std::cerr << "patch: vendor ramdisk is not a newc cpio archive\n";
     return false;
   }
 
-  if (!cpio_merge(entries, patch)) {
-    std::cerr << "patch: cannot read patch path " << patch << std::endl;
-    return false;
-  }
+  return true;
+}
 
-  const std::vector<uint8_t> packed = cpio_pack(entries);
-  return compress_to_vector(format, packed.data(), packed.size(), tmp, out);
+bool store_ramdisk(const ramdisk &rd, const std::string &tmp,
+                   std::vector<uint8_t> &out) {
+  const std::vector<uint8_t> packed = cpio_pack(rd.entries);
+  return compress_to_vector(rd.format, packed.data(), packed.size(), tmp, out);
+}
+
+// Whether the archive already carries kernel modules under lib/modules.
+bool has_modules(const std::vector<cpio_entry> &entries) {
+  const std::string prefix = std::string(kModuleDir) + "/";
+  for (const cpio_entry &entry : entries) {
+    std::string name = entry.name;
+    while (name.rfind("./", 0) == 0)
+      name.erase(0, 2);
+    if (name == kModuleDir || name.rfind(prefix, 0) == 0)
+      return true;
+  }
+  return false;
 }
 
 } // namespace
 
 // Patch `image_path` -- a v3/v4 vendor boot image -- in place by merging
-// `patch_path` into its vendor ramdisk cpio(s). The ramdisk keeps its original
-// compression and, for v4, the ramdisk table is updated to match. The result is
-// written to `<image_path>.new`.
+// `patch_path` into its vendor ramdisk cpio(s). Kernel modules (*.ko) from the
+// patch path are routed to lib/modules in the ramdisk that already holds that
+// directory (the vendor ramdisk, or a v4 DLKM sub-ramdisk); any other file is
+// merged at its relative path. Each ramdisk keeps its original compression and,
+// for v4, the ramdisk table is updated to match. The result is written to
+// `<image_path>.new`.
 int patch(const std::string image_path, const std::string patch_path) {
   MMapFile image(image_path.c_str());
   if (!image.valid()) {
@@ -176,42 +201,89 @@ int patch(const std::string image_path, const std::string patch_path) {
       return -1;
     }
 
-    // Rebuild the concatenated ramdisk section one table entry at a time so
-    // every sub-ramdisk keeps its own compression and the table stays in sync.
-    new_table.assign(vtable->data, vtable->data + vtable->size);
-    for (uint32_t i = 0; i < head.vendor_ramdisk_table_entry_num; ++i) {
-      const size_t entry_off =
-          static_cast<size_t>(i) * head.vendor_ramdisk_table_entry_size;
-      vendor_ramdisk_table_entry_v4 entry{};
-      std::memcpy(&entry, new_table.data() + entry_off, sizeof(entry));
+    const uint32_t count = head.vendor_ramdisk_table_entry_num;
+    const size_t entry_size = head.vendor_ramdisk_table_entry_size;
 
-      if (entry.ramdisk_size == 0)
+    // Parse every sub-ramdisk up front so the module-bearing one can be picked
+    // before anything is written.
+    std::vector<vendor_ramdisk_table_entry_v4> table(count);
+    std::vector<ramdisk> rds(count);
+    int module_target = -1;
+    for (uint32_t i = 0; i < count; ++i) {
+      std::memcpy(&table[i], vtable->data + static_cast<size_t>(i) * entry_size,
+                  sizeof(table[i]));
+
+      if (table[i].ramdisk_size == 0)
         continue;
 
-      if (entry.ramdisk_offset > vramdisk->size ||
-          entry.ramdisk_size > vramdisk->size - entry.ramdisk_offset) {
+      if (table[i].ramdisk_offset > vramdisk->size ||
+          table[i].ramdisk_size > vramdisk->size - table[i].ramdisk_offset) {
         std::cerr << "patch: vendor ramdisk table entry " << i
                   << " out of bounds\n";
         return -1;
       }
 
-      std::vector<uint8_t> patched;
       const std::string entry_tmp = tmp + "." + std::to_string(i);
-      if (!patch_blob(vramdisk->data + entry.ramdisk_offset, entry.ramdisk_size,
-                      patch_path, entry_tmp, patched)) {
+      if (!load_ramdisk(vramdisk->data + table[i].ramdisk_offset,
+                        table[i].ramdisk_size, entry_tmp, rds[i])) {
         return -1;
       }
+
+      if (module_target < 0 && has_modules(rds[i].entries))
+        module_target = static_cast<int>(i);
+    }
+
+    // No ramdisk carries lib/modules yet: install into the first one so the
+    // modules still land somewhere predictable.
+    if (module_target < 0) {
+      for (uint32_t i = 0; i < count; ++i) {
+        if (rds[i].size != 0) {
+          module_target = static_cast<int>(i);
+          break;
+        }
+      }
+    }
+
+    // Rebuild the concatenated ramdisk section one entry at a time so every
+    // sub-ramdisk keeps its own compression and the table stays in sync.
+    for (uint32_t i = 0; i < count; ++i) {
+      vendor_ramdisk_table_entry_v4 &entry = table[i];
+      if (entry.ramdisk_size == 0)
+        continue;
+
+      const bool target = static_cast<int>(i) == module_target;
+      const std::string ko_dir = target ? kModuleDir : "";
+      if (!cpio_merge(rds[i].entries, patch_path, ko_dir, !target)) {
+        std::cerr << "patch: cannot read patch path " << patch_path << std::endl;
+        return -1;
+      }
+
+      std::vector<uint8_t> patched;
+      const std::string entry_tmp = tmp + "." + std::to_string(i);
+      if (!store_ramdisk(rds[i], entry_tmp, patched))
+        return -1;
 
       entry.ramdisk_offset = static_cast<uint32_t>(new_ramdisk.size());
       entry.ramdisk_size = static_cast<uint32_t>(patched.size());
       new_ramdisk.insert(new_ramdisk.end(), patched.begin(), patched.end());
-      std::memcpy(new_table.data() + entry_off, &entry, sizeof(entry));
     }
+
+    new_table.resize(static_cast<size_t>(count) * entry_size);
+    for (uint32_t i = 0; i < count; ++i)
+      std::memcpy(new_table.data() + static_cast<size_t>(i) * entry_size,
+                  &table[i], sizeof(table[i]));
   } else {
-    if (!patch_blob(vramdisk->data, vramdisk->size, patch_path, tmp,
-                    new_ramdisk)) {
+    ramdisk rd;
+    if (!load_ramdisk(vramdisk->data, vramdisk->size, tmp, rd))
+      return -1;
+
+    if (!cpio_merge(rd.entries, patch_path, kModuleDir, false)) {
+      std::cerr << "patch: cannot read patch path " << patch_path << std::endl;
       return -1;
     }
+
+    if (!store_ramdisk(rd, tmp, new_ramdisk))
+      return -1;
   }
 
   vramdisk->data = new_ramdisk.data();
@@ -225,8 +297,8 @@ int patch(const std::string image_path, const std::string patch_path) {
   }
 
   const std::string out_path = image_path + ".new";
-  if (!rebuild_image(image, sections, page, header_size,
-                     std::string::npos, out_path)) {
+  if (!rebuild_image(image, sections, page, header_size, std::string::npos,
+                     out_path)) {
     std::cerr << "patch: failed to write " << out_path << std::endl;
     return -1;
   }

@@ -32,7 +32,16 @@ std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries);
 // entry's contents in place (keeping the entry's owner and mode), and new
 // paths are appended before the trailer with any missing parent directories
 // created. When `path` is a single file or symlink it is added at the archive
-// root under its base name. Returns false if `path` cannot be read.
-bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path);
+// root under its base name.
+//
+// Kernel modules are handled specially: when `ko_dir` is non-empty, any
+// regular file whose name ends in ".ko" is placed at `ko_dir/<base name>`
+// instead of its relative path, and the parent directories are created. When
+// `skip_ko` is set such files are dropped entirely, which lets a caller route
+// modules to a single vendor ramdisk.
+//
+// Returns false if `path` cannot be read.
+bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
+                const std::string &ko_dir = "", bool skip_ko = false);
 
 } // namespace boot
