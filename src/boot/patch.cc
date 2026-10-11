@@ -14,7 +14,9 @@ namespace boot {
 namespace {
 
 // The ncore kernel module always lives at this path inside the vendor ramdisk.
-constexpr const char *kNksuModule = "lib/modules/nksu.ko";
+// Ramdisk entries are named relative to the root and this one keeps the "./"
+// prefix the archives use.
+constexpr const char *kNksuModule = "./lib/modules/nksu.ko";
 
 template <typename T>
 bool read_struct(const MMapFile &image, size_t offset, T &out) {

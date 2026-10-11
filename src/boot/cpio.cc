@@ -118,12 +118,14 @@ void replace_or_add(std::vector<cpio_entry> &entries,
                     std::map<std::string, size_t> &index,
                     const std::string &name, uint32_t add_mode,
                     std::vector<uint8_t> data) {
-  const auto it = index.find(name);
+  // The index is keyed by the normalised name so "./x" and "x" resolve alike,
+  // while a newly added entry keeps the exact spelling it was given.
+  const std::string key = normalize(name);
+  const auto it = index.find(key);
   if (it != index.end()) {
     // Existing entry: swap only the payload so the original owner, mode and
     // timestamp survive. Update every entry that resolves to the same name so
     // archives carrying both "x" and "./x" stay consistent.
-    const std::string key = normalize(name);
     for (cpio_entry &entry : entries)
       if (normalize(entry.name) == key)
         entry.data = data;
@@ -135,7 +137,7 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   entry.mode = add_mode;
   entry.data = std::move(data);
   entries.push_back(std::move(entry));
-  index[name] = entries.size() - 1;
+  index[key] = entries.size() - 1;
 }
 
 // Create a 0755 directory entry for every missing parent of `name`.
@@ -145,7 +147,10 @@ void ensure_parents(std::vector<cpio_entry> &entries,
   for (size_t pos = name.find('/'); pos != std::string::npos;
        pos = name.find('/', pos + 1)) {
     const std::string dir = name.substr(0, pos);
-    if (!dir.empty() && index.find(dir) == index.end())
+    const std::string key = normalize(dir);
+    if (key.empty() || key == ".")
+      continue;
+    if (index.find(key) == index.end())
       replace_or_add(entries, index, dir, S_IFDIR | 0755, {});
   }
 }
