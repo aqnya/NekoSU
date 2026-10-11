@@ -104,9 +104,9 @@ int parse_cli(int argc, char *argv[], arguments &args) {
       .hidden_from_usage();
 
   program.add_argument("-p", "--patch")
-      .help("patch vendor bootimg: <vendor_boot.img> <file/dir>")
+      .help("patch vendor bootimg: <vendor_boot.img> <file/dir|dest=src>")
       .nargs(2)
-      .metavar("<vendor_boot.img> <file/dir>")
+      .metavar("<vendor_boot.img> <file/dir|dest=src>")
       .hidden_from_usage();
 
   // --- init events ---------------------------------------------------------

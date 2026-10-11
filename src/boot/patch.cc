@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <sys/stat.h>
 #include <vector>
 
 namespace boot {
@@ -40,6 +41,17 @@ bool read_file(const char *path, std::vector<uint8_t> &out) {
     in.read(reinterpret_cast<char *>(out.data()), size);
 
   return in.good() || in.eof();
+}
+
+std::string normalize(const std::string &name) {
+  std::string out = name;
+  while (out.rfind("./", 0) == 0)
+    out.erase(0, 2);
+  return out;
+}
+
+bool is_module_name(const std::string &name) {
+  return name.size() > 3 && name.compare(name.size() - 3, 3, ".ko") == 0;
 }
 
 // Decompress `data`, whose detected format is `format`, through a temporary
@@ -91,8 +103,8 @@ bool compress_to_vector(const char *format, const uint8_t *data, size_t size,
   return read;
 }
 
-// A loaded vendor ramdisk sub-image: its original encoding, the decompressed
-// cpio records, and where it sits in the source image.
+// A loaded vendor ramdisk sub-image: its original encoding and the decompressed
+// cpio records.
 struct ramdisk {
   size_t size = 0;
   const char *format = nullptr;
@@ -132,24 +144,39 @@ bool store_ramdisk(const ramdisk &rd, const std::string &tmp,
 bool has_modules(const std::vector<cpio_entry> &entries) {
   const std::string prefix = std::string(kModuleDir) + "/";
   for (const cpio_entry &entry : entries) {
-    std::string name = entry.name;
-    while (name.rfind("./", 0) == 0)
-      name.erase(0, 2);
+    const std::string name = normalize(entry.name);
     if (name == kModuleDir || name.rfind(prefix, 0) == 0)
       return true;
   }
   return false;
 }
 
+// Turn an explicit `dest` into an archive path: a bare module name lands in
+// lib/modules, and any other bare name lands at the ramdisk root.
+std::string explicit_path(const std::string &dest) {
+  if (dest.find('/') != std::string::npos)
+    return dest;
+  if (is_module_name(dest))
+    return std::string(kModuleDir) + "/" + dest;
+  return dest;
+}
+
 } // namespace
 
 // Patch `image_path` -- a v3/v4 vendor boot image -- in place by merging
-// `patch_path` into its vendor ramdisk cpio(s). Kernel modules (*.ko) from the
-// patch path are routed to lib/modules in the ramdisk that already holds that
-// directory (the vendor ramdisk, or a v4 DLKM sub-ramdisk); any other file is
-// merged at its relative path. Each ramdisk keeps its original compression and,
-// for v4, the ramdisk table is updated to match. The result is written to
-// `<image_path>.new`.
+// `patch_path` into its vendor ramdisk cpio(s).
+//
+// `patch_path` is one of:
+//   * a directory (or a single file) merged at its relative path; every *.ko
+//     is installed at lib/modules/<name>, replacing an existing entry of the
+//     same name;
+//   * `dest=source`, to place `source` at a specific archive path, replacing
+//     whatever is there. A bare destination module name resolves under
+//     lib/modules (e.g. `nksu.ko=android13-5.15_nksu.ko`), any other bare name
+//     at the ramdisk root, and a destination containing '/' is used verbatim.
+//
+// Each ramdisk keeps its original compression and, for v4, the ramdisk table is
+// updated to match. The result is written to `<image_path>.new`.
 int patch(const std::string image_path, const std::string patch_path) {
   MMapFile image(image_path.c_str());
   if (!image.valid()) {
@@ -184,9 +211,35 @@ int patch(const std::string image_path, const std::string patch_path) {
     return -1;
   }
 
+  // Parse an explicit `dest=source` mapping, if the source really exists.
+  std::string map_dest;
+  std::string map_src;
+  const size_t equals = patch_path.find('=');
+  if (equals != std::string::npos && equals > 0 &&
+      equals + 1 < patch_path.size()) {
+    const std::string dest = patch_path.substr(0, equals);
+    const std::string src = patch_path.substr(equals + 1);
+    struct stat st{};
+    if (::lstat(src.c_str(), &st) == 0) {
+      map_dest = explicit_path(dest);
+      map_src = src;
+    }
+  }
+  const bool mapped = !map_dest.empty();
+
   const std::string tmp = image_path + ".patch";
   std::vector<uint8_t> new_ramdisk;
   std::vector<uint8_t> new_table;
+
+  // Apply the patch to one ramdisk. `target` selects the ramdisk that receives
+  // kernel modules; the others only take non-module files.
+  auto apply = [&](std::vector<cpio_entry> &entries, bool target) -> bool {
+    if (mapped)
+      return !target || cpio_put(entries, map_dest, map_src);
+
+    const std::string ko_dir = target ? kModuleDir : "";
+    return cpio_merge(entries, patch_path, ko_dir, !target);
+  };
 
   if (b == boottype::vendor_boot_img_hdr_v4) {
     vendor_boot_img_hdr_v4 head{};
@@ -251,10 +304,9 @@ int patch(const std::string image_path, const std::string patch_path) {
       if (entry.ramdisk_size == 0)
         continue;
 
-      const bool target = static_cast<int>(i) == module_target;
-      const std::string ko_dir = target ? kModuleDir : "";
-      if (!cpio_merge(rds[i].entries, patch_path, ko_dir, !target)) {
-        std::cerr << "patch: cannot read patch path " << patch_path << std::endl;
+      if (!apply(rds[i].entries, static_cast<int>(i) == module_target)) {
+        std::cerr << "patch: failed to apply " << patch_path << " to ramdisk "
+                  << i << std::endl;
         return -1;
       }
 
@@ -277,8 +329,8 @@ int patch(const std::string image_path, const std::string patch_path) {
     if (!load_ramdisk(vramdisk->data, vramdisk->size, tmp, rd))
       return -1;
 
-    if (!cpio_merge(rd.entries, patch_path, kModuleDir, false)) {
-      std::cerr << "patch: cannot read patch path " << patch_path << std::endl;
+    if (!apply(rd.entries, true)) {
+      std::cerr << "patch: failed to apply " << patch_path << std::endl;
       return -1;
     }
 

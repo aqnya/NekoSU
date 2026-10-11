@@ -123,8 +123,12 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   const auto it = index.find(name);
   if (it != index.end()) {
     // Existing entry: swap only the payload so the original owner, mode and
-    // timestamp survive a patch.
-    entries[it->second].data = std::move(data);
+    // timestamp survive a patch. Update every entry that resolves to the same
+    // name so archives carrying both "x" and "./x" stay consistent.
+    const std::string key = normalize(name);
+    for (cpio_entry &entry : entries)
+      if (normalize(entry.name) == key)
+        entry.data = data;
     return;
   }
 
@@ -338,6 +342,40 @@ bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
 
   return merge_node(entries, index, path, base_name(path), path, st, ko_dir,
                     skip_ko);
+}
+
+bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
+              const std::string &host_path) {
+  struct stat st{};
+  if (::lstat(host_path.c_str(), &st) != 0)
+    return false;
+
+  std::map<std::string, size_t> index;
+  for (size_t i = 0; i < entries.size(); ++i)
+    index[normalize(entries[i].name)] = i;
+
+  ensure_parents(entries, index, name);
+
+  if (S_ISLNK(st.st_mode)) {
+    char target[PATH_MAX];
+    const ssize_t len = ::readlink(host_path.c_str(), target, sizeof(target));
+    if (len < 0)
+      return false;
+    std::vector<uint8_t> data(target, target + len);
+    replace_or_add(entries, index, name, S_IFLNK | 0777, std::move(data));
+    return true;
+  }
+
+  if (S_ISREG(st.st_mode)) {
+    std::vector<uint8_t> data;
+    if (!read_file(host_path, data))
+      return false;
+    replace_or_add(entries, index, name, S_IFREG | (st.st_mode & 07777),
+                   std::move(data));
+    return true;
+  }
+
+  return false;
 }
 
 } // namespace boot

@@ -44,4 +44,12 @@ std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries);
 bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
                 const std::string &ko_dir = "", bool skip_ko = false);
 
+// Add or replace a single entry named `name` inside the archive, reading from
+// the host file `host_path` (a regular file or symlink). Missing parent
+// directories are created. When the entry already exists its owner and mode are
+// kept and only the payload is swapped, so an explicit rename still replaces
+// the original record in place. Returns false if the host file cannot be read.
+bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
+              const std::string &host_path);
+
 } // namespace boot
