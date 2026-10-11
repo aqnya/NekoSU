@@ -36,20 +36,6 @@ size_t align_up(size_t value, size_t page) {
   return (value + page - 1) / page * page;
 }
 
-// One section of a boot image, in the order it appears on disk. `data` points
-// into a backing store owned by the caller.
-struct section {
-  std::string name;
-  const uint8_t *data = nullptr;
-  size_t size = 0;
-  // Offset of the u32 size field inside the boot header, or `npos` when the
-  // section has no size field (e.g. v3/v4 kernel/ramdisk are addressed
-  // implicitly by order, only their sizes are stored).
-  size_t size_field = std::string::npos;
-  // Offset of a u64 offset field inside the header, if the format uses one.
-  size_t offset_field = std::string::npos;
-};
-
 constexpr size_t npos = std::string::npos;
 
 // On-disk field offsets inside the boot header.
@@ -105,46 +91,11 @@ static_assert(sizeof(vendor_boot_img_hdr_v4) == 2128,
 
 } // namespace
 
-// Rebuild `original` with the section picked by the replacement file name
-// swapped for the (recompressed) contents of `new_file`. Every section is
-// re-laid-out page aligned and all size/offset fields in the header are
-// updated, so the result stays a well-formed boot image even when the
-// replacement changes size.
-int replace(const std::string original, const std::string new_file) {
-  MMapFile image(original.c_str());
-  if (!image.valid()) {
-    std::cerr << "replace: cannot open " << original << std::endl;
-    return -1;
-  }
-
-  MMapFile new_raw(new_file.c_str());
-  if (!new_raw.valid()) {
-    std::cerr << "replace: cannot open " << new_file << std::endl;
-    return -1;
-  }
-
-  const boottype b = probe_type(image);
-  if (b == boottype::invalid) {
-    std::cout << "invalid boot!" << std::endl;
-    return -1;
-  }
-
-  // Match the new file name against a known section. `dtb` maps to the DTB,
-  // anything else replaces the kernel.
-  std::string name = new_file;
-  const size_t slash = name.find_last_of('/');
-  if (slash != std::string::npos)
-    name = name.substr(slash + 1);
-  const bool want_dtb = name.find("dtb") != std::string::npos;
-  // Vendor boot images have no kernel: the primary replaceable section is the
-  // vendor ramdisk. Everything that is not the dtb maps to it there.
-  const bool is_vendor =
-      b == boottype::vendor_boot_img_hdr_v3 ||
-      b == boottype::vendor_boot_img_hdr_v4;
-
-  std::vector<section> sections;
-  size_t page = 4096;
-  size_t header_size = 0;
+bool collect_sections(const MMapFile &image, boottype b, size_t &page,
+                      size_t &header_size, std::vector<section> &sections) {
+  sections.clear();
+  page = 4096;
+  header_size = 0;
 
   // Collect the ordered sections and their header field offsets per format.
   switch (b) {
@@ -153,13 +104,13 @@ int replace(const std::string original, const std::string new_file) {
   case boottype::boot_img_hdr_v2: {
     boot_img_hdr_v2 head{};
     if (!read_struct(image, 0, head)) {
-      std::cerr << "replace: truncated header" << std::endl;
-      return -1;
+      std::cerr << "boot: truncated header" << std::endl;
+      return false;
     }
     page = head.page_size;
     if (page == 0) {
-      std::cerr << "replace: invalid page size" << std::endl;
-      return -1;
+      std::cerr << "boot: invalid page size" << std::endl;
+      return false;
     }
 
     if (b == boottype::boot_img_hdr_v2)
@@ -211,14 +162,14 @@ int replace(const std::string original, const std::string new_file) {
     if (b == boottype::boot_img_hdr_v4) {
       boot_img_hdr_v4 head{};
       if (!read_struct(image, 0, head))
-        return -1;
+        return false;
       kernel_size = head.kernel_size;
       ramdisk_size = head.ramdisk_size;
       signature_size = head.signature_size;
     } else {
       boot_img_hdr_v3 head{};
       if (!read_struct(image, 0, head))
-        return -1;
+        return false;
       kernel_size = head.kernel_size;
       ramdisk_size = head.ramdisk_size;
     }
@@ -243,13 +194,13 @@ int replace(const std::string original, const std::string new_file) {
   case boottype::vendor_boot_img_hdr_v4: {
     vendor_boot_img_hdr_v4 head{};
     if (!read_struct(image, 0, head)) {
-      std::cerr << "replace: truncated vendor header" << std::endl;
-      return -1;
+      std::cerr << "boot: truncated vendor header" << std::endl;
+      return false;
     }
     page = head.page_size;
     if (page == 0) {
-      std::cerr << "replace: invalid page size" << std::endl;
-      return -1;
+      std::cerr << "boot: invalid page size" << std::endl;
+      return false;
     }
     header_size = 2128;
     const size_t vrsize = VENDOR_V3_RAMDISK_SIZE_OFF;
@@ -276,12 +227,12 @@ int replace(const std::string original, const std::string new_file) {
     break;
   }
   case boottype::invalid:
-    return -1;
+    return false;
   }
 
   if (page == 0 || header_size == 0) {
-    std::cerr << "replace: unsupported boot image layout" << std::endl;
-    return -1;
+    std::cerr << "boot: unsupported boot image layout" << std::endl;
+    return false;
   }
 
   // Validate the original sections against the mapped image before touching
@@ -291,11 +242,103 @@ int replace(const std::string original, const std::string new_file) {
       continue;
     if (s.data < image.data() ||
         static_cast<size_t>(s.data - image.data()) + s.size > image.size()) {
-      std::cerr << "replace: section " << s.name << " out of bounds"
+      std::cerr << "boot: section " << s.name << " out of bounds"
                 << std::endl;
-      return -1;
+      return false;
     }
   }
+
+  return true;
+}
+
+bool rebuild_image(const MMapFile &image, std::vector<section> &sections,
+                   size_t page, size_t header_size, size_t entry_num_offset,
+                   const std::string &out_path) {
+  // Rebuild: header page(s) first, then every section page aligned. Keeping
+  // the layout page-aligned means a changed section size never shifts another
+  // section off its boundary.
+  std::vector<uint8_t> output;
+  output.resize(align_up(header_size, page), 0);
+  if (header_size < image.size())
+    std::memcpy(output.data(), image.data(), header_size);
+
+  // A collapsed table has exactly one entry; its size field is updated by the
+  // section loop below, but the entry count is not a section size, so write it
+  // here after the header copy.
+  if (entry_num_offset != npos)
+    write_le<uint32_t>(output, entry_num_offset, 1);
+
+  for (section &s : sections) {
+    if (s.size == 0)
+      continue;
+
+    const size_t offset = output.size();
+    output.resize(offset + align_up(s.size, page), 0);
+    std::memcpy(output.data() + offset, s.data, s.size);
+
+    if (s.size_field != npos)
+      write_le<uint32_t>(output, s.size_field, static_cast<uint32_t>(s.size));
+    if (s.offset_field != npos)
+      write_le<uint64_t>(output, s.offset_field,
+                         static_cast<uint64_t>(offset));
+  }
+
+  std::ofstream out(out_path, std::ios::binary);
+  if (!out) {
+    std::cerr << "boot: cannot write " << out_path << std::endl;
+    return false;
+  }
+  out.write(reinterpret_cast<const char *>(output.data()), output.size());
+  if (!out.good()) {
+    std::cerr << "boot: write failed" << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
+// Rebuild `original` with the section picked by the replacement file name
+// swapped for the (recompressed) contents of `new_file`. Every section is
+// re-laid-out page aligned and all size/offset fields in the header are
+// updated, so the result stays a well-formed boot image even when the
+// replacement changes size.
+int replace(const std::string original, const std::string new_file) {
+  MMapFile image(original.c_str());
+  if (!image.valid()) {
+    std::cerr << "replace: cannot open " << original << std::endl;
+    return -1;
+  }
+
+  MMapFile new_raw(new_file.c_str());
+  if (!new_raw.valid()) {
+    std::cerr << "replace: cannot open " << new_file << std::endl;
+    return -1;
+  }
+
+  const boottype b = probe_type(image);
+  if (b == boottype::invalid) {
+    std::cout << "invalid boot!" << std::endl;
+    return -1;
+  }
+
+  // Match the new file name against a known section. `dtb` maps to the DTB,
+  // anything else replaces the kernel.
+  std::string name = new_file;
+  const size_t slash = name.find_last_of('/');
+  if (slash != std::string::npos)
+    name = name.substr(slash + 1);
+  const bool want_dtb = name.find("dtb") != std::string::npos;
+  // Vendor boot images have no kernel: the primary replaceable section is the
+  // vendor ramdisk. Everything that is not the dtb maps to it there.
+  const bool is_vendor =
+      b == boottype::vendor_boot_img_hdr_v3 ||
+      b == boottype::vendor_boot_img_hdr_v4;
+
+  std::vector<section> sections;
+  size_t page = 0;
+  size_t header_size = 0;
+  if (!collect_sections(image, b, page, header_size, sections))
+    return -1;
 
   // Find the section to swap in. Original sections point into `image`.
   section *target = nullptr;
@@ -386,45 +429,9 @@ int replace(const std::string original, const std::string new_file) {
     }
   }
 
-  // Rebuild: header page(s) first, then every section page aligned. Keeping
-  // the layout page-aligned means a changed section size never shifts another
-  // section off its boundary.
-  std::vector<uint8_t> output;
-  output.resize(align_up(header_size, page), 0);
-  if (header_size < image.size())
-    std::memcpy(output.data(), image.data(), header_size);
-
-  // The rewritten table has exactly one entry; its size field is updated by the
-  // section loop below, but the entry count is not a section size, so write it
-  // here after the header copy.
-  if (vendor_table_entry_num_off != npos)
-    write_le<uint32_t>(output, vendor_table_entry_num_off, 1);
-
-  for (section &s : sections) {
-    if (s.size == 0)
-      continue;
-
-    const size_t offset = output.size();
-    output.resize(offset + align_up(s.size, page), 0);
-    std::memcpy(output.data() + offset, s.data, s.size);
-
-    if (s.size_field != npos)
-      write_le<uint32_t>(output, s.size_field, static_cast<uint32_t>(s.size));
-    if (s.offset_field != npos)
-      write_le<uint64_t>(output, s.offset_field,
-                         static_cast<uint64_t>(offset));
-  }
-
   const std::string out_path = original + ".new";
-  std::ofstream out(out_path, std::ios::binary);
-  if (!out) {
-    std::cerr << "replace: cannot write " << out_path << std::endl;
-    std::remove(tmp_name.c_str());
-    return -1;
-  }
-  out.write(reinterpret_cast<const char *>(output.data()), output.size());
-  if (!out.good()) {
-    std::cerr << "replace: write failed" << std::endl;
+  if (!rebuild_image(image, sections, page, header_size,
+                     vendor_table_entry_num_off, out_path)) {
     std::remove(tmp_name.c_str());
     return -1;
   }

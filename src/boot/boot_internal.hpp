@@ -1,9 +1,11 @@
 #include <cstdint>
 #include <cstdio>
+#include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <vector>
 
 enum class boottype : uint8_t {
   boot_img_hdr_v0,
@@ -96,6 +98,34 @@ private:
 };
 
 boottype probe_type(MMapFile &bootimg);
+
+// One section of a boot image, in the order it appears on disk. `data` points
+// into a backing store owned by the caller, which must outlive any rebuild.
+struct section {
+  std::string name;
+  const uint8_t *data = nullptr;
+  size_t size = 0;
+  // Offset of the u32 size field inside the boot header, or `npos` when the
+  // section has no size field (e.g. v3/v4 kernel/ramdisk are addressed
+  // implicitly by order, only their sizes are stored).
+  size_t size_field = std::string::npos;
+  // Offset of a u64 offset field inside the header, if the format uses one.
+  size_t offset_field = std::string::npos;
+};
+
+// Parse `image` and fill `sections` with its ordered sections translated to
+// their on-disk offsets, `page` with the image's page size and `header_size`
+// with the header size. Every section is validated against the mapped image.
+bool collect_sections(const MMapFile &image, boottype b, size_t &page,
+                      size_t &header_size, std::vector<section> &sections);
+
+// Lay `sections` back out page aligned after the header and write the result to
+// `out_path`, updating every size/offset header field. `entry_num_offset` is
+// the offset of a u32 to force to 1 (a collapsed v4 vendor ramdisk table), or
+// std::string::npos to leave the field alone.
+bool rebuild_image(const MMapFile &image, std::vector<section> &sections,
+                   size_t page, size_t header_size, size_t entry_num_offset,
+                   const std::string &out_path);
 
 // Detect the compression format of a section from its leading bytes. Returns
 // the name used to recreate the section (e.g. "gzip"), or nullptr when the

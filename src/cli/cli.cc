@@ -103,6 +103,12 @@ int parse_cli(int argc, char *argv[], arguments &args) {
       .metavar("<bootimg> <kernel/dtb>")
       .hidden_from_usage();
 
+  program.add_argument("-p", "--patch")
+      .help("patch vendor bootimg: <vendor_boot.img> <file/dir>")
+      .nargs(2)
+      .metavar("<vendor_boot.img> <file/dir>")
+      .hidden_from_usage();
+
   // --- init events ---------------------------------------------------------
   argparse::ArgumentParser post_fs_data("post-fs-data");
   post_fs_data.add_description("trigger the `post-fs-data` init event");
@@ -234,6 +240,18 @@ int parse_cli(int argc, char *argv[], arguments &args) {
       return 1;
     }
     int ret = boot::replace(files[0], files[1]);
+    if (ret < 0)
+      return -1;
+    return 0;
+  }
+
+  if (program.is_used("--patch")) {
+    auto files = program.get<std::vector<std::string>>("--patch");
+    if (files.size() < 2) {
+      std::cerr << "--patch requires <vendor_boot.img> <file/dir>\n";
+      return 1;
+    }
+    int ret = boot::patch(files[0], files[1]);
     if (ret < 0)
       return -1;
     return 0;

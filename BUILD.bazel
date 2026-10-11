@@ -22,6 +22,8 @@ cc_library(
         "src/boot/prase.cc",
         "src/boot/unpack.cc",
         "src/boot/replace.cc",
+        "src/boot/patch.cc",
+        "src/boot/cpio.cc",
         "src/boot/gzip.cc",
         "src/boot/bzip2.cc",
         "src/boot/lz4.cc",
@@ -31,6 +33,7 @@ cc_library(
     hdrs = [
         "include/boot/boot.hpp",
         "src/boot/boot_internal.hpp",
+        "src/boot/cpio.hpp",
         "src/boot/bootimg.h",
     ],
     includes = ["include"],
