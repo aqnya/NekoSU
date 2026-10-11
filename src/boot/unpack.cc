@@ -315,6 +315,12 @@ void dump_vendor_boot(const vendor_boot_img_hdr_v4 &head,
                 head.vendor_ramdisk_table_size);
   write_section("bootconfig", image, bootconfig_offset, head.bootconfig_size);
 
+  // A single-entry table describes exactly the whole section, so splitting it
+  // would only duplicate vendor_ramdisk; emit the per-ramdisk files only when
+  // there is more than one.
+  if (head.vendor_ramdisk_table_entry_num <= 1)
+    return;
+
   // Split the vendor ramdisk section into the individual ramdisks described
   // by the ramdisk table.
   if (head.vendor_ramdisk_table_entry_size !=
