@@ -29,10 +29,11 @@ std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries);
 
 // Add or replace a single entry named `name` inside the archive, reading from
 // the host file `host_path` (a regular file or symlink). Missing parent
-// directories are created. Every existing entry that resolves to the same name
-// (including a "./"-prefixed duplicate) has its payload swapped for the file's
-// contents while keeping its owner and mode. Returns false if the host file
-// cannot be read.
+// directories are created. The entry named exactly `name` (including any "./"
+// prefix) is updated in place, keeping its owner and mode; only if no such
+// entry exists is an existing one that differs solely by the "./" prefix
+// reused, so no duplicate is introduced. Returns false if the host file cannot
+// be read.
 bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
               const std::string &host_path);
 

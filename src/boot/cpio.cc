@@ -118,17 +118,13 @@ void replace_or_add(std::vector<cpio_entry> &entries,
                     std::map<std::string, size_t> &index,
                     const std::string &name, uint32_t add_mode,
                     std::vector<uint8_t> data) {
-  // The index is keyed by the normalised name so "./x" and "x" resolve alike,
-  // while a newly added entry keeps the exact spelling it was given.
-  const std::string key = normalize(name);
-  const auto it = index.find(key);
+  // Match the exact spelling. A "./"-prefixed entry and a bare one are
+  // different records, so only the one named `name` is touched.
+  const auto it = index.find(name);
   if (it != index.end()) {
     // Existing entry: swap only the payload so the original owner, mode and
-    // timestamp survive. Update every entry that resolves to the same name so
-    // archives carrying both "x" and "./x" stay consistent.
-    for (cpio_entry &entry : entries)
-      if (normalize(entry.name) == key)
-        entry.data = data;
+    // timestamp survive.
+    entries[it->second].data = std::move(data);
     return;
   }
 
@@ -137,7 +133,7 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   entry.mode = add_mode;
   entry.data = std::move(data);
   entries.push_back(std::move(entry));
-  index[key] = entries.size() - 1;
+  index[name] = entries.size() - 1;
 }
 
 // Create a 0755 directory entry for every missing parent of `name`.
@@ -147,10 +143,9 @@ void ensure_parents(std::vector<cpio_entry> &entries,
   for (size_t pos = name.find('/'); pos != std::string::npos;
        pos = name.find('/', pos + 1)) {
     const std::string dir = name.substr(0, pos);
-    const std::string key = normalize(dir);
-    if (key.empty() || key == ".")
+    if (dir.empty() || dir == ".")
       continue;
-    if (index.find(key) == index.end())
+    if (index.find(dir) == index.end())
       replace_or_add(entries, index, dir, S_IFDIR | 0755, {});
   }
 }
@@ -234,9 +229,23 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
 
   std::map<std::string, size_t> index;
   for (size_t i = 0; i < entries.size(); ++i)
-    index[normalize(entries[i].name)] = i;
+    index[entries[i].name] = i;
 
-  ensure_parents(entries, index, name);
+  // Prefer the exact spelling; otherwise reuse an existing entry that only
+  // differs by the "./" prefix, so an archive that spells it the other way is
+  // still updated in place instead of gaining a duplicate.
+  std::string target_name = name;
+  if (index.find(target_name) == index.end()) {
+    const std::string key = normalize(name);
+    for (const cpio_entry &entry : entries) {
+      if (normalize(entry.name) == key) {
+        target_name = entry.name;
+        break;
+      }
+    }
+  }
+
+  ensure_parents(entries, index, target_name);
 
   if (S_ISLNK(st.st_mode)) {
     char target[PATH_MAX];
@@ -244,7 +253,8 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
     if (len < 0)
       return false;
     std::vector<uint8_t> data(target, target + len);
-    replace_or_add(entries, index, name, S_IFLNK | 0777, std::move(data));
+    replace_or_add(entries, index, target_name, S_IFLNK | 0777,
+                   std::move(data));
     return true;
   }
 
@@ -252,7 +262,7 @@ bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
     std::vector<uint8_t> data;
     if (!read_file(host_path, data))
       return false;
-    replace_or_add(entries, index, name, S_IFREG | (st.st_mode & 07777),
+    replace_or_add(entries, index, target_name, S_IFREG | (st.st_mode & 07777),
                    std::move(data));
     return true;
   }
