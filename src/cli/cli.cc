@@ -104,9 +104,9 @@ int parse_cli(int argc, char *argv[], arguments &args) {
       .hidden_from_usage();
 
   program.add_argument("-p", "--patch")
-      .help("patch vendor bootimg: <vendor_boot.img> <file/dir|dest=src>")
+      .help("patch vendor boot: <vendor_boot.img> <ko>")
       .nargs(2)
-      .metavar("<vendor_boot.img> <file/dir|dest=src>")
+      .metavar("<vendor_boot.img> <ko>")
       .hidden_from_usage();
 
   // --- init events ---------------------------------------------------------
@@ -248,7 +248,7 @@ int parse_cli(int argc, char *argv[], arguments &args) {
   if (program.is_used("--patch")) {
     auto files = program.get<std::vector<std::string>>("--patch");
     if (files.size() < 2) {
-      std::cerr << "--patch requires <vendor_boot.img> <file/dir>\n";
+      std::cerr << "--patch requires <vendor_boot.img> <ko>\n";
       return 1;
     }
     int ret = boot::patch(files[0], files[1]);

@@ -1,8 +1,6 @@
 #include "cpio.hpp"
 
-#include <algorithm>
 #include <cstring>
-#include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <map>
@@ -93,7 +91,7 @@ void append_record(std::vector<uint8_t> &out, const cpio_entry &entry,
 }
 
 // Ramdisk archives name entries relative to the root, but some tools prefix
-// them with "./". Strip it so host paths compare equal to either spelling.
+// them with "./". Strip it so either spelling compares equal.
 std::string normalize(const std::string &name) {
   std::string out = name;
   while (out.rfind("./", 0) == 0)
@@ -123,8 +121,8 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   const auto it = index.find(name);
   if (it != index.end()) {
     // Existing entry: swap only the payload so the original owner, mode and
-    // timestamp survive a patch. Update every entry that resolves to the same
-    // name so archives carrying both "x" and "./x" stay consistent.
+    // timestamp survive. Update every entry that resolves to the same name so
+    // archives carrying both "x" and "./x" stay consistent.
     const std::string key = normalize(name);
     for (cpio_entry &entry : entries)
       if (normalize(entry.name) == key)
@@ -140,15 +138,6 @@ void replace_or_add(std::vector<cpio_entry> &entries,
   index[name] = entries.size() - 1;
 }
 
-std::string base_name(const std::string &path) {
-  const size_t slash = path.find_last_of('/');
-  return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
-bool is_module_name(const std::string &name) {
-  return name.size() > 3 && name.compare(name.size() - 3, 3, ".ko") == 0;
-}
-
 // Create a 0755 directory entry for every missing parent of `name`.
 void ensure_parents(std::vector<cpio_entry> &entries,
                     std::map<std::string, size_t> &index,
@@ -159,101 +148,6 @@ void ensure_parents(std::vector<cpio_entry> &entries,
     if (!dir.empty() && index.find(dir) == index.end())
       replace_or_add(entries, index, dir, S_IFDIR | 0755, {});
   }
-}
-
-// Destination of a host file inside the archive: modules are redirected to
-// `ko_dir` by their base name, everything else keeps its relative path.
-std::string target_name(const std::string &relative, const std::string &ko_dir) {
-  if (!ko_dir.empty() && is_module_name(base_name(relative)))
-    return ko_dir + "/" + base_name(relative);
-  return relative;
-}
-
-bool merge_tree(std::vector<cpio_entry> &entries,
-                std::map<std::string, size_t> &index, const std::string &root,
-                const std::string &relative, const std::string &ko_dir,
-                bool skip_ko);
-
-bool merge_node(std::vector<cpio_entry> &entries,
-                std::map<std::string, size_t> &index, const std::string &root,
-                const std::string &relative, const std::string &full,
-                const struct stat &st, const std::string &ko_dir,
-                bool skip_ko) {
-  if (S_ISDIR(st.st_mode)) {
-    replace_or_add(entries, index, relative, S_IFDIR | 0755, {});
-    return merge_tree(entries, index, root, relative, ko_dir, skip_ko);
-  }
-
-  if (S_ISLNK(st.st_mode)) {
-    if (skip_ko && is_module_name(base_name(relative)))
-      return true;
-    char target[PATH_MAX];
-    const ssize_t len = ::readlink(full.c_str(), target, sizeof(target));
-    if (len < 0)
-      return false;
-    std::vector<uint8_t> data(target, target + len);
-    const std::string name = target_name(relative, ko_dir);
-    if (name != relative)
-      ensure_parents(entries, index, name);
-    replace_or_add(entries, index, name, S_IFLNK | 0777, std::move(data));
-    return true;
-  }
-
-  if (S_ISREG(st.st_mode)) {
-    if (skip_ko && is_module_name(base_name(relative)))
-      return true;
-    std::vector<uint8_t> data;
-    if (!read_file(full, data))
-      return false;
-    const std::string name = target_name(relative, ko_dir);
-    if (name != relative)
-      ensure_parents(entries, index, name);
-    replace_or_add(entries, index, name, S_IFREG | (st.st_mode & 07777),
-                   std::move(data));
-    return true;
-  }
-
-  // Sockets, FIFOs and device nodes have no meaningful host representation
-  // here; leave them untouched.
-  return true;
-}
-
-bool merge_tree(std::vector<cpio_entry> &entries,
-                std::map<std::string, size_t> &index, const std::string &root,
-                const std::string &relative, const std::string &ko_dir,
-                bool skip_ko) {
-  const std::string full = relative.empty() ? root : root + "/" + relative;
-
-  DIR *dir = ::opendir(full.c_str());
-  if (dir == nullptr)
-    return false;
-
-  std::vector<std::string> names;
-  while (struct dirent *de = ::readdir(dir)) {
-    const std::string name = de->d_name;
-    if (name == "." || name == "..")
-      continue;
-    names.push_back(name);
-  }
-  ::closedir(dir);
-
-  // Sort so the produced archive does not depend on readdir order.
-  std::sort(names.begin(), names.end());
-
-  for (const std::string &name : names) {
-    const std::string child_rel = relative.empty() ? name : relative + "/" + name;
-    const std::string child_full = full + "/" + name;
-
-    struct stat st{};
-    if (::lstat(child_full.c_str(), &st) != 0)
-      return false;
-
-    if (!merge_node(entries, index, root, child_rel, child_full, st, ko_dir,
-                    skip_ko))
-      return false;
-  }
-
-  return true;
 }
 
 } // namespace
@@ -325,23 +219,6 @@ std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries) {
   append_record(out, trailer, ino);
 
   return out;
-}
-
-bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
-                const std::string &ko_dir, bool skip_ko) {
-  struct stat st{};
-  if (::lstat(path.c_str(), &st) != 0)
-    return false;
-
-  std::map<std::string, size_t> index;
-  for (size_t i = 0; i < entries.size(); ++i)
-    index[normalize(entries[i].name)] = i;
-
-  if (S_ISDIR(st.st_mode))
-    return merge_tree(entries, index, path, "", ko_dir, skip_ko);
-
-  return merge_node(entries, index, path, base_name(path), path, st, ko_dir,
-                    skip_ko);
 }
 
 bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,

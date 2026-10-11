@@ -13,8 +13,8 @@
 namespace boot {
 namespace {
 
-// Directory inside the ramdisk that kernel modules are installed to.
-constexpr const char *kModuleDir = "lib/modules";
+// The ncore kernel module always lives at this path inside the vendor ramdisk.
+constexpr const char *kNksuModule = "lib/modules/nksu.ko";
 
 template <typename T>
 bool read_struct(const MMapFile &image, size_t offset, T &out) {
@@ -48,10 +48,6 @@ std::string normalize(const std::string &name) {
   while (out.rfind("./", 0) == 0)
     out.erase(0, 2);
   return out;
-}
-
-bool is_module_name(const std::string &name) {
-  return name.size() > 3 && name.compare(name.size() - 3, 3, ".ko") == 0;
 }
 
 // Decompress `data`, whose detected format is `format`, through a temporary
@@ -140,44 +136,33 @@ bool store_ramdisk(const ramdisk &rd, const std::string &tmp,
   return compress_to_vector(rd.format, packed.data(), packed.size(), tmp, out);
 }
 
-// Whether the archive already carries kernel modules under lib/modules.
+// Whether the archive already carries lib/modules, marking it as the ramdisk
+// the module belongs in.
 bool has_modules(const std::vector<cpio_entry> &entries) {
-  const std::string prefix = std::string(kModuleDir) + "/";
+  const std::string target = normalize(kNksuModule);
+  const std::string dir = target.substr(0, target.find_last_of('/'));
   for (const cpio_entry &entry : entries) {
     const std::string name = normalize(entry.name);
-    if (name == kModuleDir || name.rfind(prefix, 0) == 0)
+    if (name == dir || name.rfind(dir + "/", 0) == 0)
       return true;
   }
   return false;
 }
 
-// Turn an explicit `dest` into an archive path: a bare module name lands in
-// lib/modules, and any other bare name lands at the ramdisk root.
-std::string explicit_path(const std::string &dest) {
-  if (dest.find('/') != std::string::npos)
-    return dest;
-  if (is_module_name(dest))
-    return std::string(kModuleDir) + "/" + dest;
-  return dest;
-}
-
 } // namespace
 
-// Patch `image_path` -- a v3/v4 vendor boot image -- in place by merging
-// `patch_path` into its vendor ramdisk cpio(s).
-//
-// `patch_path` is one of:
-//   * a directory (or a single file) merged at its relative path; every *.ko
-//     is installed at lib/modules/<name>, replacing an existing entry of the
-//     same name;
-//   * `dest=source`, to place `source` at a specific archive path, replacing
-//     whatever is there. A bare destination module name resolves under
-//     lib/modules (e.g. `nksu.ko=android13-5.15_nksu.ko`), any other bare name
-//     at the ramdisk root, and a destination containing '/' is used verbatim.
-//
-// Each ramdisk keeps its original compression and, for v4, the ramdisk table is
-// updated to match. The result is written to `<image_path>.new`.
-int patch(const std::string image_path, const std::string patch_path) {
+// Install `ko_path` as lib/modules/nksu.ko in the vendor ramdisk of
+// `image_path` (a v3/v4 vendor boot image), replacing the module that is
+// already there. The ramdisk keeps its original compression and, for v4, the
+// ramdisk table is updated to match. The result is written to
+// `<image_path>.new`.
+int patch(const std::string image_path, const std::string ko_path) {
+  struct stat ko_st{};
+  if (::lstat(ko_path.c_str(), &ko_st) != 0 || !S_ISREG(ko_st.st_mode)) {
+    std::cerr << "patch: " << ko_path << " is not a regular file\n";
+    return -1;
+  }
+
   MMapFile image(image_path.c_str());
   if (!image.valid()) {
     std::cerr << "patch: cannot open " << image_path << std::endl;
@@ -211,35 +196,9 @@ int patch(const std::string image_path, const std::string patch_path) {
     return -1;
   }
 
-  // Parse an explicit `dest=source` mapping, if the source really exists.
-  std::string map_dest;
-  std::string map_src;
-  const size_t equals = patch_path.find('=');
-  if (equals != std::string::npos && equals > 0 &&
-      equals + 1 < patch_path.size()) {
-    const std::string dest = patch_path.substr(0, equals);
-    const std::string src = patch_path.substr(equals + 1);
-    struct stat st{};
-    if (::lstat(src.c_str(), &st) == 0) {
-      map_dest = explicit_path(dest);
-      map_src = src;
-    }
-  }
-  const bool mapped = !map_dest.empty();
-
   const std::string tmp = image_path + ".patch";
   std::vector<uint8_t> new_ramdisk;
   std::vector<uint8_t> new_table;
-
-  // Apply the patch to one ramdisk. `target` selects the ramdisk that receives
-  // kernel modules; the others only take non-module files.
-  auto apply = [&](std::vector<cpio_entry> &entries, bool target) -> bool {
-    if (mapped)
-      return !target || cpio_put(entries, map_dest, map_src);
-
-    const std::string ko_dir = target ? kModuleDir : "";
-    return cpio_merge(entries, patch_path, ko_dir, !target);
-  };
 
   if (b == boottype::vendor_boot_img_hdr_v4) {
     vendor_boot_img_hdr_v4 head{};
@@ -287,7 +246,7 @@ int patch(const std::string image_path, const std::string patch_path) {
     }
 
     // No ramdisk carries lib/modules yet: install into the first one so the
-    // modules still land somewhere predictable.
+    // module still lands somewhere predictable.
     if (module_target < 0) {
       for (uint32_t i = 0; i < count; ++i) {
         if (rds[i].size != 0) {
@@ -304,8 +263,9 @@ int patch(const std::string image_path, const std::string patch_path) {
       if (entry.ramdisk_size == 0)
         continue;
 
-      if (!apply(rds[i].entries, static_cast<int>(i) == module_target)) {
-        std::cerr << "patch: failed to apply " << patch_path << " to ramdisk "
+      if (static_cast<int>(i) == module_target &&
+          !cpio_put(rds[i].entries, kNksuModule, ko_path)) {
+        std::cerr << "patch: failed to install " << ko_path << " into ramdisk "
                   << i << std::endl;
         return -1;
       }
@@ -329,8 +289,8 @@ int patch(const std::string image_path, const std::string patch_path) {
     if (!load_ramdisk(vramdisk->data, vramdisk->size, tmp, rd))
       return -1;
 
-    if (!apply(rd.entries, true)) {
-      std::cerr << "patch: failed to apply " << patch_path << std::endl;
+    if (!cpio_put(rd.entries, kNksuModule, ko_path)) {
+      std::cerr << "patch: failed to install " << ko_path << std::endl;
       return -1;
     }
 
@@ -355,7 +315,8 @@ int patch(const std::string image_path, const std::string patch_path) {
     return -1;
   }
 
-  std::cout << "patched vendor ramdisk -> " << out_path << std::endl;
+  std::cout << "installed " << ko_path << " -> " << kNksuModule << " in "
+            << out_path << std::endl;
   return 0;
 }
 

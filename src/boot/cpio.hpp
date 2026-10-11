@@ -27,28 +27,12 @@ bool cpio_parse(const uint8_t *data, size_t size, std::vector<cpio_entry> &out);
 // the kernel expects. Records (and the archive) are padded to four bytes.
 std::vector<uint8_t> cpio_pack(const std::vector<cpio_entry> &entries);
 
-// Merge `path` into `entries`. When `path` is a directory its tree is merged
-// recursively: a host file that matches an existing entry replaces that
-// entry's contents in place (keeping the entry's owner and mode), and new
-// paths are appended before the trailer with any missing parent directories
-// created. When `path` is a single file or symlink it is added at the archive
-// root under its base name.
-//
-// Kernel modules are handled specially: when `ko_dir` is non-empty, any
-// regular file whose name ends in ".ko" is placed at `ko_dir/<base name>`
-// instead of its relative path, and the parent directories are created. When
-// `skip_ko` is set such files are dropped entirely, which lets a caller route
-// modules to a single vendor ramdisk.
-//
-// Returns false if `path` cannot be read.
-bool cpio_merge(std::vector<cpio_entry> &entries, const std::string &path,
-                const std::string &ko_dir = "", bool skip_ko = false);
-
 // Add or replace a single entry named `name` inside the archive, reading from
 // the host file `host_path` (a regular file or symlink). Missing parent
-// directories are created. When the entry already exists its owner and mode are
-// kept and only the payload is swapped, so an explicit rename still replaces
-// the original record in place. Returns false if the host file cannot be read.
+// directories are created. Every existing entry that resolves to the same name
+// (including a "./"-prefixed duplicate) has its payload swapped for the file's
+// contents while keeping its owner and mode. Returns false if the host file
+// cannot be read.
 bool cpio_put(std::vector<cpio_entry> &entries, const std::string &name,
               const std::string &host_path);
 
