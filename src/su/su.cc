@@ -164,12 +164,6 @@ int run(int argc, char *argv[]) {
     }
   }
 
-  if (::geteuid() != 0 && ::setuid(0) != 0) {
-    std::cerr << "su: cannot switch to root: " << std::strerror(errno)
-              << std::endl;
-    return 1;
-  }
-
   if (shell.empty())
     shell = kDefaultShell;
 
