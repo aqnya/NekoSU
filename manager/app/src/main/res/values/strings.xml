@@ -278,10 +278,7 @@
     <string name="install_log_ncore_warn">[nksu] WARN: ncore install failed; the manager will retry on next boot</string>
     <string name="install_log_exported">[nksu] exported to: %1$s</string>
     <string name="install_log_export_failed">[nksu] failed to export to Download: %1$s</string>
-    <string name="install_log_patched_exported">[nksu] patched image exported: %1$s</string>
-    <string name="install_log_patched_export_failed">[nksu] patched image export failed: %1$s</string>
-    <string name="install_log_verify_ok">[nksu] write verification passed</string>
-    <string name="install_log_verify_failed">[nksu] write verification failed, rolling back original image</string>
+    <string name="install_log_rollback">[nksu] write failed, restoring the original image</string>
     <string name="install_log_direct_done">[nksu] Direct install complete; takes effect after reboot</string>
     <string name="install_log_err_ncore">[nksu] ERROR: ncore not executable: %1$s</string>
     <string name="install_log_err_ko">[nksu] ERROR: assets/%1$s not found or failed to copy</string>

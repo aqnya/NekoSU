@@ -125,19 +125,33 @@ object VendorBootInstaller {
                 resolveKo(context, koName, koUri)
                     ?: throw IllegalStateException(context.getString(R.string.install_err_ko_missing))
 
-            val patched = patchImage(ncore, vendorBoot, koFile, onOutput)
-            if (patched == null) {
-                onOutput(context.getString(R.string.install_log_err_patch))
-                return@withContext -1
-            }
+            try {
+                val patched = patchImage(ncore, vendorBoot, koFile, onOutput)
+                if (patched == null) {
+                    onOutput(context.getString(R.string.install_log_err_patch))
+                    return@withContext -1
+                }
 
-            val produced = File(dir, outputImageName())
-            produced.delete()
-            patched.copyTo(produced, overwrite = true)
-            runCatching { exportToDownload(context, produced) }
-                .onSuccess { onOutput(context.getString(R.string.install_log_exported, it.absolutePath)) }
-                .onFailure { onOutput(context.getString(R.string.install_log_export_failed, it.message.orEmpty())) }
-            0
+                // Rename the patched image to the export name rather than writing a
+                // second full copy of it.
+                val produced = File(dir, outputImageName())
+                produced.delete()
+                if (!patched.renameTo(produced)) {
+                    patched.copyTo(produced, overwrite = true)
+                    patched.delete()
+                }
+                runCatching { exportToDownload(context, produced) }
+                    .onSuccess {
+                        onOutput(context.getString(R.string.install_log_exported, it.absolutePath))
+                        // The Download copy is the deliverable; drop the private one.
+                        produced.delete()
+                    }
+                    .onFailure { onOutput(context.getString(R.string.install_log_export_failed, it.message.orEmpty())) }
+                0
+            } finally {
+                // The staged input image is only needed for this run.
+                vendorBoot.delete()
+            }
         }
 
     /**
@@ -158,10 +172,11 @@ object VendorBootInstaller {
         val output = File(dir, "${sourceImage.name}.new")
         output.delete()
         val args = listOf("-p", sourceImage.absolutePath, koFile.absolutePath)
-        if (!runNcore(ncore, args, dir, onOutput)) {
+        if (!runNcore(ncore, args, dir, onOutput) || !output.isFile) {
+            output.delete()
             return null
         }
-        return output.takeIf { it.isFile }
+        return output
     }
 
     /** 运行 ncore 并把输出逐行回调；退出码为 0 返回 true。 */
@@ -214,16 +229,15 @@ object VendorBootInstaller {
     ): String? = Ncore.findVendorBoot(slotSuffix.orEmpty(), allowSlotless)
 
     /**
-     * 直接安装：以 root 读取指定 vendor_boot 分区，打入 nksu.ko 后写回，
-     * 不再需要用户手动 fastboot。
+     * 直接安装：以 root 读取指定 vendor_boot 分区，打入 nksu.ko 后写回。
      *
-     * 流程：dump 原镜像 -> `ncore -p <镜像> <ko>` 打补丁 -> 导出补丁镜像 ->
-     * 写回分区 -> 读回校验（失败则自动回滚原镜像）。KernelSU 的「直接安装 /
-     * 刷入非活动分区」都走这里，区别只是 @partition 指向当前或非活动 slot。
+     * 流程：dump 原镜像 -> `ncore -p <镜像> <ko>` 打补丁 -> 写回分区；写入失败
+     * 时把原镜像写回回滚。KernelSU 的「直接安装 / 刷入非活动分区」都走这里，
+     * 区别只是 @partition 指向当前或非活动 slot。
      *
      * patch 全程只操作本地临时文件，不需要 root；只有 dump / 写回分区用到 su。
-     * 不再保留原镜像备份：每次安装都从分区现 dump 一份临时镜像供 patch 与
-     * 失败回滚使用，结束即删除。
+     * 原镜像只现 dump 一份、供 patch 与失败回滚使用，结束即删除；不导出补丁
+     * 镜像，也不做整分区读回校验（写入结果即依据）。
      *
      * 需要设备已具备 root（Magisk/KernelSU 等 su，或已装 nksu）。
      */
@@ -267,8 +281,7 @@ object VendorBootInstaller {
                 onOutput(context.getString(R.string.install_log_ncore_warn))
             }
 
-            // 1) 从当前分区 dump 一份原镜像，仅用于本次 patch 与校验失败回滚；
-            //    不导出、不跨次复用，安装结束后删除。
+            // 1) 现 dump 一份原镜像，既作为 patch 的输入，也作为写入失败的回滚依据。
             val source = File(dir, SOURCE_IMAGE_NAME)
             source.delete()
             source.createNewFile()
@@ -278,9 +291,6 @@ object VendorBootInstaller {
                 return@withContext -1
             }
 
-            val produced = File(dir, outputImageName())
-            produced.delete()
-
             // 2) 交给 ncore 直接把模块打进镜像（无需 root），得到补丁镜像。
             val patched = patchImage(ncore, source, koFile, onOutput)
             if (patched == null) {
@@ -288,38 +298,19 @@ object VendorBootInstaller {
                 source.delete()
                 return@withContext -1
             }
-            patched.copyTo(produced, overwrite = true)
-            runCatching { exportToDownload(context, produced) }
-                .onSuccess { onOutput(context.getString(R.string.install_log_patched_exported, it.absolutePath)) }
-                .onFailure { onOutput(context.getString(R.string.install_log_patched_export_failed, it.message.orEmpty())) }
 
-            // 3) 写回分区并读回校验（容量检查在 writeBlock 内）；不一致则回滚原镜像。
-            val size = produced.length()
-
-            if (!Ncore.writeBlock(produced.absolutePath, part)) {
-                onOutput(context.getString(R.string.install_log_err_flash))
-                source.delete()
-                return@withContext -1
-            }
-
-            val readback = File(dir, "vendor_boot.readback.img")
-            readback.delete()
-            readback.createNewFile()
-            val verified =
-                Ncore.writeBlock(part, readback.absolutePath) &&
-                    readback.exists() &&
-                    filesMatchPrefix(produced, readback, size)
-            readback.delete()
-            if (!verified) {
-                onOutput(context.getString(R.string.install_log_verify_failed))
+            // 3) 写回分区；失败则把原镜像写回，避免留下半写状态。
+            if (!Ncore.writeBlock(patched.absolutePath, part)) {
+                onOutput(context.getString(R.string.install_log_rollback))
                 Ncore.writeBlock(source.absolutePath, part)
                 source.delete()
+                patched.delete()
                 onOutput(context.getString(R.string.install_log_err_flash))
                 return@withContext -1
             }
 
             source.delete()
-            onOutput(context.getString(R.string.install_log_verify_ok))
+            patched.delete()
             onOutput(context.getString(R.string.install_log_direct_done))
             0
         }
@@ -328,46 +319,6 @@ object VendorBootInstaller {
         (1..RANDOM_TOKEN_LENGTH)
             .map { RANDOM_ALPHABET[Random.nextInt(RANDOM_ALPHABET.length)] }
             .joinToString("")
-
-    /** 分块比较 [a] 与 [b] 的前 [length] 字节，避免整段读进内存。 */
-    private fun filesMatchPrefix(
-        a: File,
-        b: File,
-        length: Long,
-    ): Boolean {
-        if (length <= 0 || a.length() < length || b.length() < length) return false
-        a.inputStream().use { ia ->
-            b.inputStream().use { ib ->
-                val bufA = ByteArray(1 shl 16)
-                val bufB = ByteArray(1 shl 16)
-                var remaining = length
-                while (remaining > 0) {
-                    val want = minOf(remaining, bufA.size.toLong()).toInt()
-                    if (readFully(ia, bufA, want) != want) return false
-                    if (readFully(ib, bufB, want) != want) return false
-                    for (i in 0 until want) {
-                        if (bufA[i] != bufB[i]) return false
-                    }
-                    remaining -= want
-                }
-            }
-        }
-        return true
-    }
-
-    private fun readFully(
-        input: java.io.InputStream,
-        buffer: ByteArray,
-        length: Int,
-    ): Int {
-        var off = 0
-        while (off < length) {
-            val n = input.read(buffer, off, length - off)
-            if (n < 0) break
-            off += n
-        }
-        return off
-    }
 
     /**
      * 把生成的补丁镜像导出到 /sdcard/Download。

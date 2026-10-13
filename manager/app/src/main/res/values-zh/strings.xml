@@ -272,10 +272,7 @@
     <string name="install_log_ncore_warn">[nksu] WARN: ncore 安装失败，模块将在下次启动由管理器重试</string>
     <string name="install_log_exported">[nksu] 已导出到: %1$s</string>
     <string name="install_log_export_failed">[nksu] 导出到 Download 失败: %1$s</string>
-    <string name="install_log_patched_exported">[nksu] 补丁镜像已导出: %1$s</string>
-    <string name="install_log_patched_export_failed">[nksu] 补丁镜像导出失败: %1$s</string>
-    <string name="install_log_verify_ok">[nksu] 写入校验通过</string>
-    <string name="install_log_verify_failed">[nksu] 写入校验失败，正在回滚原镜像</string>
+    <string name="install_log_rollback">[nksu] 写入失败，正在回滚原镜像</string>
     <string name="install_log_direct_done">[nksu] 直接安装完成，重启后生效</string>
     <string name="install_log_err_ncore">[nksu] ERROR: ncore 不可执行: %1$s</string>
     <string name="install_log_err_ko">[nksu] ERROR: assets/%1$s 未找到或复制失败</string>
