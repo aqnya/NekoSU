@@ -25,8 +25,9 @@
  *
  *   kallsyms_offsets[]  or kallsyms_addresses[]   // num_syms entries
  *   kallsyms_relative_base                       // BASE_RELATIVE only
- *   kallsyms_names[]     variable length: [len][token ...],
- *                        where len uses 0x80 continuation encoding
+ *   kallsyms_names[]     variable length: [len][token ...], where len is a
+ *                        single length byte (this kernel's
+ *                        kallsyms_expand_symbol() has no 0x80 continuation)
  *   kallsyms_markers[]   one u32 offset per 256 symbols
  *   kallsyms_token_table[]  256 NUL-terminated tokens (1-2 bytes each)
  *   kallsyms_token_index[]  256 u16 offsets into token_table
@@ -41,19 +42,21 @@
  * external memory goes through copy_from_kernel_nofault() into a bounce
  * buffer before parsing.
  *
- * Address decoding:
- *   - BASE_RELATIVE: offsets[i] >= 0 -> base + offsets[i]
- *                    offsets[i] <  0 -> base - 1 - offsets[i]
- *     (see kallsyms_sym_address)
+ * Address decoding (see kallsyms_sym_address):
+ *   - BASE_RELATIVE, !ABSOLUTE_PERCPU: addr = base + (u32)offsets[i]
+ *   - BASE_RELATIVE,  ABSOLUTE_PERCPU: offsets[i] >= 0 -> offsets[i]
+ *                                     offsets[i] <  0 -> base - 1 - offsets[i]
  *   - absolute array: addresses[i]
  *
- * To avoid depending on kernel global symbols, both the address array and
- * relative_base are recovered from the self-referential symbols inside the
- * kallsyms table ("kallsyms_names" / "kallsyms_token_table"): their values
- * must equal the names / token_table addresses we already located.
+ * To avoid depending on kernel global symbols, the address array and
+ * relative_base are recovered from the fixed .rodata layout emitted by
+ * scripts/kallsyms.c (offsets[] .. relative_base .. num_syms .. names[]):
+ * relative_base is the u64 at names-16, num_syms the u32 at names-8. No
+ * kernel global is referenced.
  */
 
 #include <linux/kernel.h>
+#include <linux/kconfig.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -70,7 +73,13 @@
 #include "klog.h"
 #include "symbol/symbol.h"
 
-#define KSYM_NAME_MAX     512         /* matches kernel KSYM_NAME_LEN cap */
+/*
+ * Upper bound for a decoded (decompressed) symbol name. The on-media length
+ * is a single u8 (<= 255 compressed tokens), and the kernel caps the
+ * decompressed name at KSYM_NAME_LEN (128 on 5.15, larger on newer kernels);
+ * 512 comfortably exceeds both on every supported version.
+ */
+#define KSYM_NAME_MAX     512
 #define KSYM_MARKERS_MAX  8192        /* at most 8192 markers */
 
 /* bounce buffer: copy this much before and after the table */
@@ -468,14 +477,21 @@ static const u8 *find_names_start(const u8 *buf_start,
 
     cand = names_end - last_marker;
 
-    for (; cand >= buf_start &&
-           (size_t)(names_end - cand) <= max_names_size; cand--) {
-        if (!names_start_valid(cand, v))
-            continue;
-        if (try(cand, names_end, arg))
+    /*
+     * Walk candidate starts downward, but never form a pointer before
+     * buf_start (that would be undefined behaviour): terminate explicitly
+     * when cand == buf_start instead of decrementing past it. As cand
+     * decreases names_end - cand grows, so the size bound is tested first.
+     */
+    for (;;) {
+        if ((size_t)(names_end - cand) > max_names_size)
+            break;
+        if (names_start_valid(cand, v) &&
+            try(cand, names_end, arg))
             return cand;
         if (cand == buf_start)
             break;
+        cand--;
     }
     return NULL;
 }
@@ -535,15 +551,33 @@ struct addr_info {
     const unsigned long *addresses;   /* absolute mode (kallsyms_addresses) */
 };
 
+/*
+ * Match the kernel's kallsyms_sym_address().
+ *
+ * With CONFIG_KALLSYMS_BASE_RELATIVE (mandatory on arm64):
+ *   - without CONFIG_KALLSYMS_ABSOLUTE_PERCPU every entry is an unsigned
+ *     32-bit offset from kallsyms_relative_base;
+ *   - with it, non-negative entries are absolute values and negative entries
+ *     encode relative values as (-offset - 1).
+ *
+ * CONFIG_KALLSYMS_ABSOLUTE_PERCPU is x86_64-only by default (init/Kconfig:
+ * "default X86_64 && SMP") and is not set on arm64, but both branches are
+ * kept so the decoder matches whichever kernel config the module was built
+ * against. Note the negative branch must sign-extend the offset; a plain
+ * (u32) cast would zero-extend and be off by 2^32.
+ */
 static unsigned long symbol_addr(const struct addr_info *ai, u32 i)
 {
-    s32 off;
-
     if (ai->base_relative) {
-        off = (s32)ai->offsets[i];
+#if IS_ENABLED(CONFIG_KALLSYMS_ABSOLUTE_PERCPU)
+        s32 off = (s32)ai->offsets[i];
+
         if (off >= 0)
-            return ai->relative_base + (u32)off;
-        return ai->relative_base - 1 - (u32)off;
+            return (unsigned long)off;                  /* absolute */
+        return ai->relative_base - 1 - (unsigned long)(long)off;
+#else
+        return ai->relative_base + (u32)ai->offsets[i];
+#endif
     }
     if (ai->addresses)
         return ai->addresses[i];
@@ -560,8 +594,9 @@ static unsigned long symbol_addr(const struct addr_info *ai, u32 i)
  *     kallsyms_names            (8-byte aligned)
  *
  * So relative_base is the u64 at names-16, num_syms the u32 at names-8, and
- * the offsets array starts at names-16-num_syms*4. num_syms must be
- * consistent with the number of markers, which validates the layout.
+ * the offsets array starts at names-16-ALIGN(num_syms*4, 8) (the array is
+ * 8-byte aligned, so its span is rounded up). num_syms must be consistent
+ * with the number of markers, which validates the layout.
  */
 static int resolve_addresses(const struct kallsyms_view *v,
                              const u8 *buf_start, const u8 *buf_end,
@@ -570,6 +605,7 @@ static int resolve_addresses(const struct kallsyms_view *v,
     const u8 *names = v->names;
     unsigned long names_addr = (unsigned long)names;
     unsigned long rel_base;
+    size_t offsets_size, offsets_span;
     u32 num_syms;
 
     memset(ai, 0, sizeof(*ai));
@@ -588,11 +624,29 @@ static int resolve_addresses(const struct kallsyms_view *v,
         num_syms > v->marker_count * 256u)
         return -ENOENT;
 
-    /* the offsets array plus the two scalars must be inside the buffer */
-    if (names_addr < (unsigned long)buf_start + 16 +
-                     (size_t)num_syms * sizeof(u32))
+    /*
+     * scripts/kallsyms.c emits kallsyms_offsets[] through output_label(), so
+     * the array starts on an 8-byte boundary and is immediately followed by
+     * the 8-byte-aligned kallsyms_relative_base. With an odd symbol count the
+     * num_syms * 4 bytes end 4 bytes short of the next 8-byte boundary, and 4
+     * bytes of padding sit between the array and relative_base. The span must
+     * be rounded up to 8 bytes, otherwise the array start -- and therefore
+     * every decoded address -- shifts by one u32.
+     */
+    offsets_size = (size_t)num_syms * sizeof(u32);
+    offsets_span = ALIGN(offsets_size, 8);
+
+    /* names must lie inside the scanned buffer */
+    if (names_addr < (unsigned long)buf_start ||
+        names_addr > (unsigned long)buf_end)
         return -ENOENT;
-    if (names_addr + 16 > (unsigned long)buf_end)
+
+    /*
+     * The offsets array, num_syms and relative_base all sit below names, so
+     * names - buf_start must leave room for both scalars and the aligned
+     * array. Subtract first so the comparison cannot overflow.
+     */
+    if (names_addr - (unsigned long)buf_start < 16 + offsets_span)
         return -ENOENT;
 
     memcpy(&rel_base, names - 16, sizeof(rel_base));
@@ -600,8 +654,7 @@ static int resolve_addresses(const struct kallsyms_view *v,
         return -ENOENT;
 
     ai->base_relative = true;
-    ai->offsets = (const u32 *)(names_addr - 16 -
-                                (size_t)num_syms * sizeof(u32));
+    ai->offsets = (const u32 *)(names_addr - 16 - offsets_span);
     ai->relative_base = rel_base;
     *num_out = num_syms;
     return 0;
@@ -715,51 +768,70 @@ static int scan_region(unsigned long start, unsigned long end)
     /* overlap so a token_table spanning a chunk boundary is still seen */
     const size_t step = SZ_64K - 4096;
     u8 *probe;
-    unsigned long pos;
+    unsigned long first, pos;
     int found = 0;
+
+    /* inverted or empty range: nothing to do */
+    if (end <= start)
+        return 0;
+
+    first = ALIGN(start, 8);
+    if (first < start)      /* ALIGN wrapped past the top of the address space */
+        first = start;
 
     probe = kvmalloc(chunk, GFP_KERNEL);
     if (!probe)
         return -ENOMEM;
 
-    /* include the final partial chunk rather than requiring pos+chunk<=end */
-    for (pos = ALIGN(start, 8); pos < end; pos += step) {
+    /*
+     * Include the final partial chunk rather than requiring pos+chunk<=end.
+     * pos += step cannot wrap: it only runs after the "len < chunk" break
+     * test, i.e. only while end - pos >= chunk > step, so pos + step < end.
+     */
+    for (pos = first; pos < end; pos += step) {
         size_t len = min_t(unsigned long, chunk, end - pos);
         size_t off;
         bool hit = false;
 
-        if (kread((const void *)pos, probe, len) == 0) {
-            /* token_table is 8-byte aligned via ALGN; step 8 */
-            for (off = 0; off + 16 <= len; off += 8) {
-                const u8 *tt = probe + off;
-                unsigned long tt_kaddr = pos + off;
-                u8 *buf;
-                unsigned long buf_len, buf_kaddr;
+        /*
+         * Fast path: one bulk copy when the whole chunk is mapped. Only if
+         * that fails fall back to the page-granular best-effort copy, which
+         * always fully initialises `probe` (unreadable pages -> zero), so no
+         * stale bytes from a previous iteration can be mistaken for data.
+         */
+        if (kread((const void *)pos, probe, len) < 0)
+            kread_best_effort(probe, pos, len);
 
-                if (!token_table_len(tt, probe + len))
-                    continue;
+        /* token_table is 8-byte aligned via ALGN; step 8 */
+        for (off = 0; off + 16 <= len; off += 8) {
+            const u8 *tt = probe + off;
+            unsigned long tt_kaddr = pos + off;
+            u8 *buf;
+            unsigned long buf_len, buf_kaddr;
 
-                /* candidate hit: copy a window ending past token_table */
-                buf_len = KSYM_BOUNCE_BACK + KSYM_BOUNCE_FWD;
-                buf = kvmalloc(buf_len, GFP_KERNEL);
-                if (!buf)
-                    break;
+            if (!token_table_len(tt, probe + len))
+                continue;
 
-                buf_kaddr = tt_kaddr > KSYM_BOUNCE_BACK ?
-                            tt_kaddr - KSYM_BOUNCE_BACK : 0;
+            /* candidate hit: copy a window ending past token_table */
+            buf_len = KSYM_BOUNCE_BACK + KSYM_BOUNCE_FWD;
+            buf = kvmalloc(buf_len, GFP_KERNEL);
+            if (!buf)
+                break;
 
-                kread_best_effort(buf, buf_kaddr, buf_len);
+            buf_kaddr = tt_kaddr > KSYM_BOUNCE_BACK ?
+                        tt_kaddr - KSYM_BOUNCE_BACK : 0;
 
-                if (consume_buffer(buf, buf_len,
-                                   buf + (tt_kaddr - buf_kaddr)) == 0) {
-                    found++;
-                    hit = true;
-                }
-                kvfree(buf);
+            kread_best_effort(buf, buf_kaddr, buf_len);
 
-                if (hit)
-                    break;
+            if (consume_buffer(buf, buf_len,
+                               buf + (tt_kaddr - buf_kaddr)) == 0) {
+                found++;
+                hit = true;
             }
+            kvfree(buf);
+
+            if (hit)
+                break;
         }
 
         /* stop after the last (short) chunk or once something was found */
@@ -785,7 +857,16 @@ static int scan_region(unsigned long start, unsigned long end)
 
 #define VMCOREINFO_PATH "/sys/kernel/vmcoreinfo"
 
-static unsigned long read_vmcoreinfo_symbol(const char *sym)
+/*
+ * Read a value from VMCOREINFO. Entries look like:
+ *
+ *     SYMBOL(_stext)=0xffff800010000000
+ *     NUMBER(KERNEL_IMAGE_SIZE)=0x2000000
+ *
+ * so the caller supplies both the entry kind ("SYMBOL" / "NUMBER") and the
+ * name. Reading KERNEL_IMAGE_SIZE through "SYMBOL(...)" would never match.
+ */
+static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
 {
     struct file *f;
     char *buf;
@@ -796,7 +877,7 @@ static unsigned long read_vmcoreinfo_symbol(const char *sym)
     char key[64];
     char *p;
 
-    snprintf(key, sizeof(key), "SYMBOL(%s)=", sym);
+    snprintf(key, sizeof(key), "%s(%s)=", kind, name);
 
     f = filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
     if (IS_ERR(f))
@@ -841,15 +922,18 @@ static void scan_kernel_memory_locked(void)
      * base and size, so the scan can be confined to the real image
      * (typically tens of MB) instead of a broad guess window.
      */
-    stext = read_vmcoreinfo_symbol("_stext");
+    stext = read_vmcoreinfo_entry("SYMBOL", "_stext");
     if (!stext)
-        stext = read_vmcoreinfo_symbol("_text");
-    img_size = read_vmcoreinfo_symbol("KERNEL_IMAGE_SIZE");
+        stext = read_vmcoreinfo_entry("SYMBOL", "_text");
+    img_size = read_vmcoreinfo_entry("NUMBER", "KERNEL_IMAGE_SIZE");
 
     if (stext) {
         if (!img_size || img_size > SZ_1G)
             img_size = SZ_512M;
-        found = scan_region(stext, stext + img_size);
+
+        /* guard against stext + img_size wrapping the address space */
+        found = stext <= ULONG_MAX - img_size ?
+                scan_region(stext, stext + img_size) : 0;
         if (found)
             return;
     }
@@ -867,9 +951,11 @@ static void scan_kernel_memory_locked(void)
      */
     anchor = (unsigned long)&copy_from_kernel_nofault;
     if (anchor) {
-        found = scan_region(anchor, anchor + SZ_256M);
-        if (found)
-            return;
+        if (anchor <= ULONG_MAX - SZ_256M) {
+            found = scan_region(anchor, anchor + SZ_256M);
+            if (found)
+                return;
+        }
 
         if (anchor > SZ_256M) {
             found = scan_region(anchor - SZ_256M, anchor);
@@ -887,6 +973,8 @@ static void scan_kernel_memory_locked(void)
         int i;
 
         for (i = 0; i < ARRAY_SIZE(bases); i++) {
+            if (bases[i] > ULONG_MAX - SZ_1G)
+                continue;
             found = scan_region(bases[i], bases[i] + SZ_1G);
             if (found)
                 break;
@@ -1016,8 +1104,14 @@ static unsigned long lookup_proc_kallsyms(const char *name)
         char *p, *line;
 
         if (used >= SZ_64K - 1) {
-            /* defensive: never let the buffer overrun */
-            used = 0;
+            /*
+             * A single kallsyms line is at most a few hundred bytes, so a
+             * pending partial line filling the whole buffer means there was
+             * no newline in 64 KiB: malformed input. Stop instead of
+             * silently reusing the buffer, which could misparse the line
+             * tail as a fresh entry and produce a wrong match.
+             */
+            break;
         }
 
         rd = kernel_read(f, buf + used, SZ_64K - 1 - used, &pos);
@@ -1062,7 +1156,7 @@ static unsigned long lookup_proc_kallsyms(const char *name)
                     used = 0;
                     break;
                 }
-                if (linelen != (size_t)(line - buf)) {
+                if (line != buf) {
                     /* move partial line to the front for the next round */
                     memmove(buf, line, linelen + 1);
                 }
