@@ -13,6 +13,7 @@ on:
       - "manager/app/src/**/*.c"
       - "manager/build.gradle.kts"
       - "manager/gradle/libs.versions.toml"
+      - "userspace/ncore/**"
       - "version"
   pull_request:
     branches: [ "main" ]
@@ -21,6 +22,7 @@ on:
       - "manager/app/src/**/*.c"
       - "manager/build.gradle.kts"
       - "manager/gradle/libs.versions.toml"
+      - "userspace/ncore/**"
       - "version"
 
 permissions:
@@ -44,6 +46,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
+        submodules: recursive
 
     - name: Set up JDK 25
       uses: actions/setup-java@v6
@@ -109,55 +112,26 @@ jobs:
         find lkm-artifacts -name '*_nksu.ko' -exec cp {} manager/app/src/main/assets/ko/ \;
         ls -la manager/app/src/main/assets/ko/
 
-    - name: Download latest ncore CI artifact
-      env:
-        # A token with read access to aqnya/ncore Actions is required: the
-        # workflow-scoped GITHUB_TOKEN cannot see another repository's
-        # artifacts.  Set the NCORE_TOKEN secret to a classic PAT with `repo`
-        # scope, or a fine-grained PAT with "Actions: read" on aqnya/ncore.
-        GH_TOKEN: ${{ secrets.NCORE_TOKEN }}
+    # ncore lives in this repository (userspace/ncore) and is built here with
+    # its pinned Bazel, so the APK no longer depends on aqnya/ncore CI output
+    # or on an NCORE_TOKEN PAT.
+    - name: Set up Bazel
+      uses: ./userspace/ncore/.github/actions/bazel
+      with:
+        bazelversion-file: userspace/ncore/.bazelversion
+
+    - name: Build ncore (android arm64)
+      working-directory: userspace/ncore
       run: |
         set -euo pipefail
+        bazel build //:ncore --config=android
+        file bazel-bin/ncore
 
-        if [ -z "${GH_TOKEN:-}" ]; then
-          echo "::error::NCORE_TOKEN secret is not set; a token with read access to aqnya/ncore Actions is required"
-          exit 1
-        fi
-
-        repo="aqnya/ncore"
-        workflow="android-arm64.yml"
-        artifact="ncore-android-arm64"
-
-        echo "::group::Locating the latest successful ncore CI run"
-        run_id="$(gh run list \
-          --repo "$repo" \
-          --workflow "$workflow" \
-          --branch main \
-          --status success \
-          --limit 1 \
-          --json databaseId \
-          --jq '.[0].databaseId')"
-        if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-          echo "::error::no successful '$workflow' run found in $repo"
-          exit 1
-        fi
-        echo "latest successful run: $run_id"
-        echo "::endgroup::"
-
-        rm -rf ncore-artifact
-        gh run download "$run_id" \
-          --repo "$repo" \
-          --name "$artifact" \
-          --dir ncore-artifact
-
-        src="$(find ncore-artifact -type f -name ncore | head -n1)"
-        if [ -z "$src" ]; then
-          echo "::error::artifact '$artifact' did not contain a 'ncore' binary"
-          exit 1
-        fi
-
+    - name: Stage ncore into jniLibs
+      run: |
+        set -euo pipefail
         mkdir -p manager/app/src/main/jniLibs/arm64-v8a
-        cp "$src" manager/app/src/main/jniLibs/arm64-v8a/libncore.so
+        cp userspace/ncore/bazel-bin/ncore manager/app/src/main/jniLibs/arm64-v8a/libncore.so
         file manager/app/src/main/jniLibs/arm64-v8a/libncore.so
 
     - name: List packaged assets

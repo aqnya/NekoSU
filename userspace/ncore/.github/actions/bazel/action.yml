@@ -11,6 +11,14 @@ inputs:
     description: 'bazelisk release tag to install'
     required: false
     default: 'v1.29.0'
+  bazelversion-file:
+    description: >-
+      path of the .bazelversion pin, relative to the repository root.  The
+      default suits a repository whose root *is* the Bazel workspace; callers
+      that keep the workspace in a subdirectory (this monorepo keeps ncore in
+      userspace/ncore) pass the path there instead.
+    required: false
+    default: '.bazelversion'
 
 runs:
   using: composite
@@ -23,9 +31,11 @@ runs:
       # every pin onto one key.  Reading the file here fails loudly instead if
       # .bazelversion ever moves.
       shell: bash
+      env:
+        BAZELVERSION_FILE: ${{ inputs.bazelversion-file }}
       run: |
         set -euo pipefail
-        echo "version=$(cat .bazelversion)" >> "$GITHUB_OUTPUT"
+        echo "version=$(cat "$BAZELVERSION_FILE")" >> "$GITHUB_OUTPUT"
 
     - name: Cache the Bazel release
       # bazelisk downloads the release .bazelversion names (~200 MB) into
