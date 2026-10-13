@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <grp.h>
 #include <iostream>
 #include <pwd.h>
 #include <sched.h>
@@ -38,6 +39,9 @@ void print_usage() {
                "  -p, --preserve-environment   keep the current environment\n"
                "  -l, --login                  start a login shell\n"
                "  -M, --mount-master           run in the global mount namespace\n"
+               "  -u, --user USER              run as USER (name or uid)\n"
+               "  -g, --group GROUP            use GROUP as the primary group\n"
+               "  -G, --supp-group GROUP       add GROUP to the supplementary groups\n"
                "  -Z, --context CONTEXT        set the SELinux context\n"
                "  -v, --version                show version\n"
                "  -h, --help                   show this help\n"
@@ -72,6 +76,75 @@ void set_selinux_context(const std::string &context) {
   ::close(fd);
 }
 
+// Resolve a user name or a decimal uid.  Returns false when it is neither a
+// valid number nor a known account.
+bool resolve_uid(const std::string &user, uid_t &out) {
+  if (user.empty())
+    return false;
+
+  char *end = nullptr;
+  const unsigned long value = std::strtoul(user.c_str(), &end, 10);
+  if (end != nullptr && *end == '\0') {
+    out = static_cast<uid_t>(value);
+    return true;
+  }
+
+  const struct passwd *pw = ::getpwnam(user.c_str());
+  if (pw != nullptr) {
+    out = pw->pw_uid;
+    return true;
+  }
+  return false;
+}
+
+// Resolve a group name or a decimal gid.
+bool resolve_gid(const std::string &group, gid_t &out) {
+  if (group.empty())
+    return false;
+
+  char *end = nullptr;
+  const unsigned long value = std::strtoul(group.c_str(), &end, 10);
+  if (end != nullptr && *end == '\0') {
+    out = static_cast<gid_t>(value);
+    return true;
+  }
+
+  const struct group *gr = ::getgrnam(group.c_str());
+  if (gr != nullptr) {
+    out = gr->gr_gid;
+    return true;
+  }
+  return false;
+}
+
+// Switch to the requested uid/gid.  The kernel has already applied the root
+// profile, so this only runs when the caller asked for an explicit identity and
+// relies on the profile's CAP_SETUID/CAP_SETGID.
+int set_identity(uid_t uid, gid_t gid, const std::vector<gid_t> &groups) {
+  if (::setgroups(groups.size(), groups.empty() ? nullptr : groups.data()) != 0) {
+    std::cerr << "su: setgroups: " << std::strerror(errno) << std::endl;
+    return 1;
+  }
+  if (::setresgid(gid, gid, gid) != 0) {
+    std::cerr << "su: setresgid " << gid << ": " << std::strerror(errno) << std::endl;
+    return 1;
+  }
+  if (::setresuid(uid, uid, uid) != 0) {
+    std::cerr << "su: setresuid " << uid << ": " << std::strerror(errno) << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+// Match `--option=value` and copy the value out.
+bool inline_option(const std::string &arg, const char *name, std::string &out) {
+  const size_t len = std::strlen(name);
+  if (arg.rfind(name, 0) != 0 || arg.size() <= len || arg[len] != '=')
+    return false;
+  out = arg.substr(len + 1);
+  return true;
+}
+
 } // namespace
 
 bool is_su_invocation(const char *arg0) {
@@ -82,14 +155,20 @@ int run(int argc, char *argv[]) {
   std::string shell;
   std::string command;
   std::string context;
+  std::string user;
+  bool have_user = false;
   bool have_command = false;
   bool preserve_env = false;
   bool login = false;
   bool mount_master = false;
+  bool have_gid = false;
+  gid_t primary_gid = 0;
+  std::vector<gid_t> supp_groups;
   std::vector<std::string> positional;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i] != nullptr ? argv[i] : "";
+    std::string value;
 
     if (arg == "-c" || arg == "--command") {
       // Android su (and KernelSU's ksud) treat everything after -c as the
@@ -131,12 +210,43 @@ int run(int argc, char *argv[]) {
       context = argv[++i];
     } else if (arg.rfind("--context=", 0) == 0) {
       context = arg.substr(strlen("--context="));
-    } else if (arg == "-g" || arg == "--group" || arg == "-u" || arg == "--user") {
-      if (i + 1 < argc)
-        ++i; // consume and ignore: only root is supported
-    } else if (arg == "-G" || arg == "--supp-group") {
-      if (i + 1 < argc)
-        ++i;
+    } else if (arg == "-u" || arg == "--user" || inline_option(arg, "--user", value)) {
+      if (value.empty()) {
+        if (i + 1 >= argc) {
+          std::cerr << "su: option " << arg << " needs an argument" << std::endl;
+          return 1;
+        }
+        value = argv[++i];
+      }
+      user = value;
+      have_user = true;
+    } else if (arg == "-g" || arg == "--group" || inline_option(arg, "--group", value)) {
+      if (value.empty()) {
+        if (i + 1 >= argc) {
+          std::cerr << "su: option " << arg << " needs an argument" << std::endl;
+          return 1;
+        }
+        value = argv[++i];
+      }
+      if (!resolve_gid(value, primary_gid)) {
+        std::cerr << "su: unknown group: " << value << std::endl;
+        return 1;
+      }
+      have_gid = true;
+    } else if (arg == "-G" || arg == "--supp-group" || inline_option(arg, "--supp-group", value)) {
+      if (value.empty()) {
+        if (i + 1 >= argc) {
+          std::cerr << "su: option " << arg << " needs an argument" << std::endl;
+          return 1;
+        }
+        value = argv[++i];
+      }
+      gid_t gid = 0;
+      if (!resolve_gid(value, gid)) {
+        std::cerr << "su: unknown group: " << value << std::endl;
+        return 1;
+      }
+      supp_groups.push_back(gid);
     } else if (arg == "--") {
       for (++i; i < argc; ++i)
         positional.push_back(argv[i] != nullptr ? argv[i] : "");
@@ -155,14 +265,22 @@ int run(int argc, char *argv[]) {
     }
   }
 
-  // Only root is supported: the kernel always escalates to root before we run.
+  // The kernel has already applied the root profile, so the process is running
+  // as the profile's uid (which may be non-root).  An explicit positional user
+  // overrides it.
   if (!positional.empty()) {
-    const std::string &user = positional[0];
-    if (user != "root" && user != "0") {
-      std::cerr << "su: only root is supported" << std::endl;
-      return 1;
-    }
+    user = positional[0];
+    have_user = true;
   }
+
+  uid_t target_uid = ::getuid();
+  if (have_user && !resolve_uid(user, target_uid)) {
+    std::cerr << "su: unknown user: " << user << std::endl;
+    return 1;
+  }
+
+  const gid_t target_gid = have_gid ? primary_gid : target_uid;
+  const bool identity_requested = have_user || have_gid || !supp_groups.empty();
 
   if (shell.empty())
     shell = kDefaultShell;
@@ -171,9 +289,10 @@ int run(int argc, char *argv[]) {
     switch_to_global_mount_ns();
 
   if (!preserve_env) {
-    const struct passwd *pw = ::getpwuid(0);
+    const struct passwd *pw = ::getpwuid(target_uid);
     const std::string home = (pw != nullptr && pw->pw_dir != nullptr) ? pw->pw_dir : "/";
-    const std::string name = (pw != nullptr && pw->pw_name != nullptr) ? pw->pw_name : "root";
+    const std::string name =
+        (pw != nullptr && pw->pw_name != nullptr) ? pw->pw_name : std::to_string(target_uid);
     ::setenv("HOME", home.c_str(), 1);
     ::setenv("USER", name.c_str(), 1);
     ::setenv("LOGNAME", name.c_str(), 1);
@@ -185,6 +304,9 @@ int run(int argc, char *argv[]) {
 
   if (!context.empty())
     set_selinux_context(context);
+
+  if (identity_requested && set_identity(target_uid, target_gid, supp_groups) != 0)
+    return 1;
 
   std::vector<char *> args;
   std::string arg0 = login ? "-" : shell;
