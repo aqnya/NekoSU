@@ -155,3 +155,4 @@ jobs:
       with:
         name: release
         path: manager/app/build/outputs/apk/release/*.apk
+        archive: false
