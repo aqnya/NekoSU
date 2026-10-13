@@ -137,12 +137,6 @@ private val licenseList =
             LicenseType.Apache2,
         ),
         LicenseItem(
-            "The Go Authors",
-            "Go Programming Language",
-            "https://github.com/golang/go",
-            LicenseType.BSD3,
-        ),
-        LicenseItem(
             "JetBrains",
             "Kotlin",
             "https://github.com/JetBrains/kotlin",

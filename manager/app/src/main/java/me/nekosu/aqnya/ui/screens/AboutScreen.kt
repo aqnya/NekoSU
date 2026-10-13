@@ -144,7 +144,7 @@ fun AboutScreen(navController: NavHostController) {
                     ListRow(
                         modifier =
                             Modifier.clickable {
-                                val intent = Intent(Intent.ACTION_VIEW, "https://github.com/aqnya/nekosu".toUri())
+                                val intent = Intent(Intent.ACTION_VIEW, "https://github.com/nksu-crew/NekoSU.git".toUri())
                                 context.startActivity(intent)
                             },
                         icon = { Icon(painter = painterResource(id = R.drawable.code_24px), contentDescription = null) },
