@@ -93,7 +93,10 @@ private fun CapsSheet(
     onSelectionChange: (Set<LinuxCap>) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
 
