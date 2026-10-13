@@ -42,7 +42,7 @@ runs:
       # ~/.cache/bazelisk; without this every run fetches it again.  The
       # bazelisk version is in the key as well, because a different bazelisk can
       # fetch a differently-built release for the same pin.
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/bazelisk
         key: bazelisk-${{ inputs.bazelisk-version }}-bazel-${{ steps.pin.outputs.version }}
