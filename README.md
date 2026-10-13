@@ -54,11 +54,16 @@ The build embeds `NKSU_VERSION` (from the root `version` file) and `NKSU_GIT_COM
 ```sh
 # prerequisites: JDK 21+, Android SDK + NDK, and:
 #   manager/app/src/main/assets/ko/*_nksu.ko      (from the LKM workflow)
-#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so   (from aqnya/ncore CI)
+#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so
+#       built from the in-repo ncore source:
+#       cd userspace/ncore && bazel build //:ncore --config=android
 
 cd manager
 ./gradlew assembleRelease
 ```
+
+Android CI builds `ncore` from `userspace/ncore` with its pinned Bazel and bundles the
+result as `libncore.so`, so no external artifact download is needed.
 
 Release signing reads `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
 from the environment; without them a debug keystore is used.
@@ -68,7 +73,8 @@ from the environment; without them a debug keystore is used.
 - **[KernelSU](https://github.com/tiann/KernelSU)** — the SELinux policy/rule engine, LSM hook layout,
   `init.rc` injection technique, SELinux hiding and the WebUI `window.ksu` interface are ported from or
   kept compatible with KernelSU, so KernelSU modules and WebUIs work with NekoSU.
-- **[ncore](https://github.com/aqnya/ncore)** — the userspace module runtime shipped inside the APK.
+- **[ncore](https://github.com/aqnya/ncore)** — the userspace module runtime shipped inside the APK,
+  built from its source in `userspace/ncore/`.
 - BusyBox, Material 3 / Jetpack Compose and the open-source libraries listed in the app's *About → Open source* screen.
 
 ## License

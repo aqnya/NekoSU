@@ -54,11 +54,16 @@ android14-6.1   android15-6.6   android16-6.12
 ```sh
 # 前置条件：JDK 21+、Android SDK + NDK，以及：
 #   manager/app/src/main/assets/ko/*_nksu.ko              （来自 LKM 工作流）
-#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so    （来自 aqnya/ncore CI）
+#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so
+#       由仓库内置的 ncore 源码构建：
+#       cd userspace/ncore && bazel build //:ncore --config=android
 
 cd manager
 ./gradlew assembleRelease
 ```
+
+Android CI 会用自带的固定版本 Bazel 从 `userspace/ncore` 构建 `ncore`，并打包为 `libncore.so`，
+不再需要从外部仓库下载产物。
 
 发布签名从环境变量读取 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；
 未设置时使用 debug keystore。
@@ -67,7 +72,7 @@ cd manager
 
 - **[KernelSU](https://github.com/tiann/KernelSU)** — SELinux 策略/规则引擎、LSM hook 布局、SELinux 隐藏以及 WebUI `window.ksu` 接口均移植或保持兼容自 KernelSU，
   因此 KernelSU 模块与 WebUI 可在 NekoSU 上直接运行。
-- **[ncore](https://github.com/aqnya/ncore)** — 打包在 APK 内的用户态模块运行时。
+- **[ncore](https://github.com/aqnya/ncore)** — 打包在 APK 内的用户态模块运行时，源码位于 `userspace/ncore/`。
 - BusyBox、Material 3 / Jetpack Compose，以及应用 *关于 → 开源许可* 页面列出的开源库。
 
 ## 许可证
