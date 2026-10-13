@@ -1,0 +1,23 @@
+menu "NKSU"
+
+config NKSU
+	tristate "nksu"
+	default y
+	help
+	  nekosu is a kernel-level rootkit.
+
+config NKSU_DEBUG
+	bool "nekosu debug mode"
+	depends on NKSU
+	default y
+	help
+	  Enable nekosu debug mode.
+	  
+config NKSU_SYSCALL
+	bool "use syscall hook"
+	depends on NKSU
+	default n
+	help
+	  Enable nekosu syscall hook.
+
+endmenu

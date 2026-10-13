@@ -1,0 +1,136 @@
+package me.nekosu.aqnya.ui.screens.settings
+
+import android.app.Activity
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.launch
+import me.nekosu.aqnya.R
+import me.nekosu.aqnya.data.prefs.AppPreferences
+import me.nekosu.aqnya.ui.component.HazeTopAppBar
+import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
+import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
+import me.nekosu.aqnya.util.LocaleHelper
+import me.nekosu.aqnya.util.LogUtils
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(navController: NavController) {
+    val mContext = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+
+    val themeValue by AppPreferences.themeModeFlow(mContext).collectAsState(initial = 0)
+    val currentThemeMode = ThemeMode.fromValue(themeValue)
+
+    val themeColorValue by AppPreferences.themeColorFlow(mContext).collectAsState(initial = 0)
+    val currentThemeColor = ThemeColor.fromValue(themeColorValue)
+
+    val amoledEnabled by AppPreferences.amoledFlow(mContext).collectAsState(initial = false)
+
+    val currentLang =
+        LocaleHelper
+            .savedLanguageTag(mContext)
+            .ifBlank { "" }
+    val currentLangLabel =
+        LocaleHelper.availableLanguages
+            .find { it.tag == currentLang }
+            ?.let { stringResource(it.labelRes) }
+            ?: stringResource(R.string.language_system)
+
+    val hazeState = rememberHazeState()
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            HazeTopAppBar(
+                state = hazeState,
+                title = stringResource(R.string.settings_title),
+                scrollBehavior = scrollBehavior,
+            )
+        },
+        contentWindowInsets =
+            WindowInsets.safeDrawing.only(
+                WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+            ),
+    ) { innerPadding ->
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .hazeSource(hazeState)
+                    .verticalScroll(rememberScrollState())
+                    .padding(innerPadding)
+                    .padding(top = 16.dp)
+                    .padding(bottom = 96.dp)
+                    .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // ── 语言 ──
+            LanguageSection(
+                currentLangLabel = currentLangLabel,
+                onLanguageChange = { tag ->
+                    LocaleHelper.saveLanguageTag(mContext, tag)
+                    (mContext as? Activity)?.let { LocaleHelper.applyLanguage(it) }
+                },
+            )
+
+            // ── 外观 ──
+            AppearanceSection(
+                currentThemeMode = currentThemeMode,
+                currentThemeColor = currentThemeColor,
+                amoledEnabled = amoledEnabled,
+                onThemeChange = { mode ->
+                    scope.launch { AppPreferences.setThemeMode(mContext, mode.value) }
+                },
+                onThemeColorChange = { color ->
+                    scope.launch { AppPreferences.setThemeColor(mContext, color.value) }
+                },
+                onAmoledChange = { enabled ->
+                    scope.launch { AppPreferences.setAmoled(mContext, enabled) }
+                },
+            )
+
+            // ── 内核功能 ──
+            FeatureSection()
+
+            // ── 工具 ──
+            ToolsSection(
+                onExportLog = { LogUtils.exportLogs(mContext) },
+            )
+
+            // ── 关于 ──
+            AboutSection(
+                onAboutClick = { navController.navigate("about") },
+            )
+
+            Spacer(Modifier)
+        }
+    }
+}

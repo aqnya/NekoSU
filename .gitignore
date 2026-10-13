@@ -1,0 +1,19 @@
+*.iml
+.gradle
+local.properties
+.idea
+.DS_Store
+build
+captures
+.externalNativeBuild
+.cxx
+release.keystore
+ktlint
+app/src/main/jniLibs/
+.kotlin/
+userspace/ncore/
+manager/app/src/main/assets/ko/
+# Local kernel debug artifacts
+last_kmsg
+dmesg.log
+logcat.log

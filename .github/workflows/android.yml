@@ -1,0 +1,183 @@
+name: Android CI
+
+on:
+  workflow_dispatch:
+  # Rebuild the APK whenever a new LKM is produced, so it tracks the latest KO.
+  workflow_run:
+    workflows: [ "Build LKM for nksu" ]
+    types: [ completed ]
+  push:
+    branches: [ "main" ]
+    paths:
+      - "manager/app/src/**/*.kt"
+      - "manager/app/src/**/*.c"
+      - "manager/build.gradle.kts"
+      - "manager/gradle/libs.versions.toml"
+      - "version"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "manager/app/src/**/*.kt"
+      - "manager/app/src/**/*.c"
+      - "manager/build.gradle.kts"
+      - "manager/gradle/libs.versions.toml"
+      - "version"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # The APK bundles the newest successful LKM artifacts, so the KO build and the
+  # Android build stay independent.  A new LKM retriggers this workflow via
+  # workflow_run above.  The manager and the running module agree on
+  # version (see HomeViewModel), which is bumped by hand when the KO
+  # changes.
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: r29
+      ANDROID_NDK_API_LEVEL: "28"
+      ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK 25
+      uses: actions/setup-java@v6
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Cache Android NDK
+      id: ndk-cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ env.ANDROID_NDK_HOME }}
+        key: android-ndk-${{ env.NDK_VERSION }}
+
+    - name: Install the Android NDK
+      if: steps.ndk-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        url="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+        curl -fSL --retry 3 -o ndk.zip "$url"
+        rm -rf "$ANDROID_NDK_HOME" android-ndk-"$NDK_VERSION"
+        unzip -q ndk.zip
+        mv android-ndk-"$NDK_VERSION" "$ANDROID_NDK_HOME"
+        rm -f ndk.zip
+
+    - name: Download latest LKM artifacts
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+
+        repo="${GITHUB_REPOSITORY}"
+        workflow="build-lkm.yml"
+
+        echo "::group::Locating the latest successful LKM run"
+        run_id="$(gh run list \
+          --repo "$repo" \
+          --workflow "$workflow" \
+          --branch main \
+          --status success \
+          --limit 1 \
+          --json databaseId \
+          --jq '.[0].databaseId')"
+        if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+          echo "::error::no successful '$workflow' run found in $repo"
+          exit 1
+        fi
+        echo "latest successful LKM run: $run_id"
+        echo "::endgroup::"
+
+        rm -rf lkm-artifacts
+        mkdir -p lkm-artifacts
+        gh run download "$run_id" \
+          --repo "$repo" \
+          --dir lkm-artifacts \
+          --pattern '*-lkm'
+        find lkm-artifacts -name '*_nksu.ko' -print
+
+    - name: Prepare KOs (assets)
+      run: |
+        mkdir -p manager/app/src/main/assets/ko
+        find lkm-artifacts -name '*_nksu.ko' -exec cp {} manager/app/src/main/assets/ko/ \;
+        ls -la manager/app/src/main/assets/ko/
+
+    - name: Download latest ncore CI artifact
+      env:
+        # A token with read access to aqnya/ncore Actions is required: the
+        # workflow-scoped GITHUB_TOKEN cannot see another repository's
+        # artifacts.  Set the NCORE_TOKEN secret to a classic PAT with `repo`
+        # scope, or a fine-grained PAT with "Actions: read" on aqnya/ncore.
+        GH_TOKEN: ${{ secrets.NCORE_TOKEN }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${GH_TOKEN:-}" ]; then
+          echo "::error::NCORE_TOKEN secret is not set; a token with read access to aqnya/ncore Actions is required"
+          exit 1
+        fi
+
+        repo="aqnya/ncore"
+        workflow="android-arm64.yml"
+        artifact="ncore-android-arm64"
+
+        echo "::group::Locating the latest successful ncore CI run"
+        run_id="$(gh run list \
+          --repo "$repo" \
+          --workflow "$workflow" \
+          --branch main \
+          --status success \
+          --limit 1 \
+          --json databaseId \
+          --jq '.[0].databaseId')"
+        if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+          echo "::error::no successful '$workflow' run found in $repo"
+          exit 1
+        fi
+        echo "latest successful run: $run_id"
+        echo "::endgroup::"
+
+        rm -rf ncore-artifact
+        gh run download "$run_id" \
+          --repo "$repo" \
+          --name "$artifact" \
+          --dir ncore-artifact
+
+        src="$(find ncore-artifact -type f -name ncore | head -n1)"
+        if [ -z "$src" ]; then
+          echo "::error::artifact '$artifact' did not contain a 'ncore' binary"
+          exit 1
+        fi
+
+        mkdir -p manager/app/src/main/jniLibs/arm64-v8a
+        cp "$src" manager/app/src/main/jniLibs/arm64-v8a/libncore.so
+        file manager/app/src/main/jniLibs/arm64-v8a/libncore.so
+
+    - name: List packaged assets
+      run: |
+        ls -la manager/app/src/main/assets/
+
+    - name: Decode Release Keystore
+      run: |
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > manager/release.keystore
+
+    - name: Build with Gradle
+      working-directory: manager
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: ./gradlew assembleRelease --no-daemon
+
+    - name: Upload Release Artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: release
+        path: manager/app/build/outputs/apk/release/*.apk
