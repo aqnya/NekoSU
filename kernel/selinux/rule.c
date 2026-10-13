@@ -599,6 +599,16 @@ static bool rule_add_filename_trans(struct policydb *db, const char *s,
 			goto free_name;
 	}
 
+	/*
+	 * filename_compute_type() bails out immediately unless the parent type
+	 * is set in filename_trans_ttypes (ss/services.c), and policydb_read()
+	 * only sets that bit for keys present when the policy was loaded. Mark
+	 * it here, or a filename transition added for a parent type that had no
+	 * rules yet is silently never applied.
+	 */
+	if (ebitmap_set_bit(&db->filename_trans_ttypes, key.ttype, 1))
+		return false;
+
 	db->compat_filename_trans_count++;
 	return ebitmap_set_bit(&trans->stypes, src->value - 1, 1) == 0;
 
@@ -620,70 +630,58 @@ static bool rule_add_genfscon(struct policydb *db, const char *fs_name,
 
 /* ---- type / attribute / type state ---- */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-#define nksu_kvrealloc(p, new_size, _old_size) kvrealloc(p, new_size, GFP_KERNEL)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
-#define nksu_kvrealloc(p, new_size, old_size) kvrealloc(p, old_size, new_size, GFP_KERNEL)
-#else
-static void *nksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize, gfp_t flags)
-{
-	void *newp;
-
-	if (oldsize >= newsize)
-		return (void *)p;
-	newp = kvmalloc(newsize, flags);
-	if (!newp)
-		return NULL;
-	memcpy(newp, p, oldsize);
-	kvfree(p);
-	return newp;
-}
-#define nksu_kvrealloc(p, new_size, old_size) nksu_kvrealloc_compat(p, old_size, new_size, GFP_KERNEL)
-#endif
-
 static bool rule_add_type_datum(struct policydb *db, const char *type_name, bool attr)
 {
-	struct type_datum *type = symtab_search(&db->p_types, type_name);
+	struct type_datum *type;
+	struct ebitmap *attr_map;
+	struct type_datum **val_to_struct;
+	char **val_to_name;
 	u32 value;
 	char *key;
 	int i;
 
-	if (type)
+	if (symtab_search(&db->p_types, type_name))
 		return true;
 
-	value = ++db->p_types.nprim;
-	type = kzalloc(sizeof(struct type_datum), GFP_KERNEL);
-	if (!type)
-		return false;
+	value = db->p_types.nprim + 1;
+
+	/*
+	 * Allocate every grown structure up front, before touching the policy.
+	 * kvrealloc() frees the old buffer before returning, so a later failure
+	 * would leave a db pointer dangling; allocating first keeps a failed
+	 * add a no-op and never leaves db->p_types partly updated.
+	 */
+	type = kzalloc(sizeof(*type), GFP_KERNEL);
+	key = kstrdup(type_name, GFP_KERNEL);
+	attr_map = kvmalloc_array(value, sizeof(*attr_map), GFP_KERNEL);
+	val_to_struct = kvmalloc_array(value, sizeof(*val_to_struct), GFP_KERNEL);
+	val_to_name = kvmalloc_array(value, sizeof(*val_to_name), GFP_KERNEL);
+	if (!type || !key || !attr_map || !val_to_struct || !val_to_name)
+		goto err_free;
+
+	if (symtab_insert(&db->p_types, key, type))
+		goto err_free;
+
+	/* Commit: from here on nothing can fail. */
+	memcpy(attr_map, db->type_attr_map_array,
+	       (value - 1) * sizeof(*attr_map));
+	memcpy(val_to_struct, db->type_val_to_struct,
+	       (value - 1) * sizeof(*val_to_struct));
+	memcpy(val_to_name, db->sym_val_to_name[SYM_TYPES],
+	       (value - 1) * sizeof(*val_to_name));
+
+	kvfree(db->type_attr_map_array);
+	kvfree(db->type_val_to_struct);
+	kvfree(db->sym_val_to_name[SYM_TYPES]);
+
+	db->type_attr_map_array = attr_map;
+	db->type_val_to_struct = val_to_struct;
+	db->sym_val_to_name[SYM_TYPES] = val_to_name;
+	db->p_types.nprim = value;
 
 	type->primary = 1;
 	type->value = value;
 	type->attribute = attr;
-
-	key = kstrdup(type_name, GFP_KERNEL);
-	if (!key) {
-		kfree(type);
-		return false;
-	}
-
-	if (symtab_insert(&db->p_types, key, type)) {
-		kfree(key);
-		kfree(type);
-		return false;
-	}
-
-	db->type_attr_map_array = nksu_kvrealloc(db->type_attr_map_array,
-						 value * sizeof(struct ebitmap),
-						 (value - 1) * sizeof(struct ebitmap));
-	db->type_val_to_struct = nksu_kvrealloc(db->type_val_to_struct,
-						sizeof(*db->type_val_to_struct) * value,
-						sizeof(*db->type_val_to_struct) * (value - 1));
-	db->sym_val_to_name[SYM_TYPES] = nksu_kvrealloc(db->sym_val_to_name[SYM_TYPES],
-							sizeof(char *) * value,
-							sizeof(char *) * (value - 1));
-	if (!db->type_attr_map_array || !db->type_val_to_struct ||
-	    !db->sym_val_to_name[SYM_TYPES])
-		return false;
 
 	ebitmap_init(&db->type_attr_map_array[value - 1]);
 	ebitmap_set_bit(&db->type_attr_map_array[value - 1], value - 1, 1);
@@ -694,6 +692,14 @@ static bool rule_add_type_datum(struct policydb *db, const char *type_name, bool
 		ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
 
 	return true;
+
+err_free:
+	kvfree(attr_map);
+	kvfree(val_to_struct);
+	kvfree(val_to_name);
+	kfree(key);
+	kfree(type);
+	return false;
 }
 
 static bool rule_set_type_state(struct policydb *db, const char *type_name, bool permissive)

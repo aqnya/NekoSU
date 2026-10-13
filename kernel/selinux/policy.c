@@ -103,6 +103,11 @@ static struct selinux_policy *nksu_policy_dup(struct selinux_policy *old_pol)
 	}
 #endif
 
+	/*
+	 * kmemdup() copies selinux_policy.sidtab too, so the working copy
+	 * shares the original's sidtab. See the KNOWN RISK note in
+	 * sepolicy_restore() for why that matters on unload.
+	 */
 	new_pol = kmemdup(old_pol, sizeof(*old_pol), GFP_KERNEL);
 	if (!new_pol) {
 		vfree(data);
@@ -194,6 +199,18 @@ void sepolicy_restore(void)
 	 * permission checks on other CPUs.  One leaked policy per load is a
 	 * small price for a safe unload, and it mirrors KernelSU, which never
 	 * tears its policy down either.
+	 *
+	 * KNOWN RISK (unload path): nksu_policy_dup() shares the original
+	 * sidtab with the working copy, and the rules injected while the copy
+	 * was live caused SIDs for types that exist only in the working
+	 * policydb (nksu / nksu_file) to be inserted into that shared sidtab.
+	 * Pointing selinux_state.policy back at the original policydb leaves
+	 * those SIDs referencing type values past the original's type arrays,
+	 * so a later access check or sid_to_context on them can index
+	 * type_attr_map_array / sym_val_to_name out of bounds.  Not fixed
+	 * here: making it safe needs the working copy to own a separate
+	 * sidtab (or the original to be re-cloned into it), which is a larger
+	 * change than this unload path warrants.
 	 */
 	nksu_work_policy = NULL;
 	nksu_orig_policy = NULL;
