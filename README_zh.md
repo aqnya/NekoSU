@@ -9,6 +9,8 @@ Android 内核级 Root 方案，由可加载内核模块（`nksu.ko`）和 Mater
 
 [English](README.md) | **简体中文**
 
+📖 **[文档](docs/README.zh.md)** —— 架构、构建指南、内核模块参考、用户手册。
+
 ---
 
 ## 功能特性
