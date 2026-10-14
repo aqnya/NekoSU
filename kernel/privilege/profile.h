@@ -22,6 +22,13 @@
 
 #define NKSU_PROFILE_INIT_CAP	16	/* initial entry slots */
 #define NKSU_PROFILE_INIT_ARENA	256	/* initial string arena size */
+/*
+ * The presence bitmap is a fast path for the common (low) uid range only.
+ * UIDs at or above it are served by the sorted entry array (binary search), so
+ * the full 32-bit uid space is addressable; Android's per-user uids
+ * (user * 100000 + app) are far above this.  Must be a multiple of
+ * BITS_PER_LONG (see the static_assert below).
+ */
 #define NKSU_BITMAP_MAX_UID	32768
 
 /* Upper bound on a stored SELinux domain; callers pass much shorter ones. */
@@ -97,7 +104,10 @@ static_assert(sizeof(struct nksu_profile_blob) % _Alignof(struct nksu_profile_en
 
 /* --- public API --- */
 
-/* O(1) bitmap check.  Safe to call from any context. */
+/*
+ * Presence check: true when a profile exists for uid.  O(1) for uids covered
+ * by the bitmap, O(log N) above it.  Safe to call from any context.
+ */
 bool nksu_profile_has_uid(uid_t uid);
 
 /*

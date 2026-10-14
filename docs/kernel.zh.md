@@ -188,7 +188,7 @@ struct privilege_desc {
 
 `privilege_escalate()` 准备凭证、应用 uid/gid、提升能力、设置域、提交、禁用 seccomp，并按需切换到 init 命名空间。`privilege_escalate_from_profile()` 是 `execve`/`setresuid` hook 调用的函数。
 
-`profile.c` 维护一个 RCU 快照（`nksu_profile_blob`，magic `0x4b4e5355`），含有序条目数组、域字符串区，以及用于 O(1) 成员判断的 32768 位 `bitmap`。默认档案授予 `CAP_FULL_SET`、域 `u:r:nksu:s0` 与 `NKSU_NS_INHERITED`。
+`profile.c` 维护一个 RCU 快照（`nksu_profile_blob`，magic `0x4b4e5355`），含有序条目数组、域字符串区，以及作为低 UID 段 O(1) 成员判断快速路径的 32768 位 `bitmap`；超过该位图的 UID 走二分查找，因此支持完整的 32 位 UID 空间（含 Android 多用户偏移）。默认档案授予 `CAP_FULL_SET`、域 `u:r:nksu:s0` 与 `NKSU_NS_INHERITED`。
 
 `profile_store.c` 把档案持久化到 `/data/adb/nksu/allow.profile`，采用逐行格式：
 

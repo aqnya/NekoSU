@@ -546,13 +546,22 @@ bool nksu_profile_has_uid(uid_t uid)
 	struct nksu_profile_blob *b;
 	bool result = false;
 
-	if (uid >= NKSU_BITMAP_MAX_UID)
-		return false;
-
 	rcu_read_lock();
 	b = rcu_dereference(g_profile_blob);
-	if (b)
-		result = test_bit(uid, b->bitmap);
+	if (b) {
+		/*
+		 * The bitmap only covers the low uid range; anything above it
+		 * falls back to the sorted entry array so larger uids (Android
+		 * per-user offsets) are supported too.
+		 */
+		if (uid < NKSU_BITMAP_MAX_UID) {
+			result = test_bit(uid, b->bitmap);
+		} else {
+			u32 idx;
+
+			result = blob_bsearch(b, uid, &idx);
+		}
+	}
 	rcu_read_unlock();
 	return result;
 }

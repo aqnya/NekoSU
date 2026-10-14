@@ -188,7 +188,7 @@ struct privilege_desc {
 
 `privilege_escalate()` prepares creds, applies uid/gid, raises caps, sets the domain, commits, disables seccomp, and optionally switches to the init namespace. `privilege_escalate_from_profile()` is what the `execve`/`setresuid` hooks call.
 
-`profile.c` keeps an RCU snapshot (`nksu_profile_blob`, magic `0x4b4e5355`) with a sorted entry array, a domain-string arena, and a 32768-bit `bitmap` for O(1) membership. The default profile grants `CAP_FULL_SET`, domain `u:r:nksu:s0`, and `NKSU_NS_INHERITED`.
+`profile.c` keeps an RCU snapshot (`nksu_profile_blob`, magic `0x4b4e5355`) with a sorted entry array, a domain-string arena, and a 32768-bit `bitmap` as an O(1) membership fast path for low uids; uids above the bitmap are resolved by binary search, so the full 32-bit uid space (including Android per-user offsets) is supported. The default profile grants `CAP_FULL_SET`, domain `u:r:nksu:s0`, and `NKSU_NS_INHERITED`.
 
 `profile_store.c` persists profiles to `/data/adb/nksu/allow.profile` in a line-based format:
 
