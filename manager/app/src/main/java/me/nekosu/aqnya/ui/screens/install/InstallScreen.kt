@@ -1,6 +1,7 @@
 package me.nekosu.aqnya.ui.screens.install
 
 import android.app.Application
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -108,6 +109,24 @@ fun InstallScreen(navController: NavController) {
 
     LaunchedEffect(Unit) { installViewModel.load() }
 
+    // 安装结束后用 Toast 提示结果；日志页顶栏保持固定标题，不再把结果放上去。
+    LaunchedEffect(state.done) {
+        if (!state.done) return@LaunchedEffect
+        val message =
+            if (state.success == true) {
+                context.getString(
+                    when (state.method) {
+                        InstallMethod.FILE -> R.string.install_success
+                        InstallMethod.DIRECT -> R.string.install_direct_success
+                        InstallMethod.INACTIVE -> R.string.install_inactive_success
+                    },
+                )
+            } else {
+                context.getString(R.string.install_failed)
+            }
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+
     var confirmMethod by remember { mutableStateOf<InstallMethod?>(null) }
     var showKmiDialog by remember { mutableStateOf(false) }
 
@@ -160,19 +179,7 @@ fun InstallScreen(navController: NavController) {
         topBar = {
             if (logVisible) {
                 LogTopBar(
-                    title =
-                        when {
-                            state.running -> stringResource(R.string.install_working)
-                            state.success == true ->
-                                stringResource(
-                                    when (state.method) {
-                                        InstallMethod.FILE -> R.string.install_success
-                                        InstallMethod.DIRECT -> R.string.install_direct_success
-                                        InstallMethod.INACTIVE -> R.string.install_inactive_success
-                                    },
-                                )
-                            else -> stringResource(R.string.install_failed)
-                        },
+                    title = stringResource(R.string.install_log_title),
                     onBack = if (state.running) null else ({ navController.popBackStack() }),
                     onSaveLog = { LogUtils.saveLog(context, "nksu-install.log", state.message) },
                 )
