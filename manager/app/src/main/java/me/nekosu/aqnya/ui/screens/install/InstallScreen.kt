@@ -184,13 +184,13 @@ fun InstallScreen(navController: NavController) {
         topBar = {
             if (logVisible) {
                 LogTopBar(
-                    title = "",
+                    title = stringResource(R.string.install_log_title),
                     onBack = if (state.running) null else ({ navController.popBackStack() }),
                     onSaveLog = { LogUtils.saveLog(context, "nksu-install.log", state.message) },
                 )
             } else {
                 AppTopAppBar(
-                    title = "",
+                    title = stringResource(R.string.install_title),
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Icon(
