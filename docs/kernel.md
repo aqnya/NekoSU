@@ -93,7 +93,7 @@ Component groups:
 
 - `hook_init.c` — when loaded at first stage, installs a temporary syscall watcher for `__NR_execve`, `__NR_execveat`, `__NR_prctl`, follows `init` through `selinux_setup` → `second_stage`, and detects zygote (`-Xzygote`). A kthread `"nksu-init"` initializes the early and SELinux components at `INIT_SECOND_STAGE`, then feature components once zygote is seen, then tears down the watcher. It also lets root obtain the control fd via `NKSU_PRCTL_GET_DRIVER_FD` (204).
 - `init_rc.c` — appends `nksu_rc[]` to `init`'s view of `/system/etc/init/hw/init.rc` (and legacy `/system/etc/init.rc`) by proxying `__NR_read` and `__NR_fstat`. The appended lines `exec u:r:nksu:s0 root -- /data/adb/nksu/ncore {post-fs-data|services|boot-completed}` run at the corresponding `on` triggers. `NKSU_NCORE_PATH = "/data/adb/nksu/ncore"`.
-- `safe_mode.c` — input handler on `EV_KEY/KEY_VOLUMEUP`; 3 presses latch a "safe mode requested" flag exposed at `/proc/nksu/safemode`. It does not write a marker or reboot: ncore reads the node at each stage and creates `/data/adb/nksu/safe_module` itself (see userspace/ncore).
+- `safe_mode.c` — input handler on `EV_KEY/KEY_VOLUMEUP`; 3 presses latch a "safe mode requested" flag exposed at `/proc/nksu/safemode`. It does not write a marker or reboot: ncore reads the node at each stage and creates `/data/adb/nksu/safe_module` itself (see userspace/ncore). Writing the node disarms the watcher (ncore does this at its last stage).
 
 ## hook — interception {#hook}
 

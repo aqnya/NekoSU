@@ -196,4 +196,8 @@ void load_sepolicy_rule();
 // start of every stage.
 void sync_safe_mode_from_kernel();
 
+// Tell the kernel the boot is over by writing /proc/nksu/safemode, which
+// disarms its volume-up watcher.  Called from the last stage (boot-completed).
+void disarm_safe_mode_watcher();
+
 } // namespace modules

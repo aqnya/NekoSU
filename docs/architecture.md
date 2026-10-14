@@ -148,7 +148,7 @@ The manager obtains a control file descriptor from the kernel:
 - `prctl(203)` → `[fmac_ctl]` (the ioctl control fd);
 - `prctl(204)` → `[fmac_ctl]`, available to any root process (used by `ncore`).
 
-The volume-key safe-mode state is exposed as a plain file node, `/proc/nksu/safemode`, which `ncore` reads at each stage.
+The volume-key safe-mode state is exposed as a plain file node, `/proc/nksu/safemode`, which `ncore` reads at each stage and writes at the last stage to disarm the watcher.
 
 The single ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`:
 

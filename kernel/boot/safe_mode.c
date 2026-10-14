@@ -56,6 +56,30 @@ static int nksu_safe_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+/*
+ * Writing the node means boot is done: ncore uses it at its last stage to stop
+ * the volume-key watcher rather than leaving it armed until module unload.
+ */
+static ssize_t nksu_safe_proc_write(struct file *file, const char __user *ubuf,
+				    size_t count, loff_t *ppos)
+{
+	nksu_safe_mode_disable();
+	return count;
+}
+
+static int nksu_safe_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, nksu_safe_proc_show, NULL);
+}
+
+static const struct proc_ops nksu_safe_proc_ops = {
+	.proc_open    = nksu_safe_proc_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = nksu_safe_proc_write,
+};
+
 /* ---- input handler: count volume-up key-down events ---- */
 
 /*
@@ -177,9 +201,8 @@ int nksu_safe_mode_init(void)
 	nksu_safe_proc_dir = proc_mkdir(NKSU_SAFE_PROC_DIR, NULL);
 	if (nksu_safe_proc_dir)
 		nksu_safe_proc_file =
-			proc_create_single(NKSU_SAFE_PROC_FILE, 0444,
-					   nksu_safe_proc_dir,
-					   nksu_safe_proc_show);
+			proc_create(NKSU_SAFE_PROC_FILE, 0644, nksu_safe_proc_dir,
+				    &nksu_safe_proc_ops);
 	if (!nksu_safe_proc_file)
 		pr_warn("[safe_mode] cannot create /proc/%s/%s\n",
 			NKSU_SAFE_PROC_DIR, NKSU_SAFE_PROC_FILE);

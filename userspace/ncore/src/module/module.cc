@@ -639,6 +639,12 @@ void sync_safe_mode_from_kernel() {
   }
 }
 
+// Last stage: any write to the node disarms the kernel's volume-up watcher.
+void disarm_safe_mode_watcher() {
+  if (!utils::write_file("/proc/nksu/safemode", "0\n", false))
+    std::cerr << "[module] cannot disarm safe-mode watcher" << std::endl;
+}
+
 int on_post_fs_data() {
   utils::umask0();
   utils::klog("post-fs-data stage start");
@@ -718,6 +724,7 @@ int on_boot_completed() {
   std::cout << "[module] on_boot_completed triggered" << std::endl;
   ensure_ksu_dir_alias();
   sync_safe_mode_from_kernel();
+  disarm_safe_mode_watcher();
   run_stage_internal("boot-completed", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
   utils::klog("boot-completed stage finished");
