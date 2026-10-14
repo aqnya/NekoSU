@@ -27,48 +27,11 @@ KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
 ## Installation
 
-1. Download the manager APK from the **Actions → Android CI → artifacts (`release`)** page.
-2. Open the app → install screen → choose **File**, **Direct install**, or **Inactive slot**.
-3. Reboot. The home card shows whether the running module matches the manager's expected version.
-
-> Direct install and inactive-slot install flash `vendor_boot`; the bootloader must be unlocked.
+See **[Usage § Installation methods](docs/usage.md#installation-methods)**.
 
 ## Building
 
-### Kernel module
-
-```sh
-make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
-```
-
-CI builds `nksu.ko` for every supported KMI inside DDK containers
-(`ghcr.io/ylarod/ddk:<kmi>-…`) and uploads `<kmi>-lkm` artifacts. Supported KMI matrix:
-
-```
-android12-5.10  android13-5.10  android13-5.15  android14-5.15
-android14-6.1   android15-6.6   android16-6.12
-```
-
-The build embeds `NKSU_VERSION` (from the root `version` file) and `NKSU_GIT_COMMIT`.
-
-### Manager app
-
-```sh
-# prerequisites: JDK 21+, Android SDK + NDK, and:
-#   manager/app/src/main/assets/ko/*_nksu.ko      (from the LKM workflow)
-#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so
-#       built from the in-repo ncore source:
-#       cd userspace/ncore && bazel build //:ncore --config=android
-
-cd manager
-./gradlew assembleRelease
-```
-
-Android CI builds `ncore` from `userspace/ncore` with its pinned Bazel and bundles the
-result as `libncore.so`, so no external artifact download is needed.
-
-Release signing reads `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
-from the environment; without them a debug keystore is used.
+See **[How to build](docs/building.md)**.
 
 ## Credits
 

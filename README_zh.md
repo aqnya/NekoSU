@@ -27,48 +27,11 @@ Android 内核级 Root 方案，由可加载内核模块（`nksu.ko`）和 Mater
 
 ## 安装
 
-1. 从 **Actions → Android CI → artifacts（`release`）** 页面下载管理器 APK。
-2. 打开应用 → 安装页 → 选择 **文件安装**、**直接安装** 或 **非活动 slot**。
-3. 重启。首页卡片会显示运行中的模块是否与管理器期望的版本一致。
-
-> 直接安装与非活动 slot 安装会刷写 `vendor_boot`，Bootloader 必须已解锁。
+见 **[使用 § 安装方式](docs/usage.zh.md#installation-methods)**。
 
 ## 构建
 
-### 内核模块
-
-```sh
-make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
-```
-
-CI 在 DDK 容器（`ghcr.io/ylarod/ddk:<kmi>-…`）中为每个受支持的 KMI 构建 `nksu.ko`，
-并上传 `<kmi>-lkm` artifact。支持的 KMI 矩阵：
-
-```
-android12-5.10  android13-5.10  android13-5.15  android14-5.15
-android14-6.1   android15-6.6   android16-6.12
-```
-
-构建会嵌入 `NKSU_VERSION`（读取根目录 `version` 文件）与 `NKSU_GIT_COMMIT`。
-
-### 管理器 App
-
-```sh
-# 前置条件：JDK 21+、Android SDK + NDK，以及：
-#   manager/app/src/main/assets/ko/*_nksu.ko              （来自 LKM 工作流）
-#   manager/app/src/main/jniLibs/arm64-v8a/libncore.so
-#       由仓库内置的 ncore 源码构建：
-#       cd userspace/ncore && bazel build //:ncore --config=android
-
-cd manager
-./gradlew assembleRelease
-```
-
-Android CI 会用自带的固定版本 Bazel 从 `userspace/ncore` 构建 `ncore`，并打包为 `libncore.so`，
-不再需要从外部仓库下载产物。
-
-发布签名从环境变量读取 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；
-未设置时使用 debug keystore。
+见 **[如何构建](docs/building.zh.md)**。
 
 ## 致谢
 
