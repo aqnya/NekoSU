@@ -17,7 +17,7 @@
 | `version` | 模块/应用版本的唯一事实来源 |
 | `.github/workflows/` | CI |
 
-在做非平凡改动之前，请先阅读[架构与设计](docs/architecture.zh.md)文档。
+在做非平凡改动之前，请先阅读[架构](docs/architecture.zh.md)文档。
 
 ---
 
@@ -35,7 +35,7 @@ git submodule update --init --recursive
 ```
 
 工具链：Bazel、NDK、JDK 与 Gradle 的准确版本见
-[构建与开发指南 §2](docs/building.zh.md#2-前置条件)。
+[如何构建 § 前置条件](docs/building.zh.md#prerequisites)。
 
 ---
 
@@ -45,7 +45,7 @@ git submodule update --init --recursive
 
 - 遵循 `.clang-format`（Linux 内核风格，120 列，4 空格缩进）。
 - 新增 ABI 必须镜像到管理器的 `cpp/libjni/ioctl.h`，并用 `static_assert` 固定。见
-  [内核模块开发者文档](docs/kernel.zh.md)。
+  [内核模块开发者指南](docs/kernel.zh.md)。
 - 本地构建：
   ```sh
   make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
@@ -64,7 +64,7 @@ git submodule update --init --recursive
 
 - Kotlin、Jetpack Compose + Material 3。格式由 ktlint 强制。
 - App 构建需要预先准备好的 native 产物（`*_nksu.ko` 资源与 `libncore.so`）；见
-  [构建与开发指南 §5](docs/building.zh.md#5-构建管理器-app)。
+  [如何构建 § 构建管理器 App](docs/building.zh.md#building-the-manager-app)。
 
 ### 文档
 
@@ -106,7 +106,7 @@ git submodule update --init --recursive
 
 ## 7. 依赖更新
 
-`renovate.json` 为依赖更新启用了 automerge。请及时审查管理器
+`renovate.json` 为依赖更新启用了 automerge。请留意管理器
 （`manager/gradle/libs.versions.toml`）与 CI actions 的机器人 PR。
 
 ---

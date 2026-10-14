@@ -18,8 +18,7 @@ merged.
 | `version` | Single source of truth for the module/app version |
 | `.github/workflows/` | CI |
 
-Read the [Architecture & Design](docs/architecture.md) document before making non-trivial
-changes.
+Read the [Architecture](docs/architecture.md) document before making non-trivial changes.
 
 ---
 
@@ -37,7 +36,7 @@ If you already cloned without them:
 git submodule update --init --recursive
 ```
 
-Toolchain: see [Build & Development Guide §2](docs/building.md#2-prerequisites) for the exact
+Toolchain: see [How to build § Prerequisites](docs/building.md#prerequisites) for the exact
 versions of Bazel, the NDK, JDK and Gradle used.
 
 ---
@@ -48,7 +47,7 @@ versions of Bazel, the NDK, JDK and Gradle used.
 
 - Follow `.clang-format` (Linux kernel style, 120 columns, 4-space indent).
 - New ABI additions must be mirrored in the manager's `cpp/libjni/ioctl.h` and pinned with
-  `static_assert`. See the [Kernel Module Developer Guide](docs/kernel.md).
+  `static_assert`. See the [Kernel module developer guide](docs/kernel.md).
 - Build locally with:
   ```sh
   make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
@@ -67,7 +66,7 @@ versions of Bazel, the NDK, JDK and Gradle used.
 
 - Kotlin, Jetpack Compose + Material 3. Formatting is enforced by ktlint.
 - The app build needs staged native artifacts (the `*_nksu.ko` assets and `libncore.so`); see
-  [Build & Development Guide §5](docs/building.md#5-building-the-manager-app).
+  [How to build § Build the manager app](docs/building.md#building-the-manager-app).
 
 ### Documentation
 

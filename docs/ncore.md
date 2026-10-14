@@ -1,23 +1,18 @@
-# ncore — Userspace Runtime
-
 **English** | [简体中文](ncore.zh.md)
 
-`ncore` is NekoSU's userspace module runtime. It is a KernelSU/`ksud`-compatible
-reimplementation in C++, built with Bazel + the Android NDK and shipped inside the manager APK
-as `libncore.so`. Despite the `.so` extension it is a **static executable** that the kernel
-starts and that the manager invokes via a root shell — it is never `dlopen`ed.
+# ncore
+
+`ncore` is NekoSU's userspace module runtime. It is a KernelSU/`ksud`-compatible reimplementation in C++, built with Bazel + the Android NDK and shipped inside the manager APK as `libncore.so`. Despite the `.so` extension it is a **static executable** that the kernel starts and that the manager invokes via a root shell — it is never `dlopen`ed.
 
 - Source: `userspace/ncore/`
 - Built artifact: `bazel-bin/ncore`
 - Installed to: `/data/adb/nksu/ncore` (SELinux label `u:object_r:nksu_file:s0`)
-- High-level role: see [Architecture & Design](architecture.md#3-userspace-runtime-ncore)
-- Build instructions: see [Build & Development Guide](building.md#4-building-ncore)
+- High-level role: see [Architecture § ncore](architecture.md#ncore)
+- Build instructions: see [How to build § Build ncore](building.md#build-ncore)
 
----
+## Directory layout {#directory-layout}
 
-## 1. Directory map
-
-```
+```txt
 userspace/ncore/
 ├── .bazelrc / .bazelversion    build config, pinned Bazel 9.3.0
 ├── MODULE.bazel               Bzlmod (no WORKSPACE)
@@ -51,12 +46,11 @@ userspace/ncore/
 └── third_party/               bzip2, lz4, lzo, xz, zlib (submodules)
 ```
 
-Only two `WORKSPACE`-era facts matter: there is no `WORKSPACE` (Bzlmod only) and the compression
-libraries come from git submodules under `third_party/`.
+::: info
+There is no `WORKSPACE` (Bzlmod only), and the compression libraries come from git submodules under `third_party/`.
+:::
 
----
-
-## 2. CLI reference
+## CLI reference {#cli}
 
 `src/main.cc` dispatches:
 
@@ -80,9 +74,7 @@ libraries come from git submodules under `third_party/`.
 | `-r, --replace <img> <kernel\|dtb>` | Replace a boot image section |
 | `-p, --patch <vendor_boot.img> <ko>` | Patch a v3/v4 vendor_boot with `nksu.ko` |
 
-With no arguments it prints help and returns 0.
-
-Concrete invocations used elsewhere:
+With no arguments it prints help and returns 0. The commands actually used elsewhere:
 
 ```sh
 # kernel-injected init.rc
@@ -98,14 +90,9 @@ Concrete invocations used elsewhere:
 /data/adb/nksu/ncore -p vendor_boot.img nksu.ko
 ```
 
----
+## su {#su}
 
-## 3. `su`
-
-`su` is reached because the kernel redirects `execve`/`execveat` of `/system/bin/su` (and
-`/system/bin/sh`) to `/data/adb/nksu/ncore` while keeping `argv[0]` so `ncore` can detect the
-invocation. By the time userspace runs, the kernel has already escalated the process according
-to the caller's UID profile — so `ncore`'s `su` only parses arguments and execs a shell.
+`su` is reached because the kernel redirects `execve`/`execveat` of `/system/bin/su` (and `/system/bin/sh`) to `/data/adb/nksu/ncore` while keeping `argv[0]` so `ncore` can detect the invocation. By the time userspace runs, the kernel has already escalated the process according to the caller's UID profile — so `ncore`'s `su` only parses arguments and execs a shell.
 
 Supported options:
 
@@ -122,36 +109,26 @@ Supported options:
 | `-Z, --context` | Write `/proc/self/attr/current` |
 | `-v, --version` / `-h, --help` | Info |
 
-Identity handling resolves names via `getpwuid`/`getpwnam`/`getgrnam`; unknown numeric uids keep
-`gid == uid` (Android `u0_aNNN`). `can_switch_user()` guards the `setgroups`/`setgid`/`setuid`
-path by checking for root or `CAP_SETUID|CAP_SETGID` (avoiding a seccomp `SIGSYS`). Unless `-p`
-is given, `HOME`/`USER`/`LOGNAME`/`SHELL` are set, PATH gets `/data/adb/nksu` prepended, and
-`umask(022)` is applied. The default shell is `/system/bin/sh`.
+Identity handling resolves names via `getpwuid`/`getpwnam`/`getgrnam`; unknown numeric uids keep `gid == uid` (Android `u0_aNNN`). `can_switch_user()` guards the `setgroups`/`setgid`/`setuid` path by checking for root or `CAP_SETUID|CAP_SETGID` (avoiding a seccomp `SIGSYS`). Unless `-p` is given, `HOME`/`USER`/`LOGNAME`/`SHELL` are set, `PATH` gets `/data/adb/nksu` prepended, and `umask(022)` is applied. The default shell is `/system/bin/sh`.
 
----
+## Module runtime {#module-runtime}
 
-## 4. Module runtime
-
-### Layout and compatibility
+### Layout and compatibility {#module-layout}
 
 Modules live in `/data/adb/modules/<id>` and follow the KernelSU/`ksud` convention:
 
-- `module.prop` (Java properties), `system/` overlay, `webroot/`, `action.sh`,
-  `uninstall.sh`, `system.prop`, `sepolicy.rule`, `initrc/`, `skip_mount`;
+- `module.prop` (Java properties), `system/` overlay, `webroot/`, `action.sh`, `uninstall.sh`, `system.prop`, `sepolicy.rule`, `initrc/`, `skip_mount`;
 - control files `disable`, `remove`, `update`, and an `update/` staging dir.
 
 Module IDs must be ≥ 2 chars, start with a letter, and contain only `[A-Za-z0-9._-]`.
 
-The runtime directory is `/data/adb/nksu/` (overridable via `NCORE_ADB_DIR`,
-`NCORE_WORKING_DIR`, `NCORE_BOOT_PATH`, `NCORE_PREINIT_DIR_WATCHDOG`,
-`NCORE_PREINIT_DIR_DEFAULT`). `/data/adb/ksu` is symlinked to `/data/adb/nksu` unless a real
-KernelSU install exists, so tools expecting `/data/adb/ksu/bin/*` keep working.
+The runtime directory is `/data/adb/nksu/` (overridable via `NCORE_ADB_DIR`, `NCORE_WORKING_DIR`, `NCORE_BOOT_PATH`, `NCORE_PREINIT_DIR_WATCHDOG`, `NCORE_PREINIT_DIR_DEFAULT`). `/data/adb/ksu` is symlinked to `/data/adb/nksu` unless a real KernelSU install exists, so tools expecting `/data/adb/ksu/bin/*` keep working.
 
-### Environment exported to scripts
+### Environment exported to scripts {#environment}
 
 `build_env()` exports to every module script:
 
-```
+```txt
 ASH_STANDALONE=1
 KSU=true
 KSU_KERNEL_VER_CODE=30000
@@ -162,47 +139,30 @@ KSU_RUNTIME_MODE=lkm
 KSU_MODULE=<id>
 ```
 
-`PATH` prepends `/data/adb/nksu/bin/`. Shell resolution order: bundled
-`/data/adb/nksu/bin/busybox`, then `which(busybox)`, then `/system/bin/sh`.
+`PATH` prepends `/data/adb/nksu/bin/`. Shell resolution order is: the bundled `/data/adb/nksu/bin/busybox`, then `which(busybox)`, then `/system/bin/sh`.
 
-### Boot stages
+### Boot stages {#boot-stages}
 
-Each stage first runs the global `/data/adb/<stage>.d` scripts, then the metamodule stage
-script, then every active module's `<stage>.sh`:
+Each stage first runs the global `/data/adb/<stage>.d` scripts, then the metamodule stage script, then every active module's `<stage>.sh`:
 
-- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It handles the common
-  `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into
-  `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running
-  `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage
-  scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
-- `on_services` / `on_boot_completed` — `NoWait`. Boot-completed also notifies the kernel
-  (`NKSU_PRCTL_BOOT_COMPLETED`) to stop the safe-mode watcher.
+- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
+- `on_services` / `on_boot_completed` — `NoWait`. Boot-completed also notifies the kernel (`NKSU_PRCTL_BOOT_COMPLETED`) to stop the safe-mode watcher.
 
-Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set or
-`/data/adb/nksu/safe_module` exists (created by the kernel volume-up watcher).
+Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set or `/data/adb/nksu/safe_module` exists (created by the kernel volume-up watcher).
 
-### Metamodules
+### Metamodules {#metamodules}
 
-`metamodule=1` or `=true` in `module.prop` designates a module that takes over mounting. It is
-symlinked at `/data/adb/metamodule` and may provide `metamount.sh`, `metainstall.sh`, and
-`metauninstall.sh`. Installs are blocked when a metamodule with `metainstall.sh` has pending
-changes (`metamodule_check_install_safety`).
+`metamodule=1` or `=true` in `module.prop` designates a module that takes over mounting. It is symlinked at `/data/adb/metamodule` and may provide `metamount.sh`, `metainstall.sh` and `metauninstall.sh`. Installs are blocked when a metamodule with `metainstall.sh` has pending changes (`metamodule_check_install_safety`).
 
-### File formats and the installer prelude
+### File formats and the installer prelude {#file-formats}
 
 - Java-properties parsing drives `module.prop` and `system.prop`.
-- `regenerate_preinit_rc` collects `initrc.d/*.rc` (execute bit = enabled) and each module's
-  `initrc/*.rc` into `/metadata/watchdog/nksu/` or `/metadata/nksu/`.
-- `sepolicy.rule` files use KernelSU syntax and are parsed by `sepolicy.cc`
-  (see [§5](#5-kernel-interfaces)).
-- Module ZIPs are read by a native `ZipArchive` (stored/deflate/xz, ZIP64, symlinks,
-  path-traversal-safe, `META-INF/` skipped); `SKIPUNZIP=1` in `customize.sh` is honored.
-- The install shell prelude provides Magisk-style helpers (`ui_print`, `abort`, `grep_prop`,
-  `set_perm[_recursive]`, `mktouch`, `mark_remove`, `mark_replace`, `api_level_arch_detect`,
-  `handle_partition`, `install_module`) plus `BOOTMODE`, `NVBASE`, `MODULOOT`, `MODPATH`,
-  `ZIPFILE`, `MAGISK_VER=25.2`, `ARCH`/`ABI`/`ABI32`/`IS64BIT`.
+- `regenerate_preinit_rc` collects `initrc.d/*.rc` (execute bit = enabled) and each module's `initrc/*.rc` into `/metadata/watchdog/nksu/` or `/metadata/nksu/`.
+- `sepolicy.rule` files use KernelSU syntax and are parsed by `sepolicy.cc` (see [Kernel interfaces](#kernel-interfaces)).
+- Module ZIPs are read by a native `ZipArchive` (stored/deflate/xz, ZIP64, symlinks, path-traversal-safe, `META-INF/` skipped); `SKIPUNZIP=1` in `customize.sh` is honored.
+- The install shell prelude provides Magisk-style helpers (`ui_print`, `abort`, `grep_prop`, `set_perm[_recursive]`, `mktouch`, `mark_remove`, `mark_replace`, `api_level_arch_detect`, `handle_partition`, `install_module`) plus `BOOTMODE`, `NVBASE`, `MODULOOT`, `MODPATH`, `ZIPFILE`, `MAGISK_VER=25.2`, `ARCH`/`ABI`/`ABI32`/`IS64BIT`.
 
-### `module list --json`
+### module list --json {#module-list-json}
 
 Returns an array of objects:
 
@@ -216,63 +176,39 @@ Returns an array of objects:
 }
 ```
 
----
+## Kernel interfaces {#kernel-interfaces}
 
-## 5. Kernel interfaces
+### Control fd {#control-fd}
 
-### Control fd
+`ncore` obtains the control fd with `prctl(204)` (`NKSU_PRCTL_GET_DRIVER_FD`) and locates it by scanning `/proc/self/fd` for the `[fmac_ctl]` link (`find_driver_fd`). The ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)` with the flag set defined in the kernel's `manager/ioctl.h`. Only `IOC_SET_SEPOLICY` (12) is used by `sepolicy.cc`; the other flags are used by the manager's JNI layer.
 
-`ncore` obtains the control fd with `prctl(204)` (`NKSU_PRCTL_GET_DRIVER_FD`) and locates it by
-scanning `/proc/self/fd` for the `[fmac_ctl]` link (`find_driver_fd`). The ioctl is
-`IOC_CMD = _IOWR('F', 0, struct fmac_ioc)` with the flag set defined in the kernel's
-`manager/ioctl.h`. Only `IOC_SET_SEPOLICY` (12) is used by `sepolicy.cc`; other flags are used
-by the manager's JNI layer.
-
-### sepolicy.rule transport
+### sepolicy.rule transport {#sepolicy-transport}
 
 `sepolicy.cc` parses KernelSU-style rules into `Atomic` records and sends them in batches:
 
-```
+```txt
 <u32 cmd><u32 subcmd> (<u32 len><bytes>'\0'){0,5}
 ```
 
-A `len == 0` argument is a wildcard. Supported commands include `allow`, `deny`,
-`auditallow`, `dontaudit`, `allowxperm`/`auditallowxperm`/`dontauditxperm` (ioctl only),
-`permissive`/`enforce`, `type`, `typeattribute`/`attradd`, `attribute`,
-`type_transition`/`name_transition`, `type_change`/`type_member`, `genfscon`, with `{ }`
-cross-product expansion. If no control fd is available, sepolicy rules are skipped with a log.
+A `len == 0` argument is a wildcard. Supported commands include `allow`, `deny`, `auditallow`, `dontaudit`, `allowxperm`/`auditallowxperm`/`dontauditxperm` (ioctl only), `permissive`/`enforce`, `type`, `typeattribute`/`attradd`, `attribute`, `type_transition`/`name_transition`, `type_change`/`type_member`, `genfscon`, with `{ }` cross-product expansion. If no control fd is available, sepolicy rules are skipped with a log.
 
-### Boot-completed notification
+### Boot-completed notification {#boot-completed}
 
-`notify_boot_completed()` calls `prctl(205)` so the kernel can stop its volume-key safe-mode
-watcher.
+`notify_boot_completed()` calls `prctl(205)` so the kernel can stop its volume-key safe-mode watcher.
 
----
-
-## 6. Boot image handling
+## Boot image handling {#boot-image}
 
 `ncore` implements its own boot-image reader — it does **not** use `magiskboot`:
 
 - `probe_type` identifies `ANDROID!`/`VNDRBOOT` images and header versions v0–v4.
-- `unpack` dumps sections (`kernel`, `ramdisk`, `second`, `recovery_dtbo`, `dtb`,
-  `boot_signature`, `vendor_ramdisk`, `vendor_dtb`, `vendor_ramdisk_table`, `bootconfig`) and
-  detects gzip/gzip2/bzip2/lzo/xz/lz4 (block/legacy/lg/frame)/lzma.
-- `replace` rebuilds the image with page-aligned relayout and recompresses to the original
-  encoding.
-- `patch` installs `nksu.ko` at `lib/modules/nksu.ko` in a v3/v4 vendor_boot ramdisk and
-  registers `lib/modules/modules.load` (`nksu.ko`) and `lib/modules/modules.dep`
-  (`/lib/modules/nksu.ko:`), preserving per-sub-ramdisk compression and the v4 table. The
-  result is written as `<image>.new`.
+- `unpack` dumps sections (`kernel`, `ramdisk`, `second`, `recovery_dtbo`, `dtb`, `boot_signature`, `vendor_ramdisk`, `vendor_dtb`, `vendor_ramdisk_table`, `bootconfig`) and detects gzip/gzip2/bzip2/lzo/xz/lz4 (block/legacy/lg/frame)/lzma.
+- `replace` rebuilds the image with page-aligned relayout and recompresses to the original encoding.
+- `patch` installs `nksu.ko` at `lib/modules/nksu.ko` in a v3/v4 vendor_boot ramdisk and registers `lib/modules/modules.load` (`nksu.ko`) and `lib/modules/modules.dep` (`/lib/modules/nksu.ko:`), preserving per-sub-ramdisk compression and the v4 table. The result is written as `<image>.new`.
 
----
+## Extending ncore {#extending}
 
-## 7. Extending `ncore`
-
-- Subcommands live in `cli/cli.cc`; keep `argparse` registration and help text consistent.
-- Module behaviour is in `src/module/`; public API in `include/module/module.hpp`, internals in
-  `src/module/module_internal.hpp`.
-- New kernel ABI usage must match `kernel/manager/ioctl.h` and the manager's
-  `cpp/libjni/ioctl.h`.
+- Subcommands live in `cli/cli.cc`; keep the `argparse` registration and help text consistent.
+- Module behaviour is in `src/module/`; the public API is in `include/module/module.hpp`, internals in `src/module/module_internal.hpp`.
+- New kernel ABI usage must match `kernel/manager/ioctl.h` and the manager's `cpp/libjni/ioctl.h`.
 - Build with `bazel build //:ncore --config=android`; CI stages the result as `libncore.so`.
-- When you change userspace behaviour that pairs with a kernel change, bump the root `version`
-  file.
+- When you change userspace behaviour that pairs with a kernel change, bump the root `version` file.
