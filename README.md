@@ -38,8 +38,6 @@ See **[How to build](docs/building.md)**.
 - **[KernelSU](https://github.com/tiann/KernelSU)** — the SELinux policy/rule engine, LSM hook layout,
   `init.rc` injection technique, SELinux hiding and the WebUI `window.ksu` interface are ported from or
   kept compatible with KernelSU, so KernelSU modules and WebUIs work with NekoSU.
-- **[ncore](https://github.com/aqnya/ncore)** — the userspace module runtime shipped inside the APK,
-  built from its source in `userspace/ncore/`.
 - BusyBox, Material 3 / Jetpack Compose and the open-source libraries listed in the app's *About → Open source* screen.
 
 ## License

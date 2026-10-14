@@ -37,7 +37,6 @@ Android 内核级 Root 方案，由可加载内核模块（`nksu.ko`）和 Mater
 
 - **[KernelSU](https://github.com/tiann/KernelSU)** — SELinux 策略/规则引擎、LSM hook 布局、SELinux 隐藏以及 WebUI `window.ksu` 接口均移植或保持兼容自 KernelSU，
   因此 KernelSU 模块与 WebUI 可在 NekoSU 上直接运行。
-- **[ncore](https://github.com/aqnya/ncore)** — 打包在 APK 内的用户态模块运行时，源码位于 `userspace/ncore/`。
 - BusyBox、Material 3 / Jetpack Compose，以及应用 *关于 → 开源许可* 页面列出的开源库。
 
 ## 许可证
