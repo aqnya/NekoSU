@@ -1,6 +1,6 @@
 # Contributing to NekoSU
 
-**English** | [简体中文](CONTRIBUTING.zh.md)
+**English** | [简体中文](docs/CONTRIBUTING.zh.md)
 
 Thanks for your interest in NekoSU. This guide covers how to set up, make changes, and get them
 merged.

@@ -26,8 +26,8 @@ NekoSU 是 Android 平台上的内核级 root 方案，由可加载内核模块�
 
 ## 相关文档 {#related-documents}
 
-- [`README.md`](../README.md) / [`README_zh.md`](../README_zh.md) —— 项目概览。
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) / [`CONTRIBUTING.zh.md`](../CONTRIBUTING.zh.md) —— 如何贡献。
+- [`README.md`](../README.md) / [`README_zh.md`](README_zh.md) —— 项目概览。
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) / [`CONTRIBUTING.zh.md`](CONTRIBUTING.zh.md) —— 如何贡献。
 
 ## 术语约定 {#conventions}
 

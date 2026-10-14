@@ -7,7 +7,7 @@
 Kernel-level root solution for Android: a kernel module plus a Material 3 manager app.
 KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
-**English** | [简体中文](README_zh.md)
+**English** | [简体中文](docs/README_zh.md)
 
 📖 [Documentation](docs/README.md) — architecture, build guide, kernel module reference, user manual.
 

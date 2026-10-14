@@ -1,6 +1,6 @@
 # 为 NekoSU 做贡献
 
-[English](CONTRIBUTING.md) | **简体中文**
+[English](../CONTRIBUTING.md) | **简体中文**
 
 感谢你对 NekoSU 的关注。本指南说明如何搭建环境、进行修改并让改动被合并。
 
@@ -13,11 +13,11 @@
 | `kernel/` | 可加载内核模块 `nksu.ko` |
 | `userspace/ncore/` | 用户态运行时，使用 Bazel 构建 |
 | `manager/` | Android 管理器应用（Gradle） |
-| `docs/` | 文档 —— 见 [`docs/README.zh.md`](docs/README.zh.md) |
+| `docs/` | 文档 —— 见 [`docs/README.zh.md`](README.zh.md) |
 | `version` | 模块/应用版本的唯一事实来源 |
 | `.github/workflows/` | CI |
 
-在做非平凡改动之前，请先阅读[架构](docs/architecture.zh.md)文档。
+在做非平凡改动之前，请先阅读[架构](architecture.zh.md)文档。
 
 ---
 
@@ -35,7 +35,7 @@ git submodule update --init --recursive
 ```
 
 工具链：Bazel、NDK、JDK 与 Gradle 的准确版本见
-[如何构建 § 前置条件](docs/building.zh.md#prerequisites)。
+[如何构建 § 前置条件](building.zh.md#prerequisites)。
 
 ---
 
@@ -45,7 +45,7 @@ git submodule update --init --recursive
 
 - 遵循 `.clang-format`（Linux 内核风格，120 列，4 空格缩进）。
 - 新增 ABI 应放入共享的 `uapi/` 头文件（`uapi/ioctl.h`、`uapi/selinux.h`），并用
-  `static_assert` 固定。见 [内核模块开发者指南](docs/kernel.zh.md)。
+  `static_assert` 固定。见 [内核模块开发者指南](kernel.zh.md)。
 - 本地构建：
   ```sh
   make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
@@ -64,7 +64,7 @@ git submodule update --init --recursive
 
 - Kotlin、Jetpack Compose + Material 3。格式由 ktlint 强制。
 - App 构建需要预先准备好的 native 产物（`*_nksu.ko` 资源与 `libncore.so`）；见
-  [如何构建 § 构建管理器 App](docs/building.zh.md#building-the-manager-app)。
+  [如何构建 § 构建管理器 App](building.zh.md#building-the-manager-app)。
 
 ### 文档
 
@@ -113,4 +113,4 @@ git submodule update --init --recursive
 
 ## 8. 许可证
 
-提交贡献即表示你同意你的贡献以 [GPL-3.0](LICENSE) 许可发布。
+提交贡献即表示你同意你的贡献以 [GPL-3.0](../LICENSE) 许可发布。

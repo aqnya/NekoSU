@@ -2,14 +2,14 @@
 
 [![Android CI](https://github.com/nksu-crew/NekoSU/actions/workflows/android.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/android.yml)
 [![Build LKM](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](../LICENSE)
 
 Android 内核级 Root 方案，由内核模块和 Material 3 管理器 App 组成。
 模块系统、WebUI 与 SELinux 规则格式均兼容 KernelSU。
 
-[English](README.md) | **简体中文**
+[English](../README.md) | **简体中文**
 
-📖 [文档](docs/README.zh.md) —— 架构、构建指南、内核模块参考、用户手册。
+📖 [文档](README.zh.md) —— 架构、构建指南、内核模块参考、用户手册。
 
 ---
 
@@ -26,11 +26,11 @@ Android 内核级 Root 方案，由内核模块和 Material 3 管理器 App 组�
 
 ## 安装
 
-见 [安装方式](docs/usage.zh.md#installation-methods)。
+见 [安装方式](usage.zh.md#installation-methods)。
 
 ## 构建
 
-见 [如何构建](docs/building.zh.md)。
+见 [如何构建](building.zh.md)。
 
 ## 致谢
 
@@ -40,4 +40,4 @@ Android 内核级 Root 方案，由内核模块和 Material 3 管理器 App 组�
 
 ## 许可证
 
-[GPL-3.0](LICENSE)
+[GPL-3.0](../LICENSE)

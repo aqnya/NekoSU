@@ -26,8 +26,8 @@ New to kernel-based root? Start with [Architecture](architecture.md) for the big
 
 ## Related documents
 
-- [`README.md`](../README.md) / [`README_zh.md`](../README_zh.md) — project overview.
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) / [`CONTRIBUTING.zh.md`](../CONTRIBUTING.zh.md) — how to contribute.
+- [`README.md`](../README.md) / [`README_zh.md`](README_zh.md) — project overview.
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) / [`CONTRIBUTING.zh.md`](CONTRIBUTING.zh.md) — how to contribute.
 
 ## Conventions
 
