@@ -1,5 +1,6 @@
 #include "klog.h"
 #include "manager/manager.h"
+#include "manager/abx.h"
 #include "boot/safe_mode.h"
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -22,6 +23,7 @@
 #include <linux/jiffies.h>
 #include <linux/atomic.h>
 #include <linux/fsnotify_backend.h>
+#include <linux/task_work.h>
 #include <linux/cred.h>
 #include <linux/capability.h>
 #include <fmac.h>
@@ -44,7 +46,6 @@
 
 #define PACKAGES_XML_PATH "/data/system/packages.xml"
 #define MAX_PACKAGES_XML_SIZE (8 * 1024 * 1024)
-#define MAX_INTERNED_STRINGS 512
 
 static kuid_t manager_kuid = INVALID_UID;
 
@@ -69,127 +70,7 @@ bool is_ncore_ready(void)
     return READ_ONCE(ncore_ready);
 }
 
-/*
- * ABX (Android Binary XML) wire format, as produced by
- * com.android.modules.utils.BinaryXmlSerializer (AOSP modules-utils).
- *
- * Every event is a single byte: low nibble is an XmlPullParser token and
- * high nibble is an optional data type signal. Strings are written with a
- * 2-byte big-endian length followed by Modified UTF-8 bytes. Names written
- * through writeInternedUTF() are canonicalized: the first occurrence is a
- * 0xffff sentinel followed by the full string, and later occurrences are a
- * 2-byte big-endian index into the intern table.
- */
-#define ABX_TOKEN_START_DOCUMENT 0
-#define ABX_TOKEN_END_DOCUMENT 1
-#define ABX_TOKEN_START_TAG 2
-#define ABX_TOKEN_END_TAG 3
-#define ABX_TOKEN_TEXT 4
-#define ABX_TOKEN_ATTRIBUTE 15
-
-#define ABX_TYPE_NULL 0x10
-#define ABX_TYPE_STRING 0x20
-#define ABX_TYPE_STRING_INTERNED 0x30
-#define ABX_TYPE_BYTES_HEX 0x40
-#define ABX_TYPE_BYTES_BASE64 0x50
-#define ABX_TYPE_INT 0x60
-#define ABX_TYPE_INT_HEX 0x70
-#define ABX_TYPE_LONG 0x80
-#define ABX_TYPE_LONG_HEX 0x90
-#define ABX_TYPE_FLOAT 0xa0
-#define ABX_TYPE_DOUBLE 0xb0
-#define ABX_TYPE_BOOLEAN_TRUE 0xc0
-#define ABX_TYPE_BOOLEAN_FALSE 0xd0
-
-#define ABX_INTERNED_SENTINEL 0xffff
-
-struct abx_reader {
-    const u8 *buf;
-    size_t len;
-    size_t pos;
-    const u8 **interned;
-    size_t *interned_len;
-    int interned_count;
-};
-
-static inline int abx_read_byte(struct abx_reader *r, u8 *out)
-{
-    if (r->pos >= r->len)
-        return -1;
-    *out = r->buf[r->pos++];
-    return 0;
-}
-
-static inline int abx_read_u16(struct abx_reader *r, u16 *out)
-{
-    if (r->pos + 2 > r->len)
-        return -1;
-    *out = (u16)((r->buf[r->pos] << 8) | r->buf[r->pos + 1]);
-    r->pos += 2;
-    return 0;
-}
-
-static inline int abx_read_u64(struct abx_reader *r, u64 *out)
-{
-    if (r->pos + 8 > r->len)
-        return -1;
-    *out = ((u64)r->buf[r->pos] << 56) | ((u64)r->buf[r->pos + 1] << 48) |
-           ((u64)r->buf[r->pos + 2] << 40) | ((u64)r->buf[r->pos + 3] << 32) |
-           ((u64)r->buf[r->pos + 4] << 24) | ((u64)r->buf[r->pos + 5] << 16) |
-           ((u64)r->buf[r->pos + 6] << 8) | (u64)r->buf[r->pos + 7];
-    r->pos += 8;
-    return 0;
-}
-
-/* Read a plain (non-interned) UTF-8 string; returns a view into the buffer. */
-static int abx_read_utf(struct abx_reader *r, const u8 **str, size_t *len)
-{
-    u16 n;
-
-    if (abx_read_u16(r, &n) < 0)
-        return -1;
-    if (r->pos + n > r->len)
-        return -1;
-    *str = r->buf + r->pos;
-    *len = n;
-    r->pos += n;
-    return 0;
-}
-
-/*
- * Read a string that was written through writeInternedUTF(). The first
- * occurrence carries a 0xffff sentinel followed by the full string, which is
- * appended to the intern table; later occurrences are an index into the table.
- */
-static int abx_read_interned(struct abx_reader *r, const u8 **str, size_t *len)
-{
-    u16 ref;
-
-    if (abx_read_u16(r, &ref) < 0)
-        return -1;
-    if (ref == ABX_INTERNED_SENTINEL) {
-        if (abx_read_utf(r, str, len) < 0)
-            return -1;
-        if (r->interned_count >= MAX_INTERNED_STRINGS)
-            return -1;
-        r->interned[r->interned_count] = *str;
-        r->interned_len[r->interned_count] = *len;
-        r->interned_count++;
-    } else {
-        if (ref >= r->interned_count)
-            return -1;
-        *str = r->interned[ref];
-        *len = r->interned_len[ref];
-    }
-    return 0;
-}
-
-static inline bool abx_str_eq(const u8 *s, size_t len, const char *lit)
-{
-    size_t l = strlen(lit);
-
-    return len == l && !memcmp(s, lit, l);
-}
+/* The ABX (Android Binary XML) parser lives in manager/abx.c. */
 
 static int sha256_bytes(const u8 *data, size_t len, u8 out[32])
 {
@@ -214,49 +95,20 @@ static int sha256_bytes(const u8 *data, size_t len, u8 out[32])
 }
 
 /*
- * The manager package's on-disk locations, captured from packages.xml while
- * looking for its signature.  nativeLibraryPath is the extracted jniLibs
- * directory (<codePath>/lib/<abi>); codePath is the fallback for images that
- * do not write it.
+ * Verify the manager's signing certificate in /data/system/packages.xml and
+ * capture its on-disk locations.  The ABX parsing lives in manager/abx.c; here
+ * we only hash the certificate it returns and compare it with TARGET_HASH.
+ * nativeLibraryPath is the extracted jniLibs directory (<codePath>/lib/<abi>);
+ * codePath is the fallback for images that do not write it.
  */
-struct manager_paths {
-    char code_path[256];
-    char native_lib_path[256];
-};
-
-static void copy_path_attr(char *dst, size_t cap, const u8 *src, size_t len)
-{
-    size_t n = 0;
-
-    if (src && len) {
-        n = len < cap - 1 ? len : cap - 1;
-        memcpy(dst, src, n);
-    }
-    dst[n] = '\0';
-}
-
-/*
- * Locate <package name="TARGET_PACKAGE"><sigs><cert key="..."/></sigs></package>
- * in /data/system/packages.xml and compare the SHA-256 of the DER certificate
- * stored in the key attribute against TARGET_HASH.  Also fills `paths` with the
- * package's codePath / nativeLibraryPath when requested.
- */
-static bool verify_package_signature(struct manager_paths *paths)
+static bool verify_package_signature(struct abx_package *paths)
 {
     struct file *fp;
-    struct abx_reader r = { .interned = NULL, .interned_len = NULL };
     loff_t pos = 0;
     ssize_t rd;
     size_t fsize;
     u8 *buf;
-    const u8 *name;
-    size_t nlen;
-    int depth = 0;
-    int pkg_depth = -1;
-    int sigs_depth = -1;
     bool valid = false;
-    const u8 *cert = NULL;
-    size_t cert_len = 0;
 
     fp = filp_open(PACKAGES_XML_PATH, O_RDONLY, 0);
     if (IS_ERR(fp))
@@ -279,195 +131,15 @@ static bool verify_package_signature(struct manager_paths *paths)
     if (rd != (ssize_t)fsize)
         goto out_free;
 
-    /* ABX magic: "ABX\0" */
-    if (memcmp(buf, "ABX\0", 4) != 0)
-        goto out_free;
-
-    r.buf = buf;
-    r.len = fsize;
-    r.pos = 4;
-    r.interned_count = 0;
-
-    r.interned = kvmalloc_array(MAX_INTERNED_STRINGS, sizeof(*r.interned), GFP_KERNEL);
-    r.interned_len = kvmalloc_array(MAX_INTERNED_STRINGS, sizeof(*r.interned_len), GFP_KERNEL);
-    if (!r.interned || !r.interned_len)
-        goto out_free;
-
-    while (r.pos < r.len) {
-        u8 ev, tok, typ;
-
-        if (abx_read_byte(&r, &ev) < 0)
-            goto out_free;
-        tok = ev & 0x0f;
-        typ = ev & 0xf0;
-
-        if (tok == ABX_TOKEN_START_DOCUMENT) {
-            continue;
-        } else if (tok == ABX_TOKEN_END_DOCUMENT) {
-            break;
-        } else if (tok == ABX_TOKEN_START_TAG) {
-            bool is_sigs, is_cert, is_pkg;
-            const u8 *pkg_attr = NULL;
-            size_t pkg_attr_len = 0;
-            const u8 *code_attr = NULL;
-            size_t code_attr_len = 0;
-            const u8 *nlib_attr = NULL;
-            size_t nlib_attr_len = 0;
-
-            if (abx_read_interned(&r, &name, &nlen) < 0)
-                goto out_free;
-            depth++;
-
-            is_sigs = (pkg_depth > 0 && sigs_depth < 0) && depth == pkg_depth + 1 &&
-                      abx_str_eq(name, nlen, "sigs");
-            is_cert = (sigs_depth > 0) && depth == sigs_depth + 1 &&
-                      abx_str_eq(name, nlen, "cert");
-
-            /* Consume attributes (if any) until the next non-attribute event. */
-            while (r.pos < r.len) {
-                size_t save = r.pos;
-                u8 ev2, typ2;
-                const u8 *aname;
-                size_t alen;
-
-                if (abx_read_byte(&r, &ev2) < 0)
-                    break;
-                if ((ev2 & 0x0f) != ABX_TOKEN_ATTRIBUTE) {
-                    r.pos = save;
-                    break;
-                }
-                typ2 = ev2 & 0xf0;
-
-                if (abx_read_interned(&r, &aname, &alen) < 0)
-                    goto out_free;
-
-                if (is_cert && abx_str_eq(aname, alen, "key") &&
-                    (typ2 == ABX_TYPE_BYTES_HEX || typ2 == ABX_TYPE_BYTES_BASE64)) {
-                    u16 blen;
-
-                    if (abx_read_u16(&r, &blen) < 0 || r.pos + blen > r.len)
-                        goto out_free;
-                    cert = r.buf + r.pos;
-                    cert_len = blen;
-                    r.pos += blen;
-                } else if (typ2 == ABX_TYPE_STRING) {
-                    u16 slen;
-
-                    if (abx_read_u16(&r, &slen) < 0 || r.pos + slen > r.len)
-                        goto out_free;
-                    if (abx_str_eq(aname, alen, "name")) {
-                        pkg_attr = r.buf + r.pos;
-                        pkg_attr_len = slen;
-                    } else if (abx_str_eq(aname, alen, "codePath")) {
-                        code_attr = r.buf + r.pos;
-                        code_attr_len = slen;
-                    } else if (abx_str_eq(aname, alen, "nativeLibraryPath")) {
-                        nlib_attr = r.buf + r.pos;
-                        nlib_attr_len = slen;
-                    }
-                    r.pos += slen;
-                } else if (typ2 == ABX_TYPE_STRING_INTERNED) {
-                    const u8 *v;
-                    size_t vlen;
-
-                    if (abx_read_interned(&r, &v, &vlen) < 0)
-                        goto out_free;
-                    if (abx_str_eq(aname, alen, "name")) {
-                        pkg_attr = v;
-                        pkg_attr_len = vlen;
-                    } else if (abx_str_eq(aname, alen, "codePath")) {
-                        code_attr = v;
-                        code_attr_len = vlen;
-                    } else if (abx_str_eq(aname, alen, "nativeLibraryPath")) {
-                        nlib_attr = v;
-                        nlib_attr_len = vlen;
-                    }
-                } else if (typ2 == ABX_TYPE_BYTES_HEX || typ2 == ABX_TYPE_BYTES_BASE64) {
-                    u16 blen;
-
-                    if (abx_read_u16(&r, &blen) < 0 || r.pos + blen > r.len)
-                        goto out_free;
-                    r.pos += blen;
-                } else if (typ2 == ABX_TYPE_INT || typ2 == ABX_TYPE_INT_HEX ||
-                           typ2 == ABX_TYPE_FLOAT) {
-                    if (r.pos + 4 > r.len)
-                        goto out_free;
-                    r.pos += 4;
-                } else if (typ2 == ABX_TYPE_LONG || typ2 == ABX_TYPE_LONG_HEX ||
-                           typ2 == ABX_TYPE_DOUBLE) {
-                    u64 v;
-
-                    if (abx_read_u64(&r, &v) < 0)
-                        goto out_free;
-                } else if (typ2 == ABX_TYPE_BOOLEAN_TRUE || typ2 == ABX_TYPE_BOOLEAN_FALSE ||
-                           typ2 == ABX_TYPE_NULL) {
-                    /* No payload */
-                } else {
-                    goto out_free;
-                }
-            }
-
-            is_pkg = (pkg_depth < 0) && abx_str_eq(name, nlen, "package") && pkg_attr &&
-                     abx_str_eq(pkg_attr, pkg_attr_len, TARGET_PACKAGE);
-
-            if (is_pkg) {
-                pkg_depth = depth;
-                if (paths) {
-                    copy_path_attr(paths->code_path, sizeof(paths->code_path),
-                                   code_attr, code_attr_len);
-                    copy_path_attr(paths->native_lib_path,
-                                   sizeof(paths->native_lib_path), nlib_attr,
-                                   nlib_attr_len);
-                }
-            }
-            if (is_sigs)
-                sigs_depth = depth;
-            if (cert && cert_len > 0)
-                goto check;
-        } else if (tok == ABX_TOKEN_END_TAG) {
-            if (abx_read_interned(&r, &name, &nlen) < 0)
-                goto out_free;
-            if (depth == pkg_depth)
-                pkg_depth = -1;
-            if (depth == sigs_depth)
-                sigs_depth = -1;
-            depth--;
-            if (depth < 0)
-                goto out_free;
-        } else if (tok == ABX_TOKEN_TEXT || tok == 5 || tok == 6 || tok == 7 || tok == 8 ||
-                   tok == 9 || tok == 10) {
-            /* TEXT(4) CDSECT(5) ENTITY_REF(6) IGNORABLE_WHITESPACE(7)
-             * PROCESSING_INSTRUCTION(8) COMMENT(9) DOCDECL(10) */
-            if (typ == ABX_TYPE_STRING) {
-                u16 slen;
-
-                if (abx_read_u16(&r, &slen) < 0 || r.pos + slen > r.len)
-                    goto out_free;
-                r.pos += slen;
-            } else if (typ == ABX_TYPE_STRING_INTERNED) {
-                if (abx_read_interned(&r, &name, &nlen) < 0)
-                    goto out_free;
-            } else if (typ == ABX_TYPE_NULL) {
-                /* No payload */
-            } else {
-                goto out_free;
-            }
-        } else {
-            goto out_free;
-        }
-    }
-
-check:
-    if (cert && cert_len > 0) {
+    if (abx_find_package(buf, fsize, TARGET_PACKAGE, paths)) {
         u8 hash[32];
 
-        if (sha256_bytes(cert, cert_len, hash) == 0 && !memcmp(hash, TARGET_HASH, 32))
+        if (sha256_bytes(paths->cert, paths->cert_len, hash) == 0 &&
+            !memcmp(hash, TARGET_HASH, 32))
             valid = true;
     }
 
 out_free:
-    kvfree(r.interned);
-    kvfree(r.interned_len);
     kvfree(buf);
     return valid;
 }
@@ -806,7 +478,7 @@ static void code_path_base(const char *code, char *out, size_t cap)
     strscpy(out, code, cap);
 }
 
-static bool resolve_lib_dir(const struct manager_paths *paths, char *out, size_t cap)
+static bool resolve_lib_dir(const struct abx_package *paths, char *out, size_t cap)
 {
     char cand[320];
     char base[256];
@@ -836,7 +508,7 @@ static bool resolve_lib_dir(const struct manager_paths *paths, char *out, size_t
     return false;
 }
 
-static int install_ncore_from_manager(const struct manager_paths *paths)
+static int install_ncore_from_manager(const struct abx_package *paths)
 {
     char lib_dir[256];
     char src[320];
@@ -896,14 +568,26 @@ static int install_ncore_from_manager(const struct manager_paths *paths)
     return 0;
 }
 
+/*
+ * Scans can be triggered concurrently: the initial one from appscan_init() and
+ * one task_work per packages.xml change.  Serialize them (the scan mutates the
+ * profile table and caches the borrowed nksu creds).
+ */
+static DEFINE_MUTEX(appscan_mutex);
+
 static int scan_and_apply(void)
 {
     const struct cred *old;
-    struct manager_paths paths = { 0 };
+    struct abx_package paths = { 0 };
     uid_t uid;
     int ret = -1;
 
+    mutex_lock(&appscan_mutex);
     old = nksu_borrow_creds_begin();
+    if (!old) {
+        mutex_unlock(&appscan_mutex);
+        return -ENOMEM;
+    }
 
     uid = get_uid_from_packages_list(TARGET_PACKAGE);
     if (uid == (uid_t)-1) {
@@ -935,21 +619,30 @@ static int scan_and_apply(void)
 
 out:
     nksu_borrow_creds_end(old);
+    mutex_unlock(&appscan_mutex);
+
+    /*
+     * No ncore means no module can run this boot, so volume-key safe mode has
+     * nothing to protect.  Idempotent, and safe before the safe-mode component
+     * has initialized (the state is observed by nksu_safe_mode_init).
+     */
+    if (!READ_ONCE(ncore_ready))
+        nksu_safe_mode_disable();
+
     return ret;
 }
-
-static struct task_struct *appscan_thread;
-static DECLARE_WAIT_QUEUE_HEAD(appscan_wq);
-static atomic_t appscan_pending = ATOMIC_INIT(0);
 
 /*
  * packages.xml observer.
  *
  * PackageManagerService republishes /data/system/packages.xml whenever the set
  * of installed packages changes (it writes a reserve copy and renames it into
- * place), so watch the directory and re-run the manager scan as soon as the
- * manager appears or is updated. The callback runs under the fsnotify SRCU lock
- * and must not sleep, so it only flags the scan thread.
+ * place), so re-run the manager scan on every create/rename instead of polling.
+ * The callback runs under the fsnotify SRCU lock and the rename's directory
+ * locks, while the scan sleeps and reads files, so the work is deferred with
+ * task_work (KernelSU's ksu_defer_track_throne): it then runs in the renamer's
+ * context and finishes before the rename returns, so a freshly installed
+ * manager is verified and granted before it can be opened.
  */
 #define APPSCAN_WATCH_DIR "/data/system"
 #define APPSCAN_WATCH_NAME "packages.xml"
@@ -958,10 +651,33 @@ static atomic_t appscan_pending = ATOMIC_INIT(0);
 static struct fsnotify_group *appscan_group;
 static struct fsnotify_mark *appscan_mark;
 
-static void appscan_notify(void)
+static void appscan_task_work(struct callback_head *cb)
 {
-    atomic_set(&appscan_pending, 1);
-    wake_up_interruptible(&appscan_wq);
+    kfree(cb);
+
+    /* Runs after exit_fs() if the task is exiting; path lookups would oops. */
+    if (current->flags & PF_EXITING)
+        return;
+
+    scan_and_apply();
+}
+
+static void appscan_defer_scan(void)
+{
+    struct callback_head *cb;
+
+    if (!(current->flags & PF_KTHREAD)) {
+        cb = kzalloc(sizeof(*cb), GFP_KERNEL);
+        if (cb) {
+            init_task_work(cb, appscan_task_work);
+            if (!task_work_add(current, cb, TWA_RESUME))
+                return;
+            kfree(cb);
+        }
+    }
+
+    /* kthread or allocation failure: run it inline. */
+    scan_and_apply();
 }
 
 static int appscan_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
@@ -980,7 +696,7 @@ static int appscan_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
                sizeof(APPSCAN_WATCH_NAME) - 1))
         return 0;
 
-    appscan_notify();
+    appscan_defer_scan();
     return 0;
 }
 
@@ -1053,88 +769,25 @@ out_group:
     return ret;
 }
 
-static int appscan_retry_thread(void *data)
-{
-    int tries = 120; /* first boot: up to ~60s of retries */
-
-    while (!kthread_should_stop()) {
-        if (scan_and_apply() == 0) {
-            pr_info("[manager] manager profile applied\n");
-            tries = 0; /* applied: park until packages.xml changes */
-        } else if (tries > 0 && --tries == 0) {
-            pr_info("[manager] manager not found yet, waiting for package changes\n");
-        }
-
-        /*
-         * No ncore means no module can run this boot, so volume-key safe mode
-         * has nothing to protect.  tries == 0 is the settled state: a
-         * successful scan (ncore_ready was just set) or retry exhaustion.
-         * nksu_safe_mode_disable() is idempotent and safe before the safe
-         * mode component has initialized.
-         */
-        if (tries == 0 && !READ_ONCE(ncore_ready))
-            nksu_safe_mode_disable();
-
-        if (tries > 0) {
-            /*
-             * First boot: retry every 500ms, but wake up immediately when
-             * packages.xml changes.
-             */
-            wait_event_interruptible_timeout(appscan_wq,
-                                             kthread_should_stop() ||
-                                                 atomic_xchg(&appscan_pending, 0),
-                                             msecs_to_jiffies(500));
-        } else {
-            /*
-             * Applied, or out of retries: wait for the app list to change and
-             * then re-run the scan, so the manager is picked up without a
-             * reboot.
-             */
-            wait_event_interruptible(appscan_wq,
-                                     kthread_should_stop() ||
-                                         atomic_xchg(&appscan_pending, 0));
-        }
-    }
-
-    /*
-     * Never return on our own: a kthread that exits while the module still
-     * holds its task_struct makes the later kthread_stop() touch freed
-     * memory.
-     */
-    wait_event_interruptible(appscan_wq, kthread_should_stop());
-    return 0;
-}
-
 int appscan_init(void)
 {
-    int ret;
-
     pr_info("[manager] Module starting scan...\n");
 
-    appscan_observer_init();
-
     /*
-     * Always keep the scan thread around: the packages.xml observer wakes it
-     * whenever the app list changes. A first-stage (vendor_boot) load starts
-     * before PackageManagerService has written the package list, so the first
-     * successful scan usually comes from the retry loop.
+     * Install the observer first, then scan once.  A first-stage (vendor_boot)
+     * load can reach this before PackageManagerService has written
+     * packages.xml; the observer then triggers the scan as soon as it appears,
+     * so no retry loop is needed.
      */
-    appscan_thread = kthread_run(appscan_retry_thread, NULL, "nksu-appscan");
-    if (IS_ERR(appscan_thread)) {
-        ret = PTR_ERR(appscan_thread);
-        appscan_thread = NULL;
-        appscan_observer_exit();
-        return ret;
-    }
+    if (appscan_observer_init())
+        pr_warn("[manager] package observer unavailable, scanning boot only\n");
+
+    scan_and_apply();
     return 0;
 }
 
 void appscan_exit(void)
 {
-    if (appscan_thread) {
-        kthread_stop(appscan_thread);
-        appscan_thread = NULL;
-    }
     appscan_observer_exit();
     nksu_borrow_creds_release();
 }
