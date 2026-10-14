@@ -208,20 +208,6 @@ fun InstallScreen(navController: NavController) {
                 )
             }
         },
-        bottomBar = {
-            if (!logVisible) {
-                InstallBottomBar(
-                    state = state,
-                    onInstall = {
-                        when (state.method) {
-                            InstallMethod.FILE -> installViewModel.install()
-                            InstallMethod.DIRECT, InstallMethod.INACTIVE -> confirmMethod = state.method
-                        }
-                    },
-                    onDone = { navController.popBackStack() },
-                )
-            }
-        },
         floatingActionButton = {
             when {
                 // 直接安装 / 非活动分区安装成功后，用悬浮按钮一键重启；
@@ -280,6 +266,16 @@ fun InstallScreen(navController: NavController) {
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                InstallBottomBar(
+                    state = state,
+                    onInstall = {
+                        when (state.method) {
+                            InstallMethod.FILE -> installViewModel.install()
+                            InstallMethod.DIRECT, InstallMethod.INACTIVE -> confirmMethod = state.method
+                        }
+                    },
+                    onDone = { navController.popBackStack() },
+                )
             }
         }
     }
@@ -572,7 +568,7 @@ private fun InstallBottomBar(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(vertical = 12.dp),
             ) {
                 Text(stringResource(R.string.install_done))
             }
@@ -583,7 +579,7 @@ private fun InstallBottomBar(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(vertical = 12.dp),
             ) {
                 Text(stringResource(R.string.install_start))
             }
