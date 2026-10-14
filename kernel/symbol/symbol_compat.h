@@ -38,6 +38,8 @@
 #include <linux/nsproxy.h>
 #include <linux/uidgid.h>
 #include <linux/user_namespace.h>
+#include <linux/syscalls.h>
+#include <linux/task_work.h>
 #include <asm/fixmap.h>
 
 #include "security.h"
@@ -107,6 +109,14 @@ extern typeof(lookup_one_len) *nksu_lookup_one_len;
 extern typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
 
 /*
+ * Flush dirty filesystems before rebooting (safe mode) and defer work onto the
+ * current task's resume queue (manager event scan). Neither is in every GKI
+ * export set, so reach them through kallsyms like the rest.
+ */
+extern typeof(ksys_sync) *nksu_ksys_sync;
+extern typeof(task_work_add) *nksu_task_work_add;
+
+/*
  * spawn primitives (kernel/spawn/spawn.c). None of these is exported on GKI, and they
  * are exactly what a self-contained call_usermodehelper replacement needs:
  * spawn a task, exec a program in it, wait for it, reset its handlers.
@@ -169,6 +179,8 @@ extern typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 #define vfs_unlink                       nksu_vfs_unlink
 #define lookup_one_len                   nksu_lookup_one_len
 #define __vfs_setxattr_noperm            nksu___vfs_setxattr_noperm
+#define ksys_sync                        nksu_ksys_sync
+#define task_work_add                    nksu_task_work_add
 #define kernel_thread                    nksu_kernel_thread
 #define kernel_execve                    nksu_kernel_execve
 #define kernel_wait                      nksu_kernel_wait

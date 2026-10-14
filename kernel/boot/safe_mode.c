@@ -49,6 +49,18 @@
 #include "manager/ioctl.h"
 #include "selinux/selinux.h"
 
+/* Last: redirects ksys_sync() to the resolved-symbol pointer. */
+#include "symbol/symbol_compat.h"
+
+/*
+ * This file calls the resolved ksys_sync() through a pointer. Disable CFI for
+ * its functions so that indirect call is not type-hash checked (the module's
+ * build headers may hash differently than the running kernel).
+ */
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#endif
+
 #define NKSU_SAFE_DIR       "/data/adb/nksu"
 #define NKSU_SAFE_MARKER    NKSU_SAFE_DIR "/safe_module"
 #define NKSU_SAFE_PRESSES   3
@@ -334,3 +346,7 @@ void nksu_safe_mode_exit(void)
 		nksu_safe_thread = NULL;
 	}
 }
+
+#if defined(__clang__)
+#pragma clang attribute pop
+#endif

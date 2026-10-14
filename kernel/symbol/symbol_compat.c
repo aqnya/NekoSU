@@ -52,6 +52,8 @@ typeof(vfs_mkdir) *nksu_vfs_mkdir;
 typeof(vfs_unlink) *nksu_vfs_unlink;
 typeof(lookup_one_len) *nksu_lookup_one_len;
 typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
+typeof(ksys_sync) *nksu_ksys_sync;
+typeof(task_work_add) *nksu_task_work_add;
 
 typeof(kernel_thread) *nksu_kernel_thread;
 typeof(kernel_execve) *nksu_kernel_execve;
@@ -102,6 +104,8 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_vfs_unlink, "vfs_unlink");
 	NKSU_RESOLVE(nksu_lookup_one_len, "lookup_one_len");
 	NKSU_RESOLVE(nksu___vfs_setxattr_noperm, "__vfs_setxattr_noperm");
+	NKSU_RESOLVE(nksu_ksys_sync, "ksys_sync");
+	NKSU_RESOLVE(nksu_task_work_add, "task_work_add");
 	NKSU_RESOLVE(nksu_selinux_state, "selinux_state");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	NKSU_RESOLVE(nksu_selinux_blob_sizes, "selinux_blob_sizes");
@@ -169,6 +173,8 @@ void nksu_symbol_compat_exit(void)
 	nksu_vfs_unlink = NULL;
 	nksu_lookup_one_len = NULL;
 	nksu___vfs_setxattr_noperm = NULL;
+	nksu_ksys_sync = NULL;
+	nksu_task_work_add = NULL;
 	nksu_selinux_state = NULL;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	nksu_selinux_blob_sizes = NULL;
