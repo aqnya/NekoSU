@@ -38,6 +38,7 @@
 #include <linux/types.h>
 #include <linux/uidgid.h>
 #include <linux/wait.h>
+#include <linux/syscalls.h>
 #include <asm/ptrace.h>
 #include <asm/unistd.h>
 
@@ -200,6 +201,7 @@ static void nksu_safe_trigger(void)
 		}
 		nksu_borrow_creds_end(old);
 	}
+	ksys_sync();
 
 	/* Let the write land, then reboot into the safe-mode boot. */
 	msleep(500);
