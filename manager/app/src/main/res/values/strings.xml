@@ -274,8 +274,6 @@
 
     <!-- Install log / error messages -->
     <string name="install_log_partition">[nksu] vendor_boot: %1$s</string>
-    <string name="install_log_ncore_installed">[nksu] ncore installed to %1$s</string>
-    <string name="install_log_ncore_warn">[nksu] WARN: ncore install failed; the manager will retry on next boot</string>
     <string name="install_log_exported">[nksu] exported to: %1$s</string>
     <string name="install_log_export_failed">[nksu] failed to export to Download: %1$s</string>
     <string name="install_log_rollback">[nksu] write failed, restoring the original image</string>

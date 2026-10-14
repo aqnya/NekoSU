@@ -273,14 +273,6 @@ object VendorBootInstaller {
             val part = partition
             onOutput(context.getString(R.string.install_log_partition, part))
 
-            // 已具备 root：顺便把 ncore 放到 init.rc 会 exec 的固定路径，
-            // 免去“首次重启后再由管理器补装、需二次重启”的往返。
-            if (NcoreBoot.install(context)) {
-                onOutput(context.getString(R.string.install_log_ncore_installed, NcoreBoot.BOOT_PATH))
-            } else {
-                onOutput(context.getString(R.string.install_log_ncore_warn))
-            }
-
             // 1) 现 dump 一份原镜像，既作为 patch 的输入，也作为写入失败的回滚依据。
             val source = File(dir, SOURCE_IMAGE_NAME)
             source.delete()

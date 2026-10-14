@@ -268,8 +268,6 @@
 
     <!-- 安装日志 / 错误信息 -->
     <string name="install_log_partition">[nksu] vendor_boot: %1$s</string>
-    <string name="install_log_ncore_installed">[nksu] ncore 已安装到 %1$s</string>
-    <string name="install_log_ncore_warn">[nksu] WARN: ncore 安装失败，模块将在下次启动由管理器重试</string>
     <string name="install_log_exported">[nksu] 已导出到: %1$s</string>
     <string name="install_log_export_failed">[nksu] 导出到 Download 失败: %1$s</string>
     <string name="install_log_rollback">[nksu] 写入失败，正在回滚原镜像</string>
