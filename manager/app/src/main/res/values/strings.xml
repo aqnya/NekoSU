@@ -255,6 +255,7 @@
     <string name="install_failed">Install failed</string>
     <string name="install_ko_missing">No kernel module (nksu.ko) packaged in assets/ko</string>
     <string name="install_done">Done</string>
+    <string name="reboot">Reboot</string>
     <string name="install_method_direct">Direct install (root)</string>
     <string name="install_method_direct_desc">Read this device\'s vendor_boot, patch it and flash it back automatically</string>
     <string name="install_direct_no_root">Root not available. Install Magisk/KernelSU first.</string>

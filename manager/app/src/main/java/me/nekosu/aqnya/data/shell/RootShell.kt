@@ -30,6 +30,12 @@ object RootShell {
             ?: Result(-1, "root shell unavailable")
     }
 
+    /**
+     * 以 root 重启设备。命令一般不会返回（设备随即重启），
+     * 因此调用方应在 IO 线程执行，避免阻塞 UI。
+     */
+    fun reboot(): Boolean = exec("svc power reboot").ok
+
     fun readFileBytes(path: String): ByteArray? =
         runCatching { Ncore.readFile(path) }.getOrNull()?.takeIf { it.isNotEmpty() }
 

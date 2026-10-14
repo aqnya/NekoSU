@@ -249,6 +249,7 @@
     <string name="install_failed">安装失败</string>
     <string name="install_ko_missing">assets/ko 中未打包内核模块 (nksu.ko)</string>
     <string name="install_done">完成</string>
+    <string name="reboot">重启</string>
     <string name="install_method_direct">直接安装（Root）</string>
     <string name="install_method_direct_desc">自动提取本机 vendor_boot，打补丁后刷回，无需手动 fastboot</string>
     <string name="install_direct_no_root">未检测到 Root，请先获取 root（Magisk/KernelSU 等）</string>

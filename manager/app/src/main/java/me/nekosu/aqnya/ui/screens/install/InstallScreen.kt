@@ -51,6 +51,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,8 +64,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.data.kernel.KernelInfo
+import me.nekosu.aqnya.data.shell.RootShell
 import me.nekosu.aqnya.ui.component.AppDialog
 import me.nekosu.aqnya.ui.component.AppRadioButton
 import me.nekosu.aqnya.ui.component.AppTopAppBar
@@ -92,6 +96,7 @@ fun InstallScreen(navController: NavController) {
 
     val state by installViewModel.uiState.collectAsState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scope = rememberCoroutineScope()
 
     val pickVendorBoot =
         rememberLauncherForActivityResult(
@@ -218,11 +223,22 @@ fun InstallScreen(navController: NavController) {
             }
         },
         floatingActionButton = {
-            if (state.done) {
-                LogDoneFab(
-                    label = stringResource(R.string.install_done),
-                    onClick = { navController.popBackStack() },
-                )
+            when {
+                // 直接安装 / 非活动分区安装成功后，用悬浮按钮一键重启；
+                // 选择镜像方式只是产出补丁镜像，不需要重启，保留「完成」。
+                state.done && state.success == true && state.method != InstallMethod.FILE -> {
+                    LogDoneFab(
+                        label = stringResource(R.string.reboot),
+                        onClick = { scope.launch(Dispatchers.IO) { RootShell.reboot() } },
+                    )
+                }
+
+                state.done -> {
+                    LogDoneFab(
+                        label = stringResource(R.string.install_done),
+                        onClick = { navController.popBackStack() },
+                    )
+                }
             }
         },
         contentWindowInsets =
