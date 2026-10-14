@@ -21,9 +21,8 @@ Android 内核级 Root 方案，由可加载内核模块（`nksu.ko`）和 Mater
 
 ## 环境要求
 
-- Android 12+（minSdk 31），仅支持 **arm64-v8a**。
-- Bootloader 已解锁（刷写 `vendor_boot`）。
-- 直接安装 / 非活动 slot 安装额外需要已有 Root 方案（Magisk/KernelSU）且为 GKI 设备。
+- Android 12+（minSdk 31），仅支持 **arm64-v8a**
+- 解锁Bootloader
 
 ## 安装
 

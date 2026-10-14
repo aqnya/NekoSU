@@ -21,9 +21,8 @@ KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
 ## Requirements
 
-- Android 12+ (minSdk 31), **arm64-v8a** only.
-- Unlocked bootloader (flashing `vendor_boot`).
-- Direct / inactive-slot install additionally needs an existing root solution (Magisk/KernelSU) and a GKI device.
+- Android 12+ (minSdk 31), **arm64-v8a** only
+- Unlocked bootloader
 
 ## Installation
 
