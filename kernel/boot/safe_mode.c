@@ -94,26 +94,19 @@ static long nksu_safe_prctl_sys(const struct pt_regs *regs)
 
 /* ---- input handler: count volume-up key-down events ---- */
 
-static void nksu_safe_events(struct input_handle *handle,
-			     const struct input_value *vals, unsigned int count)
+/*
+ * Use the per-event callback: its signature is unchanged from 5.10 through
+ * 6.12, while input_handler->events() gained a return value and dropped the
+ * const on its value array in newer kernels.
+ */
+static void nksu_safe_event(struct input_handle *handle, unsigned int type,
+			    unsigned int code, int value)
 {
-	unsigned int i;
-	bool pressed = false;
-
 	if (READ_ONCE(nksu_safe_disarmed))
 		return;
 
-	for (i = 0; i < count; i++) {
-		/*
-		 * value 1 is a key-down; 2 is autorepeat and 0 is key-up, so a
-		 * held key still counts once.
-		 */
-		if (vals[i].type == EV_KEY && vals[i].code == KEY_VOLUMEUP &&
-		    vals[i].value == 1)
-			pressed = true;
-	}
-
-	if (pressed) {
+	/* value 1 is a key-down; 2 is autorepeat and 0 is key-up. */
+	if (type == EV_KEY && code == KEY_VOLUMEUP && value == 1) {
 		atomic_inc(&nksu_safe_presses);
 		wake_up_interruptible(&nksu_safe_wq);
 	}
@@ -170,7 +163,7 @@ static const struct input_device_id nksu_safe_ids[] = {
 };
 
 static struct input_handler nksu_safe_handler = {
-	.events = nksu_safe_events,
+	.event = nksu_safe_event,
 	.connect = nksu_safe_connect,
 	.disconnect = nksu_safe_disconnect,
 	.name = "nksu-safe",
