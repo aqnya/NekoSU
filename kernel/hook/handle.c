@@ -34,11 +34,11 @@ long handle_prctl_hooks(struct pt_regs *regs)
     }
 
     switch (option) {
-    case 201:
+    case NKSU_PRCTL_GET_SHM_FD:
         fmac_anonfd_get();
         return 1;
 
-    case 203:
+    case NKSU_PRCTL_GET_CTL_FD:
         fmac_ctlfd_get();
         return 1;
 

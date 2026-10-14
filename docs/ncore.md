@@ -180,7 +180,7 @@ Returns an array of objects:
 
 ### Control fd {#control-fd}
 
-`ncore` obtains the control fd with `prctl(204)` (`NKSU_PRCTL_GET_DRIVER_FD`) and locates it by scanning `/proc/self/fd` for the `[fmac_ctl]` link (`find_driver_fd`). The ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)` with the flag set defined in the kernel's `manager/ioctl.h`. Only `IOC_SET_SEPOLICY` (12) is used by `sepolicy.cc`; the other flags are used by the manager's JNI layer.
+`ncore` obtains the control fd with `prctl(204)` (`NKSU_PRCTL_GET_DRIVER_FD`) and locates it by scanning `/proc/self/fd` for the `[fmac_ctl]` link (`find_driver_fd`). The ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)` with the flag set defined in the shared [`uapi/ioctl.h`](../uapi/ioctl.h). Only `IOC_SET_SEPOLICY` (12) is used by `sepolicy.cc`; the other flags are used by the manager's JNI layer.
 
 ### sepolicy.rule transport {#sepolicy-transport}
 
@@ -209,6 +209,6 @@ A `len == 0` argument is a wildcard. Supported commands include `allow`, `deny`,
 
 - Subcommands live in `cli/cli.cc`; keep the `argparse` registration and help text consistent.
 - Module behaviour is in `src/module/`; the public API is in `include/module/module.hpp`, internals in `src/module/module_internal.hpp`.
-- New kernel ABI usage must match `kernel/manager/ioctl.h` and the manager's `cpp/libjni/ioctl.h`.
+- New kernel ABI usage must match the shared `uapi/ioctl.h` / `uapi/selinux.h`.
 - Build with `bazel build //:ncore --config=android`; CI stages the result as `libncore.so`.
 - When you change userspace behaviour that pairs with a kernel change, bump the root `version` file.

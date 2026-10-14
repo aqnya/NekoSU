@@ -51,9 +51,11 @@ kernel/
     ├── rule.c/.h          规则引擎（allow/deny/xperm/type/attr/transitions）
     ├── rule_file.c        IOC_SET_SEPOLICY 批次解码器
     ├── hide.c/.h          selinuxfs f_op 修补 + setprocattr LSM hook
-    ├── engine.c/.h        内置策略引擎（≥ 6.6）
-    └── nksu_uapi_selinux.h sepolicy 批次线上格式（兼容 KernelSU）
+    └── engine.c/.h        内置策略引擎（≥ 6.6）
 ```
+
+内核/用户态的线上契约位于仓库根目录的 `uapi/`（`uapi/ioctl.h`、`uapi/selinux.h`），
+由内核、管理器与 `ncore` 共同包含。
 
 ## 初始化与生命周期 {#initialization}
 
@@ -121,7 +123,7 @@ typedef struct {
 
 ## 控制 fd 与 ioctl ABI {#control-fd--ioctl-abi}
 
-定义于 `manager/ioctl.h`，并在管理器的 `cpp/libjni/ioctl.h` 中逐字节镜像：
+统一定义于共享的 [`uapi/ioctl.h`](../uapi/ioctl.h)，内核经 `manager/ioctl.h`、管理器的 JNI 层与 `ncore` 均包含它：
 
 ```c
 #define IOC_MAGIC 'F'
@@ -208,7 +210,7 @@ struct privilege_desc {
 
 ### sepolicy 线上格式 {#sepolicy-wire-format}
 
-`nksu_uapi_selinux.h`（镜像 KernelSU `uapi/selinux.h`）：每条记录为 `<u32 cmd><u32 subcmd>`，后跟最多 5 个参数，参数编码为 `<u32 len><bytes><NUL>`，`len == 0` 表示通配/ALL。
+共享的 [`uapi/selinux.h`](../uapi/selinux.h)（线上格式与 KernelSU 一致）：每条记录为 `<u32 cmd><u32 subcmd>`，后跟最多 5 个参数，参数编码为 `<u32 len><bytes><NUL>`，`len == 0` 表示通配/ALL。
 
 | cmd | 值 |
 | --- | --- |
@@ -236,6 +238,6 @@ struct privilege_desc {
 ## 编码约定 {#coding-conventions}
 
 - 遵循 `.clang-format`（Linux 内核风格，120 列，4 空格缩进，函数大括号另起一行）。
-- 新增 ABI 必须镜像到 `manager/app/src/main/cpp/libjni/ioctl.h`（必要时还有 `userspace/ncore`），并用 `static_assert` 固定。
+- 新增 ABI 应放入共享的 `uapi/` 头文件（`uapi/ioctl.h`、`uapi/selinux.h`），并用 `static_assert` 固定。
 - 优先扩展 `NKSU_SYSCALL_HANDLERS(X)` 与组件注册表，而不是新增入口点。
 - 每当内核 ABI 或行为变化时，重新构建并递增根目录 `version` 文件。

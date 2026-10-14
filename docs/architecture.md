@@ -155,11 +155,11 @@ The single ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`:
 struct fmac_ioc { unsigned int flag; unsigned int size; unsigned char data[]; };
 ```
 
-Payload offsets and sizes are pinned with `static_assert` and mirrored byte-for-byte in `manager/app/src/main/cpp/libjni/ioctl.h`. See the [full flag table](kernel.md#control-fd--ioctl-abi).
+Payload offsets and sizes are pinned with `static_assert` and defined once in the shared [`uapi/ioctl.h`](../uapi/ioctl.h) header, which the kernel module, the manager's JNI layer and `ncore` all include. See the [full flag table](kernel.md#control-fd--ioctl-abi).
 
 ### SELinux rule batches {#selinux-batches}
 
-`ncore` parses `sepolicy.rule` files (KernelSU syntax, with `{ }` cross-product expansion), encodes them into the wire format defined in `kernel/selinux/nksu_uapi_selinux.h`, and sends them with `IOC_SET_SEPOLICY`. A batch is a sequence of `<cmd><subcmd>` records, each followed by up to five `<length><bytes><NUL>` arguments where a zero length means "wildcard". Batches are limited to 8 MiB.
+`ncore` parses `sepolicy.rule` files (KernelSU syntax, with `{ }` cross-product expansion), encodes them into the wire format defined in the shared [`uapi/selinux.h`](../uapi/selinux.h), and sends them with `IOC_SET_SEPOLICY`. A batch is a sequence of `<cmd><subcmd>` records, each followed by up to five `<length><bytes><NUL>` arguments where a zero length means "wildcard". Batches are limited to 8 MiB.
 
 ### Boot-image patching {#boot-image-patching}
 

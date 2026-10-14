@@ -9,6 +9,9 @@
 
 #include "module_internal.hpp"
 
+#include "uapi/ioctl.h"
+#include "uapi/selinux.h"
+
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -25,45 +28,37 @@
 namespace modules {
 namespace {
 
-// ---- nksu control interface (mirrors src/include/ioctl.h) -----------------
+// ---- shared kernel/userspace control interface (uapi/) --------------------
 
-constexpr int kNksuPrctlGetDriverFd = 204;
-constexpr int kNksuPrctlBootCompleted = 205;
-constexpr unsigned long kIocMagic = 'F';
-constexpr unsigned int kIocSetSepolicy = 12;
+// struct fmac_ioc, the IOC_* flag set, the prctl opcodes and the sepolicy
+// batch command ids all come from the shared UAPI headers, so ncore cannot
+// drift from the kernel module.
 
-struct fmac_ioc {
-  uint32_t flag;
-  uint32_t size;
-  uint8_t data[];
-};
+constexpr int kNksuPrctlGetDriverFd = NKSU_PRCTL_GET_DRIVER_FD;
+constexpr int kNksuPrctlBootCompleted = NKSU_PRCTL_BOOT_COMPLETED;
+constexpr uint32_t kCmdMany = 0; // not a batch head command
 
-#define NKSU_IOC_CMD _IOWR(kIocMagic, 0, struct fmac_ioc)
+constexpr uint32_t kCmdNormalPerm = NKSU_SEPOLICY_CMD_NORMAL_PERM;
+constexpr uint32_t kCmdXperm = NKSU_SEPOLICY_CMD_XPERM;
+constexpr uint32_t kCmdTypeState = NKSU_SEPOLICY_CMD_TYPE_STATE;
+constexpr uint32_t kCmdType = NKSU_SEPOLICY_CMD_TYPE;
+constexpr uint32_t kCmdTypeAttr = NKSU_SEPOLICY_CMD_TYPE_ATTR;
+constexpr uint32_t kCmdAttr = NKSU_SEPOLICY_CMD_ATTR;
+constexpr uint32_t kCmdTypeTransition = NKSU_SEPOLICY_CMD_TYPE_TRANSITION;
+constexpr uint32_t kCmdTypeChange = NKSU_SEPOLICY_CMD_TYPE_CHANGE;
+constexpr uint32_t kCmdGenfscon = NKSU_SEPOLICY_CMD_GENFSCON;
 
-// ---- batch command ids (mirror src/include/nksu_uapi_selinux.h) -----------
-
-constexpr uint32_t kCmdNormalPerm = 1;
-constexpr uint32_t kCmdXperm = 2;
-constexpr uint32_t kCmdTypeState = 3;
-constexpr uint32_t kCmdType = 4;
-constexpr uint32_t kCmdTypeAttr = 5;
-constexpr uint32_t kCmdAttr = 6;
-constexpr uint32_t kCmdTypeTransition = 7;
-constexpr uint32_t kCmdTypeChange = 8;
-constexpr uint32_t kCmdGenfscon = 9;
-constexpr uint32_t kCmdMany = 0;
-
-constexpr uint32_t kSubAllow = 1;
-constexpr uint32_t kSubDeny = 2;
-constexpr uint32_t kSubAuditallow = 3;
-constexpr uint32_t kSubDontaudit = 4;
-constexpr uint32_t kSubXAllow = 1;
-constexpr uint32_t kSubXAuditallow = 2;
-constexpr uint32_t kSubXDontaudit = 3;
-constexpr uint32_t kSubPermissive = 1;
-constexpr uint32_t kSubEnforce = 2;
-constexpr uint32_t kSubChangeChange = 1;
-constexpr uint32_t kSubChangeMember = 2;
+constexpr uint32_t kSubAllow = NKSU_SEPOLICY_SUBCMD_NORMAL_PERM_ALLOW;
+constexpr uint32_t kSubDeny = NKSU_SEPOLICY_SUBCMD_NORMAL_PERM_DENY;
+constexpr uint32_t kSubAuditallow = NKSU_SEPOLICY_SUBCMD_NORMAL_PERM_AUDITALLOW;
+constexpr uint32_t kSubDontaudit = NKSU_SEPOLICY_SUBCMD_NORMAL_PERM_DONTAUDIT;
+constexpr uint32_t kSubXAllow = NKSU_SEPOLICY_SUBCMD_XPERM_ALLOW;
+constexpr uint32_t kSubXAuditallow = NKSU_SEPOLICY_SUBCMD_XPERM_AUDITALLOW;
+constexpr uint32_t kSubXDontaudit = NKSU_SEPOLICY_SUBCMD_XPERM_DONTAUDIT;
+constexpr uint32_t kSubPermissive = NKSU_SEPOLICY_SUBCMD_TYPE_STATE_PERMISSIVE;
+constexpr uint32_t kSubEnforce = NKSU_SEPOLICY_SUBCMD_TYPE_STATE_ENFORCE;
+constexpr uint32_t kSubChangeChange = NKSU_SEPOLICY_SUBCMD_TYPE_CHANGE_CHANGE;
+constexpr uint32_t kSubChangeMember = NKSU_SEPOLICY_SUBCMD_TYPE_CHANGE_MEMBER;
 
 struct Atomic {
   uint32_t cmd;
@@ -357,12 +352,12 @@ bool send_batch(const std::vector<uint8_t> &payload, int *applied) {
 
   std::vector<uint8_t> buf(sizeof(struct fmac_ioc) + payload.size());
   auto *ioc = reinterpret_cast<struct fmac_ioc *>(buf.data());
-  ioc->flag = kIocSetSepolicy;
+  ioc->flag = IOC_SET_SEPOLICY;
   ioc->size = static_cast<uint32_t>(payload.size());
   if (!payload.empty())
     std::memcpy(ioc->data, payload.data(), payload.size());
 
-  const int ret = ::ioctl(fd, NKSU_IOC_CMD, buf.data());
+  const int ret = ::ioctl(fd, IOC_CMD, buf.data());
   if (ret < 0) {
     std::cerr << "[module] IOC_SET_SEPOLICY failed: " << std::strerror(errno)
               << std::endl;

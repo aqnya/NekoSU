@@ -44,8 +44,8 @@ git submodule update --init --recursive
 ### 内核模块
 
 - 遵循 `.clang-format`（Linux 内核风格，120 列，4 空格缩进）。
-- 新增 ABI 必须镜像到管理器的 `cpp/libjni/ioctl.h`，并用 `static_assert` 固定。见
-  [内核模块开发者指南](docs/kernel.zh.md)。
+- 新增 ABI 应放入共享的 `uapi/` 头文件（`uapi/ioctl.h`、`uapi/selinux.h`），并用
+  `static_assert` 固定。见 [内核模块开发者指南](docs/kernel.zh.md)。
 - 本地构建：
   ```sh
   make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
@@ -97,7 +97,7 @@ git submodule update --init --recursive
 
 ## 6. 提交与 Pull Request
 
-- 保持提交聚焦；对内核 ABI 的改动与 `ioctl.h` 中的镜像应放在同一个提交里。
+- 保持提交聚焦；对内核 ABI 的改动与共享 `uapi/` 头文件应放在同一个提交里。
 - 提交信息中说明**为什么**，而不只是做了什么。
 - 向 `main` 发起 Pull Request。PR 必须通过 `Android CI`（它依赖 LKM 构建成功）。
 - 若改动影响 ABI 或跨层协议，请在 PR 描述中明确说明，以便评审版本递增。

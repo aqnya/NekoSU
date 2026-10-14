@@ -21,7 +21,7 @@
 #include <linux/limits.h>
 
 #include <fmac.h>
-#include "selinux/nksu_uapi_selinux.h"
+#include <uapi/selinux.h>
 #include "ss/avtab.h"
 
 struct nksu_sepol_cmd {

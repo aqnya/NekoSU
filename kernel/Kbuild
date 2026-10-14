@@ -59,6 +59,8 @@ ccflags-y += -I$(srctree)/security/selinux/include
 ccflags-y += -I$(IDIR)
 # Source root: headers are grouped per subsystem, e.g. "hook/handle.h".
 ccflags-y += -I$(IDIR)/..
+# Repository root: the shared kernel/userspace UAPI headers under uapi/.
+ccflags-y += -I$(IDIR)/../..
 ccflags-y += -I$(objtree)/security/selinux
 ccflags-y += -include $(srctree)/include/uapi/asm-generic/errno.h
 

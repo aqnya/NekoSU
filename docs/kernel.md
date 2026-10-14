@@ -51,9 +51,11 @@ kernel/
     ├── rule.c/.h          rule engine (allow/deny/xperm/type/attr/transitions)
     ├── rule_file.c        decoder for IOC_SET_SEPOLICY batches
     ├── hide.c/.h          selinuxfs f_op patching + setprocattr LSM hook
-    ├── engine.c/.h        vendored policy engine (≥ 6.6)
-    └── nksu_uapi_selinux.h sepolicy batch wire format (KernelSU-compatible)
+    └── engine.c/.h        vendored policy engine (≥ 6.6)
 ```
+
+The kernel/userspace wire contract lives in the repository-root `uapi/` directory
+(`uapi/ioctl.h`, `uapi/selinux.h`) and is included by the kernel, the manager and `ncore`.
 
 ## Initialization and lifecycle {#initialization}
 
@@ -121,7 +123,7 @@ Text patching (`patch.c`) uses `stop_machine()` + `set_fixmap_offset(FIX_TEXT_PO
 
 ## Control fd and ioctl ABI {#control-fd--ioctl-abi}
 
-Defined in `manager/ioctl.h` and mirrored byte-for-byte in the manager's `cpp/libjni/ioctl.h`:
+Defined once in the shared [`uapi/ioctl.h`](../uapi/ioctl.h), included by the kernel via `manager/ioctl.h`, by the manager's JNI layer and by `ncore`:
 
 ```c
 #define IOC_MAGIC 'F'
@@ -208,7 +210,7 @@ struct privilege_desc {
 
 ### sepolicy wire format {#sepolicy-wire-format}
 
-`nksu_uapi_selinux.h` (mirrors KernelSU `uapi/selinux.h`): each record is `<u32 cmd><u32 subcmd>` followed by up to 5 arguments encoded as `<u32 len><bytes><NUL>`, where `len == 0` means wildcard/ALL.
+The shared [`uapi/selinux.h`](../uapi/selinux.h) (which mirrors KernelSU's wire format): each record is `<u32 cmd><u32 subcmd>` followed by up to 5 arguments encoded as `<u32 len><bytes><NUL>`, where `len == 0` means wildcard/ALL.
 
 | cmd | Value |
 | --- | --- |
@@ -236,6 +238,6 @@ The module never links unexported GKI symbols directly. `symbol.c` implements a 
 ## Coding conventions {#coding-conventions}
 
 - Follow `.clang-format` (Linux kernel style, 120 columns, 4-space indent, function braces on a new line).
-- New ABI additions must be mirrored in `manager/app/src/main/cpp/libjni/ioctl.h` (and, where applicable, `userspace/ncore`) and pinned with `static_assert`.
+- New ABI additions belong in the shared `uapi/` headers (`uapi/ioctl.h`, `uapi/selinux.h`) and must be pinned with `static_assert`.
 - Prefer extending `NKSU_SYSCALL_HANDLERS(X)` and the component registry rather than adding new entry points.
 - Rebuild and bump the root `version` file whenever the kernel ABI or behaviour changes.

@@ -16,6 +16,16 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# Shared kernel/userspace UAPI headers.  include/uapi is a symlink into the
+# repository-root uapi/ directory (the single source of truth), included by
+# the kernel module and the manager app's JNI layer as well.
+cc_library(
+    name = "uapi",
+    hdrs = glob(["include/uapi/*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
 cc_library(
     name = "boot",
     srcs = [
@@ -62,6 +72,7 @@ cc_library(
     ],
     includes = ["include"],
     deps = [
+        ":uapi",
         "//third_party:xz",
         "//third_party:zlib",
     ],

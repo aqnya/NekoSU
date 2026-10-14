@@ -17,10 +17,14 @@
 #include <vector>
 #include <sys/system_properties.h>
 
-#include "ioctl.h"
+#include <uapi/ioctl.h>
+
 #include "log.h"
 
-enum Opcode { OP_AUTHENTICATE = 201, OP_IOCTL = 203 };
+enum Opcode {
+  OP_AUTHENTICATE = NKSU_PRCTL_GET_SHM_FD,
+  OP_IOCTL = NKSU_PRCTL_GET_CTL_FD,
+};
 
 class JniUtfString {
 public:

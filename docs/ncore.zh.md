@@ -180,7 +180,7 @@ KSU_MODULE=<id>
 
 ### 控制 fd {#control-fd}
 
-`ncore` 通过 `prctl(204)`（`NKSU_PRCTL_GET_DRIVER_FD`）获取控制 fd，并通过扫描 `/proc/self/fd` 查找 `[fmac_ctl]` 链接来定位它（`find_driver_fd`）。ioctl 为 `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`，标志集定义于内核的 `manager/ioctl.h`。`sepolicy.cc` 只使用 `IOC_SET_SEPOLICY`（12）；其它标志由管理器的 JNI 层使用。
+`ncore` 通过 `prctl(204)`（`NKSU_PRCTL_GET_DRIVER_FD`）获取控制 fd，并通过扫描 `/proc/self/fd` 查找 `[fmac_ctl]` 链接来定位它（`find_driver_fd`）。ioctl 为 `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`，标志集定义于共享的 [`uapi/ioctl.h`](../uapi/ioctl.h)。`sepolicy.cc` 只使用 `IOC_SET_SEPOLICY`（12）；其它标志由管理器的 JNI 层使用。
 
 ### sepolicy.rule 传输 {#sepolicy-transport}
 
@@ -209,6 +209,6 @@ KSU_MODULE=<id>
 
 - 子命令位于 `cli/cli.cc`；保持 `argparse` 注册与帮助文本一致。
 - 模块行为位于 `src/module/`；公共 API 在 `include/module/module.hpp`，内部在 `src/module/module_internal.hpp`。
-- 新增内核 ABI 使用必须与 `kernel/manager/ioctl.h` 及管理器的 `cpp/libjni/ioctl.h` 保持一致。
+- 新增内核 ABI 使用必须与共享的 `uapi/ioctl.h` / `uapi/selinux.h` 保持一致。
 - 用 `bazel build //:ncore --config=android` 构建；CI 会把结果作为 `libncore.so` 暂存。
 - 当你修改的用户态行为与内核改动配套时，递增根目录 `version` 文件。

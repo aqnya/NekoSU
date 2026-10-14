@@ -155,11 +155,11 @@ KernelSU 模块与 WebUI 无需改动即可工作，因为兼容性契约被保�
 struct fmac_ioc { unsigned int flag; unsigned int size; unsigned char data[]; };
 ```
 
-载荷偏移与大小由 `static_assert` 固定，并在 `manager/app/src/main/cpp/libjni/ioctl.h` 中逐字节镜像。完整标志表见 [控制 fd 与 ioctl ABI](kernel.zh.md#control-fd--ioctl-abi)。
+载荷偏移与大小由 `static_assert` 固定，并统一定义在共享的 [`uapi/ioctl.h`](../uapi/ioctl.h) 中，内核模块、管理器的 JNI 层与 `ncore` 都包含它。完整标志表见 [控制 fd 与 ioctl ABI](kernel.zh.md#control-fd--ioctl-abi)。
 
 ### SELinux 规则批次 {#selinux-batches}
 
-`ncore` 解析 `sepolicy.rule` 文件（KernelSU 语法，支持 `{ }` 笛卡尔展开），编码为 `kernel/selinux/nksu_uapi_selinux.h` 定义的线上格式，再用 `IOC_SET_SEPOLICY` 发送。一个批次是一串 `<cmd><subcmd>` 记录，每条后跟最多五个 `<长度><字节><NUL>` 参数，长度为零表示“通配”。批次上限 8 MiB。
+`ncore` 解析 `sepolicy.rule` 文件（KernelSU 语法，支持 `{ }` 笛卡尔展开），编码为共享的 [`uapi/selinux.h`](../uapi/selinux.h) 定义的线上格式，再用 `IOC_SET_SEPOLICY` 发送。一个批次是一串 `<cmd><subcmd>` 记录，每条后跟最多五个 `<长度><字节><NUL>` 参数，长度为零表示“通配”。批次上限 8 MiB。
 
 ### boot 镜像修补 {#boot-image-patching}
 

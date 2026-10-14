@@ -46,8 +46,8 @@ versions of Bazel, the NDK, JDK and Gradle used.
 ### Kernel module
 
 - Follow `.clang-format` (Linux kernel style, 120 columns, 4-space indent).
-- New ABI additions must be mirrored in the manager's `cpp/libjni/ioctl.h` and pinned with
-  `static_assert`. See the [Kernel module developer guide](docs/kernel.md).
+- New ABI additions belong in the shared `uapi/` headers (`uapi/ioctl.h`, `uapi/selinux.h`) and
+  must be pinned with `static_assert`. See the [Kernel module developer guide](docs/kernel.md).
 - Build locally with:
   ```sh
   make -C kernel CONFIG_NKSU=m CONFIG_NKSU_DEBUG=y
@@ -100,7 +100,7 @@ test suite; `./gradlew assembleRelease` and the LKM build are the primary checks
 
 ## 6. Commits and pull requests
 
-- Keep commits focused; a change to the kernel ABI and its mirror in `ioctl.h` belongs in one
+- Keep commits focused; a change to the kernel ABI and the shared `uapi/` header belongs in one
   commit.
 - Describe **why** in the commit message, not just what.
 - Open a pull request against `main`. The PR must pass `Android CI` (which depends on a
