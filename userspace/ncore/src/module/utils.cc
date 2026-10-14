@@ -175,8 +175,12 @@ std::string which(const std::string &name) {
 }
 
 bool is_safe_mode() {
+  // /data/adb/nksu/safe_module is created by the kernel when the user presses
+  // volume-up three times during boot (see kernel/boot/safe_mode.c). The path
+  // is fixed there, so do not route it through the configurable working_dir.
   return getprop("persist.sys.safemode") == "1" ||
-         getprop("ro.sys.safemode") == "1";
+         getprop("ro.sys.safemode") == "1" ||
+         is_file("/data/adb/nksu/safe_module");
 }
 
 bool has_magisk() { return !which("magisk").empty(); }

@@ -117,6 +117,11 @@ int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous,
     return 0;
 }
 
+int syscall_slot_unhook(int nr)
+{
+    return restore_slot((unsigned long)&syscall_table[nr]);
+}
+
 int syscall_table_resolve(void)
 {
     /*

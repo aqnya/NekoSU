@@ -21,4 +21,9 @@ int syscall_table_resolve(void);
 int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous,
                       const char *tag);
 
+/* Put a single previously hooked slot back and drop its record.  Lets a
+ * long-lived hook (see boot/safe_mode.c) own its own lifetime instead of
+ * relying on the group restore. */
+int syscall_slot_unhook(int nr);
+
 void syscall_slots_restore_all(void);

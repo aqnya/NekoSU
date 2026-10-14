@@ -20,4 +20,8 @@ bool is_ncore_ready(void);
  * failed verification (or a reinstall that changes the UID). */
 bool is_manager_uid(uid_t uid);
 
+/* mkdir -p for kernel-internal paths.  Runs with the caller's creds, so callers
+ * that touch /data must borrow the nksu domain first. */
+int nksu_kpath_mkdir_p(const char *dir);
+
 #endif /* NKSU_MANAGER_H */

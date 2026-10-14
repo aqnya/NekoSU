@@ -1,4 +1,6 @@
 #include "klog.h"
+#include "manager/manager.h"
+#include "boot/safe_mode.h"
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
@@ -725,6 +727,11 @@ static int kdir_mkdir_p(const char *dir)
     return err;
 }
 
+int nksu_kpath_mkdir_p(const char *dir)
+{
+    return kdir_mkdir_p(dir);
+}
+
 static int kfile_copy(const char *src, const char *dst)
 {
     struct file *in, *out;
@@ -1057,6 +1064,16 @@ static int appscan_retry_thread(void *data)
         } else if (tries > 0 && --tries == 0) {
             pr_info("[manager] manager not found yet, waiting for package changes\n");
         }
+
+        /*
+         * No ncore means no module can run this boot, so volume-key safe mode
+         * has nothing to protect.  tries == 0 is the settled state: a
+         * successful scan (ncore_ready was just set) or retry exhaustion.
+         * nksu_safe_mode_disable() is idempotent and safe before the safe
+         * mode component has initialized.
+         */
+        if (tries == 0 && !READ_ONCE(ncore_ready))
+            nksu_safe_mode_disable();
 
         if (tries > 0) {
             /*

@@ -28,6 +28,7 @@ namespace {
 // ---- nksu control interface (mirrors src/include/ioctl.h) -----------------
 
 constexpr int kNksuPrctlGetDriverFd = 204;
+constexpr int kNksuPrctlBootCompleted = 205;
 constexpr unsigned long kIocMagic = 'F';
 constexpr unsigned int kIocSetSepolicy = 12;
 
@@ -373,6 +374,12 @@ bool send_batch(const std::vector<uint8_t> &payload, int *applied) {
 }
 
 } // namespace
+
+// Tell the kernel the boot is complete so it stops watching the volume-up key
+// for safe mode (see kernel/boot/safe_mode.c).  Runs as root; no fd needed.
+void notify_boot_completed() {
+  ::prctl(kNksuPrctlBootCompleted, 0, 0, 0, 0);
+}
 
 void load_sepolicy_rule() {
   foreach_module(ModuleType::Active, [](const std::string &module) {

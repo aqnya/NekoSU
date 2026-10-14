@@ -75,9 +75,10 @@ struct fmac_ioc {
 /*
  * prctl opcodes.  201 and 203 are reserved for the manager (is_manager-gated);
  * 204 lets the boot-time daemon obtain the control fd (root-gated) so it can
- * send IOC_SET_SEPOLICY.
+ * send IOC_SET_SEPOLICY.  205 lets it report boot completion (root-gated).
  */
 #define NKSU_PRCTL_GET_DRIVER_FD 204
+#define NKSU_PRCTL_BOOT_COMPLETED 205
 
 #define FMAC_OFF_UID     0
 #define FMAC_OFF_CAPS    4

@@ -190,4 +190,9 @@ bool regenerate_preinit_rc();
 // files are skipped.
 void load_sepolicy_rule();
 
+// Report boot completion to the kernel (prctl NKSU_PRCTL_BOOT_COMPLETED) so
+// the safe-mode volume-key watcher stops counting.  Called from
+// on_boot_completed().
+void notify_boot_completed();
+
 } // namespace modules

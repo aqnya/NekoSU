@@ -696,6 +696,7 @@ int on_services() {
 int on_boot_completed() {
   utils::klog("boot-completed stage start");
   std::cout << "[module] on_boot_completed triggered" << std::endl;
+  notify_boot_completed();
   ensure_ksu_dir_alias();
   run_stage_internal("boot-completed", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());

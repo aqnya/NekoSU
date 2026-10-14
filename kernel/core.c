@@ -14,6 +14,7 @@
 #include "symbol/symbol_compat.h"
 #include "nksu.h"
 #include "boot/init.h"
+#include "boot/safe_mode.h"
 #include "privilege/profile_store.h"
 #include "selinux/hide.h"
 
@@ -97,6 +98,17 @@ static const module_component_t feature_components[] = {
         .exit = NULL,
     },
 #endif
+    {
+        /*
+         * Last: watch the volume-up key until ncore reports boot completion
+         * (prctl 205).  It installs its own prctl syscall-slot hook, so it
+         * must run after the syscall dispatcher to wrap its slot, and it must
+         * be torn down before the dispatcher's group restore.
+         */
+        .name = "safe mode",
+        .init = nksu_safe_mode_init,
+        .exit = nksu_safe_mode_exit,
+    },
 };
 
 static int nekosu_init_component(const module_component_t *comp, int index)
