@@ -41,4 +41,4 @@ See [How to build](docs/building.md).
 
 ## License
 
-[GPL-3.0](LICENSE) — © 2025 Aqnya
+[GPL-3.0](LICENSE)

@@ -40,4 +40,4 @@ Android 内核级 Root 方案，由内核模块和 Material 3 管理器 App 组�
 
 ## 许可证
 
-[GPL-3.0](LICENSE) — © 2025 Aqnya
+[GPL-3.0](LICENSE)
