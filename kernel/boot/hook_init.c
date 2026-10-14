@@ -43,6 +43,13 @@ int boot_stage = INIT_FIRST_STAGE;
  *                                   handled (see stop_init_thread() for the
  *                                   early-exit path at module unload).
  *
+ * Zygote ordering: Android init triggers `post-fs-data` *before*
+ * `zygote-start` (both from `late-init` in the AOSP init.rc), and this device
+ * follows that order, so /data is always mounted by the time zygote runs.
+ * That is why the feature components (which need /data) are brought up on
+ * zygote detection here, and not at second_stage, which runs before vold
+ * mounts and decrypts /data.
+ *
  * Late load just initializes everything at once (see core.c).
  */
 

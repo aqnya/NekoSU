@@ -38,8 +38,11 @@ typedef struct {
 
 /*
  * SELinux needs the policy, which is loaded during the "selinux_setup"
- * stage; everything else needs /data and the zygote.  Late load runs both
- * groups back to back, a first-stage (vendor_boot) load stages them.
+ * stage; everything else needs /data, which is mounted by the time zygote
+ * runs (Android init triggers `post-fs-data` before `zygote-start`, matching
+ * AOSP).  The feature group is therefore gated on zygote detection.  Late
+ * load runs both groups back to back, a first-stage (vendor_boot) load
+ * stages them.
  */
 static const module_component_t selinux_components[] = {
     {
