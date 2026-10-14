@@ -3,10 +3,14 @@
  * Volume-key safe mode.
  *
  * The module watches KEY_VOLUMEUP from early boot.  Three key-down events set
- * a "safe mode requested" flag; the flag is exposed through
- * /proc/nksu/safemode.  The kernel does not write any file and does not
- * reboot -- ncore reads the node at each boot stage, and when it reads "1" it
- * creates /data/adb/nksu/safe_module and skips module loading.
+ * a "safe mode requested" flag.  The kernel does not write any file and does
+ * not reboot: the flag is reported through the control ioctl
+ * (IOC_GET_SAFEMODE) and ncore acts on it -- creating
+ * /data/adb/nksu/safe_module and skipping module loading -- then disarms the
+ * watcher with IOC_DISARM_SAFEMODE.
+ *
+ * An ioctl is used instead of a procfs node because the control fd is an
+ * anonymous inode, so SELinux path checks never get in the way.
  *
  * Key detection uses the input subsystem: a small input_handler matching
  * EV_KEY/KEY_VOLUMEUP devices, opened on connect.  The event callback runs in
@@ -20,9 +24,7 @@
 #include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/proc_fs.h>
 #include <linux/sched.h>
-#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 
@@ -30,55 +32,18 @@
 #include "boot/safe_mode.h"
 
 #define NKSU_SAFE_PRESSES   3
-#define NKSU_SAFE_PROC_DIR  "nksu"
-#define NKSU_SAFE_PROC_FILE "safemode"
 
 static atomic_t nksu_safe_presses = ATOMIC_INIT(0);
 /* Latched once the press threshold is reached. */
 static bool nksu_safe_requested __read_mostly;
-/* Set once the watcher is told to stop (manager found no ncore). */
+/* Set once the watcher is told to stop (ncore's last stage, or no ncore). */
 static bool nksu_safe_disarmed __read_mostly;
 static bool nksu_safe_input_registered;
-
-static struct proc_dir_entry *nksu_safe_proc_dir;
-static struct proc_dir_entry *nksu_safe_proc_file;
 
 bool nksu_safe_mode_requested(void)
 {
 	return READ_ONCE(nksu_safe_requested);
 }
-
-/* ---- /proc/nksu/safemode ---- */
-
-static int nksu_safe_proc_show(struct seq_file *m, void *v)
-{
-	seq_printf(m, "%d\n", READ_ONCE(nksu_safe_requested) ? 1 : 0);
-	return 0;
-}
-
-/*
- * Writing the node means boot is done: ncore uses it at its last stage to stop
- * the volume-key watcher rather than leaving it armed until module unload.
- */
-static ssize_t nksu_safe_proc_write(struct file *file, const char __user *ubuf,
-				    size_t count, loff_t *ppos)
-{
-	nksu_safe_mode_disable();
-	return count;
-}
-
-static int nksu_safe_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, nksu_safe_proc_show, NULL);
-}
-
-static const struct proc_ops nksu_safe_proc_ops = {
-	.proc_open    = nksu_safe_proc_open,
-	.proc_read    = seq_read,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
-	.proc_write   = nksu_safe_proc_write,
-};
 
 /* ---- input handler: count volume-up key-down events ---- */
 
@@ -198,30 +163,12 @@ int nksu_safe_mode_init(void)
 	}
 	nksu_safe_input_registered = true;
 
-	nksu_safe_proc_dir = proc_mkdir(NKSU_SAFE_PROC_DIR, NULL);
-	if (nksu_safe_proc_dir)
-		nksu_safe_proc_file =
-			proc_create(NKSU_SAFE_PROC_FILE, 0644, nksu_safe_proc_dir,
-				    &nksu_safe_proc_ops);
-	if (!nksu_safe_proc_file)
-		pr_warn("[safe_mode] cannot create /proc/%s/%s\n",
-			NKSU_SAFE_PROC_DIR, NKSU_SAFE_PROC_FILE);
-
 	pr_info("[safe_mode] watching volume-up keys for safe mode\n");
 	return 0;
 }
 
 void nksu_safe_mode_exit(void)
 {
-	if (nksu_safe_proc_file) {
-		proc_remove(nksu_safe_proc_file);
-		nksu_safe_proc_file = NULL;
-	}
-	if (nksu_safe_proc_dir) {
-		proc_remove(nksu_safe_proc_dir);
-		nksu_safe_proc_dir = NULL;
-	}
-
 	if (nksu_safe_input_registered) {
 		input_unregister_handler(&nksu_safe_handler);
 		nksu_safe_input_registered = false;

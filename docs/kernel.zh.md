@@ -19,7 +19,7 @@ kernel/
 ├── boot/                  运行时引导（不是 boot 镜像修补）
 │   ├── hook_init.c/.h     一阶段观察器：跟随 init、分阶段初始化
 │   ├── init_rc.c/.h       init.rc 读/fstat 代理 → exec ncore
-│   └── safe_mode.c/.h     音量键安全模式 → /proc/nksu/safemode 标志
+│   └── safe_mode.c/.h     音量键安全模式 → 经 ioctl 的安全模式标志
 ├── hook/
 │   ├── handle.c/.h        稳态系统调用处理函数
 │   ├── syscall.c/.h       sys_call_table 槽位修补/恢复
@@ -81,7 +81,7 @@ typedef struct {
 
 - `early_components[]` —— 安全模式（`nksu_safe_mode_init` / `nksu_safe_mode_exit`）；在 `second_stage` 武装，早于 `/data` 与 zygote。
 - `selinux_components[]` —— `init_selinux_hook` / `selinux_exit`。
-- `feature_components[]`，按顺序：匿名 FD、uid 档案、档案存储、tracepoint hook（仅在 `!CONFIG_NKSU_SYSCALL` 时）、管理器扫描、SELinux 隐藏、系统调用分发 + 系统调用 hook（`CONFIG_NKSU_SYSCALL`）。
+- `feature_components[]`，按顺序：匿名 FD、uid 档案、档案存储、tracepoint hook（仅在 `!CONFIG_NKSU_SYSCALL` 时）、管理器扫描、SELinux 隐藏、系统调用分发 + 系统调用 hook（`CONFIG_NKSU_SYSCALL`），最后是 daemon fd（在临时观察器拆除后继续让 root 通过 `prctl(204)` 拿到控制 fd）。
 
 `core.c` 导出 `nksu_init_early_components()`、`nksu_exit_early_components()`、`nksu_init_selinux_components()`、`nksu_exit_selinux_components()`、`nksu_init_feature_components()`、`nksu_exit_feature_components()`（供分阶段引导观察器使用）与 `nksu_version()`。
 
@@ -93,7 +93,8 @@ typedef struct {
 
 - `hook_init.c` —— 在一阶段加载时，为 `__NR_execve`、`__NR_execveat`、`__NR_prctl` 安装临时系统调用观察器，跟随 `init` 经历 `selinux_setup` → `second_stage`，并检测 zygote（`-Xzygote`）。kthread `"nksu-init"` 在 `INIT_SECOND_STAGE` 初始化早期与 SELinux 组件，看到 zygote 后初始化特性组件，然后拆除观察器。它还允许 root 通过 `NKSU_PRCTL_GET_DRIVER_FD`（204）获取控制 fd。
 - `init_rc.c` —— 通过代理 `__NR_read` 与 `__NR_fstat`，把 `nksu_rc[]` 追加到 `init` 可见的 `/system/etc/init/hw/init.rc`（以及旧的 `/system/etc/init.rc`）。追加的行 `exec u:r:nksu:s0 root -- /data/adb/nksu/ncore {post-fs-data|services|boot-completed}` 在对应的 `on` 触发器执行。`NKSU_NCORE_PATH = "/data/adb/nksu/ncore"`。
-- `safe_mode.c` —— 针对 `EV_KEY/KEY_VOLUMEUP` 的输入处理；按 3 次会锁存一个“安全模式请求”标志，通过 `/proc/nksu/safemode` 暴露。它不写标记也不重启：ncore 在每个阶段读取该节点并自行创建 `/data/adb/nksu/safe_module`（见 userspace/ncore）。写入该节点会解除观察器（ncore 在最后一个阶段执行）。
+- `safe_mode.c` —— 针对 `EV_KEY/KEY_VOLUMEUP` 的输入处理；按 3 次会锁存一个“安全模式请求”标志，由控制 ioctl（`IOC_GET_SAFEMODE`）上报。它不写标记也不重启：ncore 在每个阶段查询该标志并自行创建 `/data/adb/nksu/safe_module`（见 userspace/ncore），最后在末阶段用 `IOC_DISARM_SAFEMODE` 停止观察器。用 ioctl 而非 proc 节点，是因为控制 fd 是匿名 inode，SELinux 路径检查不会介入。
+- `manager/daemon.c` —— 在 feature 阶段安装一个稳态 `__NR_prctl` slot hook，把控制 fd 授予 root，使 ncore 在每个阶段（不止 zygote 前）都能访问 `IOC_*`。
 
 ## hook —— 拦截 {#hook}
 

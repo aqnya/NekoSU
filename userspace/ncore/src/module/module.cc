@@ -621,14 +621,11 @@ static void ensure_ksu_dir_alias() {
   std::cout << "[module] linked " << ksu << " -> " << nksu << std::endl;
 }
 
-// The kernel's volume-up watcher only exposes state at /proc/nksu/safemode
-// (it no longer writes the marker or reboots).  Mirror that decision to disk
-// so the rest of this boot -- and later boots -- skips module loading.
+// The kernel's volume-up watcher only reports state over the control ioctl (it
+// no longer writes the marker or reboots).  Mirror that decision to disk so
+// the rest of this boot -- and later boots -- skips module loading.
 void sync_safe_mode_from_kernel() {
-  std::string value;
-  if (!utils::read_file("/proc/nksu/safemode", value))
-    return;
-  if (value.empty() || value[0] != '1')
+  if (!kernel_safe_mode_requested())
     return;
 
   if (!utils::exists("/data/adb/nksu/safe_module")) {
@@ -639,11 +636,8 @@ void sync_safe_mode_from_kernel() {
   }
 }
 
-// Last stage: any write to the node disarms the kernel's volume-up watcher.
-void disarm_safe_mode_watcher() {
-  if (!utils::write_file("/proc/nksu/safemode", "0\n", false))
-    std::cerr << "[module] cannot disarm safe-mode watcher" << std::endl;
-}
+// Last stage: tell the kernel to stop its volume-up watcher.
+void disarm_safe_mode_watcher() { kernel_disarm_safe_mode(); }
 
 int on_post_fs_data() {
   utils::umask0();

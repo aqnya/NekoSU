@@ -13,6 +13,7 @@
 #include "manager/feature.h"
 #include "manager/ioctl.h"
 #include "nksu.h"
+#include "boot/safe_mode.h"
 #include "privilege/profile_store.h"
 
 static long ioc_get_shm(void)
@@ -271,6 +272,21 @@ static long ioc_feature_set(void __user *data, unsigned int size)
     return nksu_feature_set(id, value);
 }
 
+/*
+ * Volume-key safe mode (kernel/boot/safe_mode.c).  The flag is reported as the
+ * ioctl return value (1/0); a disarm is a side effect of any call.
+ */
+static long ioc_get_safemode(void)
+{
+    return nksu_safe_mode_requested() ? 1 : 0;
+}
+
+static long ioc_disarm_safemode(void)
+{
+    nksu_safe_mode_disable();
+    return 0;
+}
+
 static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct fmac_ioc ioc;
@@ -319,6 +335,10 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return ioc_feature_get((void __user *)data, ioc.size);
     case IOC_FEATURE_SET:
         return ioc_feature_set((void __user *)data, ioc.size);
+    case IOC_GET_SAFEMODE:
+        return ioc_get_safemode();
+    case IOC_DISARM_SAFEMODE:
+        return ioc_disarm_safemode();
     default:
         return -ENOTTY;
     }

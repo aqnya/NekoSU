@@ -37,4 +37,11 @@ static inline u64 cap_to_u64(kernel_cap_t cap)
 
 int fmac_ctlfd_get(void);
 
+/*
+ * Steady-state grant of the control fd to root (see manager/daemon.c).  Lets
+ * ncore obtain the fd at every stage, not just before zygote.
+ */
+int nksu_daemon_fd_init(void);
+void nksu_daemon_fd_exit(void);
+
 #endif /* IOCTL_H */

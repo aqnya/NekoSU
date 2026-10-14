@@ -74,6 +74,13 @@ enum fmac_flag {
     IOC_FEATURE_LIST = 15, /* data[<= NKSU_FEATURE_TEXT_MAX] out = feature table */
     IOC_FEATURE_GET = 16,  /* data[12] = uint32_t id (in) | uint64_t value (out) */
     IOC_FEATURE_SET = 17,  /* data[12] = uint32_t id | uint64_t value */
+    /*
+     * Volume-key safe mode (see kernel/boot/safe_mode.c).  GET reports whether
+     * the watcher latched a request (return 1/0, data empty); DISARM stops the
+     * watcher (data empty, return 0).  Root callers only.
+     */
+    IOC_GET_SAFEMODE = 18,   /* data 为空，返回 1=已请求安全模式 / 0=未请求 */
+    IOC_DISARM_SAFEMODE = 19, /* data 为空，关闭安全模式观察器 */
 };
 
 #define NKSU_PROFILE_TEXT_MAX (64 * 1024)

@@ -400,4 +400,24 @@ void load_sepolicy_rule() {
   });
 }
 
+// Volume-key safe mode is reported through the control ioctl (not a file node,
+// which SELinux can deny).  The fd is obtained on demand; see manager/daemon.c
+// for the steady-state root grant.
+namespace {
+int simple_ioc(uint32_t flag) {
+  const int fd = driver_fd();
+  if (fd < 0)
+    return -1;
+  uint8_t buf[sizeof(struct fmac_ioc)] = {};
+  auto *ioc = reinterpret_cast<struct fmac_ioc *>(buf);
+  ioc->flag = flag;
+  ioc->size = 0;
+  return ::ioctl(fd, IOC_CMD, ioc);
+}
+} // namespace
+
+bool kernel_safe_mode_requested() { return simple_ioc(IOC_GET_SAFEMODE) > 0; }
+
+void kernel_disarm_safe_mode() { simple_ioc(IOC_DISARM_SAFEMODE); }
+
 } // namespace modules

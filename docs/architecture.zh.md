@@ -148,7 +148,7 @@ KernelSU 模块与 WebUI 无需改动即可工作，因为兼容性契约被保�
 - `prctl(203)` → `[fmac_ctl]`（ioctl 控制 fd）；
 - `prctl(204)` → `[fmac_ctl]`，对任意 root 进程可用（供 `ncore` 使用）。
 
-音量键安全模式状态以普通文件节点 `/proc/nksu/safemode` 暴露，`ncore` 在每个阶段读取它，并在最后一个阶段写入它以解除观察器。
+音量键安全模式状态通过控制 ioctl（`IOC_GET_SAFEMODE` / `IOC_DISARM_SAFEMODE`）上报，`ncore` 在每个阶段查询它，并在最后一个阶段解除观察器。控制 fd 是匿名 inode，SELinux 路径检查不会介入。
 
 唯一的 ioctl 是 `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`：
 

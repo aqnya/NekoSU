@@ -145,10 +145,10 @@ KSU_MODULE=<id>
 
 Each stage first runs the global `/data/adb/<stage>.d` scripts, then the metamodule stage script, then every active module's `<stage>.sh`:
 
-- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It first reads `/proc/nksu/safemode` and, if the kernel's volume-up watcher latched safe mode, creates `/data/adb/nksu/safe_module`. Then it handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
-- `on_services` / `on_boot_completed` — `NoWait`. Both also read `/proc/nksu/safemode` (and create the marker if needed) before running their stage; boot-completed then writes the node to disarm the kernel's volume-up watcher.
+- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It first queries the kernel's safe-mode flag over the control ioctl and, if the volume-up watcher latched it, creates `/data/adb/nksu/safe_module`. Then it handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
+- `on_services` / `on_boot_completed` — `NoWait`. Both also query the kernel's safe-mode flag (and create the marker if needed) before running their stage; boot-completed then disarms the kernel's volume-up watcher (`IOC_DISARM_SAFEMODE`).
 
-Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set, `/data/adb/nksu/safe_module` exists (created by ncore when the kernel's volume-up watcher reports safe mode), or the kernel's `/proc/nksu/safemode` reads `1`.
+Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set, `/data/adb/nksu/safe_module` exists (created by ncore when the kernel reports safe mode), or the kernel's `IOC_GET_SAFEMODE` reports it.
 
 ### Metamodules {#metamodules}
 
@@ -194,7 +194,7 @@ A `len == 0` argument is a wildcard. Supported commands include `allow`, `deny`,
 
 ### Safe-mode query {#safe-mode-query}
 
-`sync_safe_mode_from_kernel()` reads `/proc/nksu/safemode`; when it returns `1`, ncore creates `/data/adb/nksu/safe_module` so the rest of this boot (and later boots) skips module loading. It is called at the start of every stage. The last stage (boot-completed) then writes the node, which disarms the kernel's volume-up watcher.
+`sync_safe_mode_from_kernel()` queries the kernel's safe-mode flag over the control ioctl; when it is set, ncore creates `/data/adb/nksu/safe_module` so the rest of this boot (and later boots) skips module loading. It is called at the start of every stage. The last stage (boot-completed) then disarms the kernel's volume-up watcher (`IOC_DISARM_SAFEMODE`).
 
 ## Boot image handling {#boot-image}
 

@@ -15,6 +15,7 @@
 #include "nksu.h"
 #include "boot/init.h"
 #include "boot/safe_mode.h"
+#include "manager/ioctl.h"
 #include "privilege/profile_store.h"
 #include "selinux/hide.h"
 
@@ -44,10 +45,10 @@ typedef struct {
 static const module_component_t early_components[] = {
     {
         /*
-         * Volume-key safe mode depends only on the input subsystem and procfs,
-         * neither of which needs the SELinux policy, /data or the zygote, so
-         * it is armed at second_stage -- before post-fs-data, where ncore first
-         * reads /proc/nksu/safemode.
+         * Volume-key safe mode depends only on the input subsystem, which
+         * needs neither the SELinux policy, /data nor the zygote, so it is
+         * armed at second_stage -- before post-fs-data, where ncore first
+         * queries the flag over the control ioctl.
          */
         .name = "safe mode",
         .init = nksu_safe_mode_init,
@@ -120,6 +121,17 @@ static const module_component_t feature_components[] = {
         .exit = NULL,
     },
 #endif
+    {
+        /*
+         * Last: keep the control fd obtainable by root after the temporary
+         * boot watcher is gone, so ncore can query safe mode / sepolicy at
+         * every stage.  Wrapping the syscall dispatcher here means the reverse
+         * cleanup removes it before the dispatcher is restored.
+         */
+        .name = "daemon fd",
+        .init = nksu_daemon_fd_init,
+        .exit = nksu_daemon_fd_exit,
+    },
 };
 
 static int nekosu_init_component(const module_component_t *comp, int index)

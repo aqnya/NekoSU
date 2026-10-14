@@ -19,7 +19,7 @@ kernel/
 ├── boot/                  runtime bootstrap (NOT boot-image patching)
 │   ├── hook_init.c/.h     first-stage watcher: follow init, staged bring-up
 │   ├── init_rc.c/.h       init.rc read/fstat proxy → exec ncore
-│   └── safe_mode.c/.h     volume-up safe mode → /proc/nksu/safemode flag
+│   └── safe_mode.c/.h     volume-up safe mode → safe-mode flag via ioctl
 ├── hook/
 │   ├── handle.c/.h        steady-state syscall handlers
 │   ├── syscall.c/.h       sys_call_table slot patch/restore
@@ -81,7 +81,7 @@ Component groups:
 
 - `early_components[]` — safe mode (`nksu_safe_mode_init` / `nksu_safe_mode_exit`); armed at `second_stage`, before `/data` and the zygote.
 - `selinux_components[]` — `init_selinux_hook` / `selinux_exit`.
-- `feature_components[]`, in order: anonymous FD, uid profile, profile store, tracepoint hook (only when `!CONFIG_NKSU_SYSCALL`), manager scan, SELinux hide, syscall dispatch + syscall hook (`CONFIG_NKSU_SYSCALL`).
+- `feature_components[]`, in order: anonymous FD, uid profile, profile store, tracepoint hook (only when `!CONFIG_NKSU_SYSCALL`), manager scan, SELinux hide, syscall dispatch + syscall hook (`CONFIG_NKSU_SYSCALL`), and daemon fd last (keeps `prctl(204)` granting the control fd to root after the temporary watcher is gone).
 
 `core.c` exposes `nksu_init_early_components()`, `nksu_exit_early_components()`, `nksu_init_selinux_components()`, `nksu_exit_selinux_components()`, `nksu_init_feature_components()`, `nksu_exit_feature_components()` (used by the staged boot watcher) and `nksu_version()`.
 
@@ -93,7 +93,8 @@ Component groups:
 
 - `hook_init.c` — when loaded at first stage, installs a temporary syscall watcher for `__NR_execve`, `__NR_execveat`, `__NR_prctl`, follows `init` through `selinux_setup` → `second_stage`, and detects zygote (`-Xzygote`). A kthread `"nksu-init"` initializes the early and SELinux components at `INIT_SECOND_STAGE`, then feature components once zygote is seen, then tears down the watcher. It also lets root obtain the control fd via `NKSU_PRCTL_GET_DRIVER_FD` (204).
 - `init_rc.c` — appends `nksu_rc[]` to `init`'s view of `/system/etc/init/hw/init.rc` (and legacy `/system/etc/init.rc`) by proxying `__NR_read` and `__NR_fstat`. The appended lines `exec u:r:nksu:s0 root -- /data/adb/nksu/ncore {post-fs-data|services|boot-completed}` run at the corresponding `on` triggers. `NKSU_NCORE_PATH = "/data/adb/nksu/ncore"`.
-- `safe_mode.c` — input handler on `EV_KEY/KEY_VOLUMEUP`; 3 presses latch a "safe mode requested" flag exposed at `/proc/nksu/safemode`. It does not write a marker or reboot: ncore reads the node at each stage and creates `/data/adb/nksu/safe_module` itself (see userspace/ncore). Writing the node disarms the watcher (ncore does this at its last stage).
+- `safe_mode.c` — input handler on `EV_KEY/KEY_VOLUMEUP`; 3 presses latch a "safe mode requested" flag reported by the control ioctl (`IOC_GET_SAFEMODE`). It does not write a marker or reboot: ncore queries the flag at each stage and creates `/data/adb/nksu/safe_module` itself (see userspace/ncore), then stops the watcher with `IOC_DISARM_SAFEMODE` at its last stage. The ioctl is used instead of a proc node because the control fd is anonymous, so SELinux path checks never apply.
+- `manager/daemon.c` — installs a steady-state `__NR_prctl` slot hook (feature stage) that grants the control fd to root, so ncore can reach `IOC_*` at every stage, not just before zygote.
 
 ## hook — interception {#hook}
 

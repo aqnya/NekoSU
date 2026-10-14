@@ -145,10 +145,10 @@ KSU_MODULE=<id>
 
 每个阶段先运行全局 `/data/adb/<stage>.d` 脚本，再运行 metamodule 阶段脚本，最后运行每个活动模块的 `<stage>.sh`：
 
-- `on_post_fs_data` —— 有 35 秒期限（`BOOT_STAGE_TIMEOUT_SEC`）。它先读取 `/proc/nksu/safemode`，若内核音量键观察器锁存了安全模式，则创建 `/data/adb/nksu/safe_module`。然后处理公共 `post-fs-data.d` 脚本、安全模式（禁用所有模块）、把 `modules_update/<id>` 换入 `modules/<id>`（保留 `disable`/`remove`）、清理被移除的模块（运行 `uninstall.sh`）、重新生成预初始化 `modules.rc`、加载 `sepolicy.rule`、运行阶段脚本、通过 `setprop` 应用 `system.prop`，并挂载 metamodule。
-- `on_services` / `on_boot_completed` —— `NoWait`。两者在运行各自阶段前也会读取 `/proc/nksu/safemode`（并在需要时创建标记）；boot-completed 随后写入该节点以解除内核音量键观察器。
+- `on_post_fs_data` —— 有 35 秒期限（`BOOT_STAGE_TIMEOUT_SEC`）。它先通过控制 ioctl 查询内核安全模式标志，若音量键观察器已锁存则创建 `/data/adb/nksu/safe_module`。然后处理公共 `post-fs-data.d` 脚本、安全模式（禁用所有模块）、把 `modules_update/<id>` 换入 `modules/<id>`（保留 `disable`/`remove`）、清理被移除的模块（运行 `uninstall.sh`）、重新生成预初始化 `modules.rc`、加载 `sepolicy.rule`、运行阶段脚本、通过 `setprop` 应用 `system.prop`，并挂载 metamodule。
+- `on_services` / `on_boot_completed` —— `NoWait`。两者在运行各自阶段前也会查询内核安全模式标志（并在需要时创建标记）；boot-completed 随后通过 `IOC_DISARM_SAFEMODE` 解除内核音量键观察器。
 
-若设置了 `persist.sys.safemode`/`ro.sys.safemode`、存在 `/data/adb/nksu/safe_module`（由 ncore 在内核音量键观察器报告安全模式时创建），或内核 `/proc/nksu/safemode` 读出 `1`，则安全模式生效。
+若设置了 `persist.sys.safemode`/`ro.sys.safemode`、存在 `/data/adb/nksu/safe_module`（由 ncore 在内核报告安全模式时创建），或内核 `IOC_GET_SAFEMODE` 报告安全模式，则安全模式生效。
 
 ### Metamodule {#metamodules}
 
@@ -194,7 +194,7 @@ KSU_MODULE=<id>
 
 ### 安全模式查询 {#safe-mode-query}
 
-`sync_safe_mode_from_kernel()` 读取 `/proc/nksu/safemode`；当读出 `1` 时，ncore 创建 `/data/adb/nksu/safe_module`，使本次启动的其余部分（以及后续启动）跳过模块加载。它在每个阶段开始时调用。最后一个阶段（boot-completed）随后写入该节点，解除内核音量键观察器。
+`sync_safe_mode_from_kernel()` 通过控制 ioctl 查询内核安全模式标志；当标志置位时，ncore 创建 `/data/adb/nksu/safe_module`，使本次启动的其余部分（以及后续启动）跳过模块加载。它在每个阶段开始时调用。最后一个阶段（boot-completed）随后通过 `IOC_DISARM_SAFEMODE` 解除内核音量键观察器。
 
 ## boot 镜像处理 {#boot-image}
 

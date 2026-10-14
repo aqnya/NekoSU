@@ -190,14 +190,20 @@ bool regenerate_preinit_rc();
 // files are skipped.
 void load_sepolicy_rule();
 
-// Ask the kernel (/proc/nksu/safemode) whether the volume-up watcher latched
-// safe mode this boot; when it did, create /data/adb/nksu/safe_module so the
-// rest of the boot (and later boots) skips module loading.  Called at the
-// start of every stage.
+// Query / disarm the kernel's volume-key safe mode over the control ioctl.
+// The kernel reports the flag through IOC_GET_SAFEMODE and stops its watcher
+// on IOC_DISARM_SAFEMODE (see kernel/boot/safe_mode.c).  Defined in
+// sepolicy.cc, which owns the control-fd transport.
+bool kernel_safe_mode_requested();
+void kernel_disarm_safe_mode();
+
+// Read the kernel's safe-mode flag and, when set, create
+// /data/adb/nksu/safe_module so the rest of the boot (and later boots) skips
+// module loading.  Called at the start of every stage.
 void sync_safe_mode_from_kernel();
 
-// Tell the kernel the boot is over by writing /proc/nksu/safemode, which
-// disarms its volume-up watcher.  Called from the last stage (boot-completed).
+// Tell the kernel the boot is over (IOC_DISARM_SAFEMODE), stopping its
+// volume-key watcher.  Called from the last stage (boot-completed).
 void disarm_safe_mode_watcher();
 
 } // namespace modules
