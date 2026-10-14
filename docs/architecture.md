@@ -146,8 +146,9 @@ The manager obtains a control file descriptor from the kernel:
 
 - `prctl(201)` → `[fmac_shm]` (anonymous shared memory, used for path/argument exchange);
 - `prctl(203)` → `[fmac_ctl]` (the ioctl control fd);
-- `prctl(204)` → `[fmac_ctl]`, available to any root process (used by `ncore`);
-- `prctl(205)` → boot-completed notification (stops the kernel safe-mode watcher).
+- `prctl(204)` → `[fmac_ctl]`, available to any root process (used by `ncore`).
+
+The volume-key safe-mode state is exposed as a plain file node, `/proc/nksu/safemode`, which `ncore` reads at each stage.
 
 The single ioctl is `IOC_CMD = _IOWR('F', 0, struct fmac_ioc)`:
 

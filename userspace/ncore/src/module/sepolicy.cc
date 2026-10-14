@@ -35,7 +35,6 @@ namespace {
 // drift from the kernel module.
 
 constexpr int kNksuPrctlGetDriverFd = NKSU_PRCTL_GET_DRIVER_FD;
-constexpr int kNksuPrctlBootCompleted = NKSU_PRCTL_BOOT_COMPLETED;
 constexpr uint32_t kCmdMany = 0; // not a batch head command
 
 constexpr uint32_t kCmdNormalPerm = NKSU_SEPOLICY_CMD_NORMAL_PERM;
@@ -369,12 +368,6 @@ bool send_batch(const std::vector<uint8_t> &payload, int *applied) {
 }
 
 } // namespace
-
-// Tell the kernel the boot is complete so it stops watching the volume-up key
-// for safe mode (see kernel/boot/safe_mode.c).  Runs as root; no fd needed.
-void notify_boot_completed() {
-  ::prctl(kNksuPrctlBootCompleted, 0, 0, 0, 0);
-}
 
 void load_sepolicy_rule() {
   foreach_module(ModuleType::Active, [](const std::string &module) {

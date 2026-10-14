@@ -2,107 +2,58 @@
 /*
  * Volume-key safe mode.
  *
- * The module watches the volume-up key from early in the boot until ncore
- * reports boot completion.  Three key-down events within that window create
- * /data/adb/nksu/safe_module and reboot the device, so the next boot comes up
- * with every module and stage script skipped (ncore checks the marker in
- * utils::is_safe_mode()).
+ * The module watches KEY_VOLUMEUP from early boot.  Three key-down events set
+ * a "safe mode requested" flag; the flag is exposed through
+ * /proc/nksu/safemode.  The kernel does not write any file and does not
+ * reboot -- ncore reads the node at each boot stage, and when it reads "1" it
+ * creates /data/adb/nksu/safe_module and skips module loading.
  *
- * Key detection uses the input subsystem: a small input_handler that matches
- * EV_KEY/KEY_VOLUMEUP devices, opens them, and counts key-down (value == 1)
- * events.  The handler callback runs in the input device's context (possibly
- * atomic), so it only bumps a counter and wakes the worker thread; the thread
- * does the file I/O and the reboot.
- *
- * The file is written while borrowing the nksu domain creds, because a kernel
- * thread's own creds cannot touch /data/adb (see selinux/selinux.h).
+ * Key detection uses the input subsystem: a small input_handler matching
+ * EV_KEY/KEY_VOLUMEUP devices, opened on connect.  The event callback runs in
+ * the input device's context (possibly atomic), so it only bumps a counter and
+ * latches the flag.
  */
 
 #include <linux/atomic.h>
 #include <linux/bits.h>
-#include <linux/completion.h>
-#include <linux/cred.h>
-#include <linux/delay.h>
-#include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/file.h>
-#include <linux/fs.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
-#include <linux/kthread.h>
 #include <linux/module.h>
-#include <linux/reboot.h>
+#include <linux/proc_fs.h>
 #include <linux/sched.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/types.h>
-#include <linux/uidgid.h>
-#include <linux/wait.h>
-#include <linux/syscalls.h>
-#include <asm/ptrace.h>
-#include <asm/unistd.h>
 
 #include "klog.h"
 #include "boot/safe_mode.h"
-#include "hook/syscall.h"
-#include "manager/manager.h"
-#include "manager/ioctl.h"
-#include "selinux/selinux.h"
 
-/* Last: redirects ksys_sync() to the resolved-symbol pointer. */
-#include "symbol/symbol_compat.h"
-
-/*
- * This file calls the resolved ksys_sync() through a pointer. Disable CFI for
- * its functions so that indirect call is not type-hash checked (the module's
- * build headers may hash differently than the running kernel).
- */
-#if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
-#endif
-
-#define NKSU_SAFE_DIR       "/data/adb/nksu"
-#define NKSU_SAFE_MARKER    NKSU_SAFE_DIR "/safe_module"
 #define NKSU_SAFE_PRESSES   3
+#define NKSU_SAFE_PROC_DIR  "nksu"
+#define NKSU_SAFE_PROC_FILE "safemode"
 
-static struct task_struct *nksu_safe_thread;
-static DECLARE_WAIT_QUEUE_HEAD(nksu_safe_wq);
-static DECLARE_COMPLETION(nksu_safe_exited);
 static atomic_t nksu_safe_presses = ATOMIC_INIT(0);
-/* Set once the watcher is told to stop (boot completed, or no ncore). */
+/* Latched once the press threshold is reached. */
+static bool nksu_safe_requested __read_mostly;
+/* Set once the watcher is told to stop (manager found no ncore). */
 static bool nksu_safe_disarmed __read_mostly;
 static bool nksu_safe_input_registered;
 
-/*
- * ncore reports boot completion with prctl(NKSU_PRCTL_BOOT_COMPLETED) from its
- * boot-completed stage.  It runs as root and is not in the uid profile, and the
- * default build's tracepoint dispatcher only traces profile UIDs, so the
- * notification gets its own prctl syscall-slot hook that sees every caller.
- * It is installed last (see core.c) so it wraps the syscall dispatcher in the
- * CONFIG_NKSU_SYSCALL build and the raw prctl otherwise.
- */
-static syscall_fn_t nksu_safe_orig_prctl;
-static bool nksu_safe_prctl_hooked;
+static struct proc_dir_entry *nksu_safe_proc_dir;
+static struct proc_dir_entry *nksu_safe_proc_file;
 
-static long nksu_safe_prctl_sys(const struct pt_regs *regs)
+bool nksu_safe_mode_requested(void)
 {
-	unsigned long option;
-#if defined(__aarch64__)
-	option = regs->regs[0];
-#elif defined(__x86_64__)
-	option = regs->di;
-#else
-	option = 0;
-#endif
+	return READ_ONCE(nksu_safe_requested);
+}
 
-	if (option == NKSU_PRCTL_BOOT_COMPLETED &&
-	    (uid_eq(current_euid(), GLOBAL_ROOT_UID) ||
-	     uid_eq(current_uid(), GLOBAL_ROOT_UID))) {
-		nksu_safe_mode_disable();
-		return 1;
-	}
+/* ---- /proc/nksu/safemode ---- */
 
-	return nksu_safe_orig_prctl ? nksu_safe_orig_prctl(regs) : -ENOSYS;
+static int nksu_safe_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", READ_ONCE(nksu_safe_requested) ? 1 : 0);
+	return 0;
 }
 
 /* ---- input handler: count volume-up key-down events ---- */
@@ -115,13 +66,16 @@ static long nksu_safe_prctl_sys(const struct pt_regs *regs)
 static void nksu_safe_event(struct input_handle *handle, unsigned int type,
 			    unsigned int code, int value)
 {
-	if (READ_ONCE(nksu_safe_disarmed))
+	if (READ_ONCE(nksu_safe_disarmed) || READ_ONCE(nksu_safe_requested))
 		return;
 
 	/* value 1 is a key-down; 2 is autorepeat and 0 is key-up. */
 	if (type == EV_KEY && code == KEY_VOLUMEUP && value == 1) {
-		atomic_inc(&nksu_safe_presses);
-		wake_up_interruptible(&nksu_safe_wq);
+		if (atomic_inc_return(&nksu_safe_presses) >= NKSU_SAFE_PRESSES) {
+			WRITE_ONCE(nksu_safe_requested, true);
+			pr_alert("[safe_mode] volume-up pressed %d times, safe mode requested\n",
+				 NKSU_SAFE_PRESSES);
+		}
 	}
 }
 
@@ -183,68 +137,6 @@ static struct input_handler nksu_safe_handler = {
 	.id_table = nksu_safe_ids,
 };
 
-/* ---- worker: create the marker and reboot ---- */
-
-static void nksu_safe_trigger(void)
-{
-	const struct cred *old;
-
-	pr_alert("[safe_mode] volume-up pressed %d times, enabling safe mode\n",
-		 NKSU_SAFE_PRESSES);
-
-	old = nksu_borrow_creds_begin();
-	if (old) {
-		struct file *fp;
-		loff_t pos = 0;
-
-		nksu_kpath_mkdir_p(NKSU_SAFE_DIR);
-		fp = filp_open(NKSU_SAFE_MARKER,
-			       O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		if (IS_ERR(fp)) {
-			pr_err("[safe_mode] cannot create %s: %ld\n",
-			       NKSU_SAFE_MARKER, PTR_ERR(fp));
-		} else {
-			static const char msg[] = "nksu safe mode\n";
-
-			kernel_write(fp, msg, sizeof(msg) - 1, &pos);
-			vfs_fsync(fp, 0);
-			filp_close(fp, NULL);
-			pr_info("[safe_mode] created %s\n", NKSU_SAFE_MARKER);
-		}
-		nksu_borrow_creds_end(old);
-	}
-	ksys_sync();
-
-	/* Let the write land, then reboot into the safe-mode boot. */
-	msleep(500);
-	kernel_restart(NULL);
-}
-
-static int nksu_safe_thread_fn(void *unused)
-{
-	for (;;) {
-		if (READ_ONCE(nksu_safe_disarmed))
-			break;
-
-		if (atomic_read(&nksu_safe_presses) >= NKSU_SAFE_PRESSES) {
-			nksu_safe_trigger();
-			break;
-		}
-
-		wait_event_interruptible(nksu_safe_wq,
-			READ_ONCE(nksu_safe_disarmed) ||
-			atomic_read(&nksu_safe_presses) >= NKSU_SAFE_PRESSES);
-	}
-
-	/*
-	 * Signal exit and return: the thread is NOT kthread_stop()ped later, so
-	 * it must retire itself (same pattern as the boot watcher in
-	 * boot/hook_init.c).  nksu_safe_mode_exit() only waits on the completion.
-	 */
-	complete(&nksu_safe_exited);
-	return 0;
-}
-
 /* ---- public interface ---- */
 
 void nksu_safe_mode_disable(void)
@@ -253,7 +145,6 @@ void nksu_safe_mode_disable(void)
 		return;
 
 	WRITE_ONCE(nksu_safe_disarmed, true);
-	wake_up_interruptible(&nksu_safe_wq);
 	pr_info("[safe_mode] volume-up watcher disarmed\n");
 }
 
@@ -262,9 +153,8 @@ int nksu_safe_mode_init(void)
 	int ret;
 
 	/*
-	 * The manager scan runs before this component and may have already
-	 * disarmed the watcher (it found no ncore, so no module can run).  In
-	 * that case stay off; the flag is not reset here.
+	 * The manager scan may have already disarmed the watcher before this
+	 * component came up; in that case stay off (the flag is not reset here).
 	 */
 	if (READ_ONCE(nksu_safe_disarmed))
 		return 0;
@@ -284,69 +174,33 @@ int nksu_safe_mode_init(void)
 	}
 	nksu_safe_input_registered = true;
 
-	if (!syscall_table) {
-		ret = syscall_table_resolve();
-		if (ret) {
-			pr_err("[safe_mode] cannot resolve sys_call_table: %d\n",
-			       ret);
-			goto disable_input;
-		}
-	}
-
-	ret = syscall_slot_hook(__NR_prctl, nksu_safe_prctl_sys,
-				&nksu_safe_orig_prctl, "nksu_safe_prctl");
-	if (ret) {
-		pr_err("[safe_mode] prctl hook failed: %d\n", ret);
-		goto disable_input;
-	}
-	nksu_safe_prctl_hooked = true;
-
-	reinit_completion(&nksu_safe_exited);
-	nksu_safe_thread = kthread_run(nksu_safe_thread_fn, NULL, "nksu-safe");
-	if (IS_ERR(nksu_safe_thread)) {
-		pr_err("[safe_mode] worker thread failed: %ld\n",
-		       PTR_ERR(nksu_safe_thread));
-		nksu_safe_thread = NULL;
-		syscall_slot_unhook(__NR_prctl);
-		nksu_safe_prctl_hooked = false;
-		goto disable_input;
-	}
+	nksu_safe_proc_dir = proc_mkdir(NKSU_SAFE_PROC_DIR, NULL);
+	if (nksu_safe_proc_dir)
+		nksu_safe_proc_file =
+			proc_create_single(NKSU_SAFE_PROC_FILE, 0444,
+					   nksu_safe_proc_dir,
+					   nksu_safe_proc_show);
+	if (!nksu_safe_proc_file)
+		pr_warn("[safe_mode] cannot create /proc/%s/%s\n",
+			NKSU_SAFE_PROC_DIR, NKSU_SAFE_PROC_FILE);
 
 	pr_info("[safe_mode] watching volume-up keys for safe mode\n");
-	return 0;
-
-disable_input:
-	input_unregister_handler(&nksu_safe_handler);
-	nksu_safe_input_registered = false;
 	return 0;
 }
 
 void nksu_safe_mode_exit(void)
 {
-	if (nksu_safe_prctl_hooked) {
-		syscall_slot_unhook(__NR_prctl);
-		nksu_safe_prctl_hooked = false;
+	if (nksu_safe_proc_file) {
+		proc_remove(nksu_safe_proc_file);
+		nksu_safe_proc_file = NULL;
+	}
+	if (nksu_safe_proc_dir) {
+		proc_remove(nksu_safe_proc_dir);
+		nksu_safe_proc_dir = NULL;
 	}
 
 	if (nksu_safe_input_registered) {
 		input_unregister_handler(&nksu_safe_handler);
 		nksu_safe_input_registered = false;
 	}
-
-	/*
-	 * The watcher retires itself (never kthread_stop()ped); ask it to leave
-	 * and wait for its completion so no safe-mode code is still running when
-	 * the module is torn down.
-	 */
-	WRITE_ONCE(nksu_safe_disarmed, true);
-	wake_up_interruptible(&nksu_safe_wq);
-
-	if (nksu_safe_thread) {
-		wait_for_completion(&nksu_safe_exited);
-		nksu_safe_thread = NULL;
-	}
 }
-
-#if defined(__clang__)
-#pragma clang attribute pop
-#endif

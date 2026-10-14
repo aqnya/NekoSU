@@ -190,9 +190,10 @@ bool regenerate_preinit_rc();
 // files are skipped.
 void load_sepolicy_rule();
 
-// Report boot completion to the kernel (prctl NKSU_PRCTL_BOOT_COMPLETED) so
-// the safe-mode volume-key watcher stops counting.  Called from
-// on_boot_completed().
-void notify_boot_completed();
+// Ask the kernel (/proc/nksu/safemode) whether the volume-up watcher latched
+// safe mode this boot; when it did, create /data/adb/nksu/safe_module so the
+// rest of the boot (and later boots) skips module loading.  Called at the
+// start of every stage.
+void sync_safe_mode_from_kernel();
 
 } // namespace modules

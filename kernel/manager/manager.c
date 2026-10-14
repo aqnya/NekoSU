@@ -623,8 +623,8 @@ out:
 
     /*
      * No ncore means no module can run this boot, so volume-key safe mode has
-     * nothing to protect.  Idempotent, and safe before the safe-mode component
-     * has initialized (the state is observed by nksu_safe_mode_init).
+     * nothing to protect.  Idempotent; the safe-mode watcher is armed earlier
+     * (second_stage), so this simply stops it counting.
      */
     if (!READ_ONCE(ncore_ready))
         nksu_safe_mode_disable();

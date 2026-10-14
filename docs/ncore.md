@@ -145,10 +145,10 @@ KSU_MODULE=<id>
 
 Each stage first runs the global `/data/adb/<stage>.d` scripts, then the metamodule stage script, then every active module's `<stage>.sh`:
 
-- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
-- `on_services` / `on_boot_completed` — `NoWait`. Boot-completed also notifies the kernel (`NKSU_PRCTL_BOOT_COMPLETED`) to stop the safe-mode watcher.
+- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It first reads `/proc/nksu/safemode` and, if the kernel's volume-up watcher latched safe mode, creates `/data/adb/nksu/safe_module`. Then it handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
+- `on_services` / `on_boot_completed` — `NoWait`. Both also read `/proc/nksu/safemode` (and create the marker if needed) before running their stage.
 
-Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set or `/data/adb/nksu/safe_module` exists (created by the kernel volume-up watcher).
+Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set, `/data/adb/nksu/safe_module` exists (created by ncore when the kernel's volume-up watcher reports safe mode), or the kernel's `/proc/nksu/safemode` reads `1`.
 
 ### Metamodules {#metamodules}
 
@@ -192,9 +192,9 @@ Returns an array of objects:
 
 A `len == 0` argument is a wildcard. Supported commands include `allow`, `deny`, `auditallow`, `dontaudit`, `allowxperm`/`auditallowxperm`/`dontauditxperm` (ioctl only), `permissive`/`enforce`, `type`, `typeattribute`/`attradd`, `attribute`, `type_transition`/`name_transition`, `type_change`/`type_member`, `genfscon`, with `{ }` cross-product expansion. If no control fd is available, sepolicy rules are skipped with a log.
 
-### Boot-completed notification {#boot-completed}
+### Safe-mode query {#safe-mode-query}
 
-`notify_boot_completed()` calls `prctl(205)` so the kernel can stop its volume-key safe-mode watcher.
+`sync_safe_mode_from_kernel()` reads `/proc/nksu/safemode`; when it returns `1`, ncore creates `/data/adb/nksu/safe_module` so the rest of this boot (and later boots) skips module loading. It is called at the start of every stage.
 
 ## Boot image handling {#boot-image}
 

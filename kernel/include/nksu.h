@@ -17,10 +17,12 @@
 #endif
 
 /*
- * Component groups.  Late load runs both at once; a first-stage (vendor_boot)
- * load stages them: SELinux once the policy exists, the rest once /data and
- * the zygote are available.
+ * Component groups.  Late load runs all of them at once; a first-stage
+ * (vendor_boot) load stages them: the early group at second_stage, and the
+ * feature group once /data and the zygote are available.
  */
+int nksu_init_early_components(void);
+void nksu_exit_early_components(void);
 int nksu_init_selinux_components(void);
 void nksu_exit_selinux_components(void);
 int nksu_init_feature_components(void);

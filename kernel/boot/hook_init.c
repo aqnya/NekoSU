@@ -59,6 +59,7 @@ static DECLARE_COMPLETION(init_done);
 static bool stage_pending;
 static bool init_exiting;
 static bool zygote_seen;
+static bool early_loaded;
 static bool selinux_loaded;
 static bool features_loaded;
 
@@ -217,16 +218,27 @@ static int init_thread_fn(void *data)
 
         /*
          * The policy is loaded during selinux_setup, so by second_stage we
-         * can inject the nksu domain and its rules.  Do NOT start the module
-         * stage here: on FBE devices init's second_stage runs *before* vold
-         * mounts and decrypts /data, so /data/adb/modules does not exist yet
-         * (this is what made every module look absent).
+         * can inject the nksu domain and its rules.  The early group (safe
+         * mode) needs neither the policy nor /data, so it is armed here too --
+         * before post-fs-data, where ncore first reads /proc/nksu/safemode.
+         * Do NOT start the module stage here: on FBE devices init's
+         * second_stage runs *before* vold mounts and decrypts /data, so
+         * /data/adb/modules does not exist yet (this is what made every module
+         * look absent).
          */
-        if (READ_ONCE(boot_stage) == INIT_SECOND_STAGE && !selinux_loaded) {
-            if (nksu_init_selinux_components() == 0)
-                selinux_loaded = true;
-            else
-                pr_err("nksu: SELinux hook init failed\n");
+        if (READ_ONCE(boot_stage) == INIT_SECOND_STAGE) {
+            if (!early_loaded) {
+                if (nksu_init_early_components() == 0)
+                    early_loaded = true;
+                else
+                    pr_err("nksu: early component init failed\n");
+            }
+            if (!selinux_loaded) {
+                if (nksu_init_selinux_components() == 0)
+                    selinux_loaded = true;
+                else
+                    pr_err("nksu: SELinux hook init failed\n");
+            }
         }
 
         if (READ_ONCE(zygote_seen) && !features_loaded) {
@@ -238,6 +250,9 @@ static int init_thread_fn(void *data)
 
             /* Let the execve() that announced zygote settle. */
             msleep(100);
+
+            if (!early_loaded && nksu_init_early_components() == 0)
+                early_loaded = true;
 
             if (!selinux_loaded &&
                 nksu_init_selinux_components() == 0)
@@ -333,6 +348,9 @@ void hook_exit(void)
 
     if (READ_ONCE(selinux_loaded))
         nksu_exit_selinux_components();
+
+    if (READ_ONCE(early_loaded))
+        nksu_exit_early_components();
 
     nksu_dispatch_exit();
 }

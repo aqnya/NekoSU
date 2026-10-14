@@ -621,10 +621,29 @@ static void ensure_ksu_dir_alias() {
   std::cout << "[module] linked " << ksu << " -> " << nksu << std::endl;
 }
 
+// The kernel's volume-up watcher only exposes state at /proc/nksu/safemode
+// (it no longer writes the marker or reboots).  Mirror that decision to disk
+// so the rest of this boot -- and later boots -- skips module loading.
+void sync_safe_mode_from_kernel() {
+  std::string value;
+  if (!utils::read_file("/proc/nksu/safemode", value))
+    return;
+  if (value.empty() || value[0] != '1')
+    return;
+
+  if (!utils::exists("/data/adb/nksu/safe_module")) {
+    utils::ensure_file_exists("/data/adb/nksu/safe_module");
+    utils::klog("kernel requested safe mode, marker created");
+    std::cout << "[module] kernel requested safe mode, marker created"
+              << std::endl;
+  }
+}
+
 int on_post_fs_data() {
   utils::umask0();
   utils::klog("post-fs-data stage start");
   ensure_ksu_dir_alias();
+  sync_safe_mode_from_kernel();
 
   if (utils::has_magisk()) {
     utils::klog("Magisk detected, skip post-fs-data");
@@ -687,6 +706,7 @@ int on_services() {
   utils::klog("service stage start");
   std::cout << "[module] on_services triggered" << std::endl;
   ensure_ksu_dir_alias();
+  sync_safe_mode_from_kernel();
   run_stage_internal("service", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
   utils::klog("service stage finished");
@@ -696,8 +716,8 @@ int on_services() {
 int on_boot_completed() {
   utils::klog("boot-completed stage start");
   std::cout << "[module] on_boot_completed triggered" << std::endl;
-  notify_boot_completed();
   ensure_ksu_dir_alias();
+  sync_safe_mode_from_kernel();
   run_stage_internal("boot-completed", ScriptWait::NoWait,
                      std::chrono::steady_clock::now());
   utils::klog("boot-completed stage finished");

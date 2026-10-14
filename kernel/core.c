@@ -37,11 +37,30 @@ typedef struct {
 } module_component_t;
 
 /*
+ * Component groups.  Late load runs all three back to back; a first-stage
+ * (vendor_boot) load stages them: the early group plus SELinux once the policy
+ * exists, and the feature group once /data and the zygote are available.
+ */
+static const module_component_t early_components[] = {
+    {
+        /*
+         * Volume-key safe mode depends only on the input subsystem and procfs,
+         * neither of which needs the SELinux policy, /data or the zygote, so
+         * it is armed at second_stage -- before post-fs-data, where ncore first
+         * reads /proc/nksu/safemode.
+         */
+        .name = "safe mode",
+        .init = nksu_safe_mode_init,
+        .exit = nksu_safe_mode_exit,
+    },
+};
+
+/*
  * SELinux needs the policy, which is loaded during the "selinux_setup"
  * stage; everything else needs /data, which is mounted by the time zygote
  * runs (Android init triggers `post-fs-data` before `zygote-start`, matching
  * AOSP).  The feature group is therefore gated on zygote detection.  Late
- * load runs both groups back to back, a first-stage (vendor_boot) load
+ * load runs the groups back to back, a first-stage (vendor_boot) load
  * stages them.
  */
 static const module_component_t selinux_components[] = {
@@ -101,17 +120,6 @@ static const module_component_t feature_components[] = {
         .exit = NULL,
     },
 #endif
-    {
-        /*
-         * Last: watch the volume-up key until ncore reports boot completion
-         * (prctl 205).  It installs its own prctl syscall-slot hook, so it
-         * must run after the syscall dispatcher to wrap its slot, and it must
-         * be torn down before the dispatcher's group restore.
-         */
-        .name = "safe mode",
-        .init = nksu_safe_mode_init,
-        .exit = nksu_safe_mode_exit,
-    },
 };
 
 static int nekosu_init_component(const module_component_t *comp, int index)
@@ -172,6 +180,18 @@ static int init_component_list(const module_component_t *comps, int count)
     return 0;
 }
 
+int nksu_init_early_components(void)
+{
+    return init_component_list(early_components,
+                               ARRAY_SIZE(early_components));
+}
+
+void nksu_exit_early_components(void)
+{
+    nekosu_cleanup_components(early_components,
+                              ARRAY_SIZE(early_components));
+}
+
 int nksu_init_selinux_components(void)
 {
     return init_component_list(selinux_components,
@@ -198,14 +218,22 @@ void nksu_exit_feature_components(void)
 
 static int nekosu_init_all_components(void)
 {
-    int ret = nksu_init_selinux_components();
+    int ret = nksu_init_early_components();
 
     if (ret)
         return ret;
 
+    ret = nksu_init_selinux_components();
+    if (ret) {
+        nksu_exit_early_components();
+        return ret;
+    }
+
     ret = nksu_init_feature_components();
-    if (ret)
+    if (ret) {
         nksu_exit_selinux_components();
+        nksu_exit_early_components();
+    }
 
     return ret;
 }
@@ -214,6 +242,7 @@ static void nekosu_cleanup_all_components(void)
 {
     nksu_exit_feature_components();
     nksu_exit_selinux_components();
+    nksu_exit_early_components();
 }
 
 static int __init nekosu_init(void)
