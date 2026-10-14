@@ -261,7 +261,6 @@ fun InstallScreen(navController: NavController) {
                         .padding(top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                KernelInfoSection(state)
                 InstallMethodSection(
                     state = state,
                     onPick = { pickVendorBoot.launch(arrayOf("*/*")) },
@@ -287,37 +286,6 @@ fun InstallScreen(navController: NavController) {
 }
 
 @Composable
-private fun KernelInfoSection(state: InstallUiState) {
-    val unknown = stringResource(R.string.about_unknown_version)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle(stringResource(R.string.install_device_info))
-        CardGroup {
-            item {
-                ListRow(
-                    icon = { Icon(Icons.Rounded.Memory, contentDescription = null) },
-                    headline = { Text(stringResource(R.string.kernel_version)) },
-                    supporting = { Text(state.kernelVersion ?: unknown) },
-                )
-            }
-            item {
-                ListRow(
-                    icon = { Icon(Icons.Rounded.Android, contentDescription = null) },
-                    headline = { Text(stringResource(R.string.install_mode)) },
-                    supporting = { Text(if (state.isGki) "GKI" else "LKM") },
-                )
-            }
-            item {
-                ListRow(
-                    icon = { Icon(Icons.Rounded.Numbers, contentDescription = null) },
-                    headline = { Text(stringResource(R.string.install_current_kmi)) },
-                    supporting = { Text(state.currentKmi ?: unknown) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun InstallMethodSection(
     state: InstallUiState,
     onPick: () -> Unit,
@@ -337,7 +305,6 @@ private fun InstallMethodSection(
         }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle(stringResource(R.string.install_method))
         CardGroup {
             options.forEach { option ->
                 item {
@@ -450,7 +417,6 @@ private fun KernelModuleSection(
     val selectedKmi = (state.lkmSelection as? LkmSelection.Kmi)?.kmi ?: state.autoKo?.let { KernelInfo.kmiOf(it) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle(stringResource(R.string.install_select_ko))
         CardGroup {
             if (kmis.isNotEmpty()) {
                 item {
