@@ -172,7 +172,7 @@ KSU_MODULE=<id>
 
 Each stage first runs the global `/data/adb/<stage>.d` scripts, then the metamodule stage script, then every active module's `<stage>.sh`:
 
-- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It first queries the kernel's safe-mode flag over the control ioctl and, if the volume-up watcher latched it, creates `/data/adb/nksu/safe_module`. Then it handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies `system.prop` via `setprop`, and mounts the metamodule.
+- `on_post_fs_data` — has a 35 s deadline (`BOOT_STAGE_TIMEOUT_SEC`). It first queries the kernel's safe-mode flag over the control ioctl and, if the volume-up watcher latched it, creates `/data/adb/nksu/safe_module`. Then it handles the common `post-fs-data.d` scripts, safe mode (disabling all modules), swaps `modules_update/<id>` into `modules/<id>` preserving `disable`/`remove`, prunes removed modules (running `uninstall.sh`), regenerates the preinit `modules.rc`, loads `sepolicy.rule` files, runs stage scripts, applies every active module's `system.prop` (`key=value`) through the direct resetprop path so `ro.*` entries take effect, and mounts the metamodule.
 - `on_services` / `on_boot_completed` — `NoWait`. Both also query the kernel's safe-mode flag (and create the marker if needed) before running their stage; boot-completed then disarms the kernel's volume-up watcher (`IOC_DISARM_SAFEMODE`).
 
 Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set, `/data/adb/nksu/safe_module` exists (created by ncore when the kernel reports safe mode), or the kernel's `IOC_GET_SAFEMODE` reports it.
@@ -183,7 +183,7 @@ Safe mode is active if `persist.sys.safemode`/`ro.sys.safemode` is set, `/data/a
 
 ### File formats and the installer prelude {#file-formats}
 
-- Java-properties parsing drives `module.prop` and `system.prop`.
+- Java-properties parsing drives `module.prop`; `system.prop` is build.prop-style `key=value` lines (see [resetprop](#resetprop)).
 - `regenerate_preinit_rc` collects `initrc.d/*.rc` (execute bit = enabled) and each module's `initrc/*.rc` into `/metadata/watchdog/nksu/` or `/metadata/nksu/`.
 - `sepolicy.rule` files use KernelSU syntax and are parsed by `sepolicy.cc` (see [Kernel interfaces](#kernel-interfaces)).
 - Module ZIPs are read by a native `ZipArchive` (stored/deflate/xz, ZIP64, symlinks, path-traversal-safe, `META-INF/` skipped); `SKIPUNZIP=1` in `customize.sh` is honored.

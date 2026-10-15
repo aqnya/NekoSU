@@ -1,4 +1,5 @@
 #include "module_internal.hpp"
+#include "prop/prop_internal.hpp"
 #include "zip.hpp"
 
 #include <cerrno>
@@ -839,8 +840,15 @@ void disable_all_modules() {
   regenerate_preinit_rc();
 }
 
+// Apply every active module's system.prop.  Like KernelSU's
+// resetprop::load_system_prop_file, this writes the shared property area
+// directly (skip property_service) so `ro.*` entries take effect too; if the
+// areas cannot be mapped (not root) it falls back to the property_service.
 void load_system_prop() {
-  foreach_module(ModuleType::Active, [](const std::string &module) {
+  prop::SystemProperties &sys = prop::SystemProperties::Instance();
+  const bool direct = sys.Init();
+
+  foreach_module(ModuleType::Active, [&](const std::string &module) {
     const std::string prop = utils::join(module, "system.prop");
     if (!utils::is_file(prop))
       return;
@@ -849,6 +857,7 @@ void load_system_prop() {
     if (!utils::read_file(prop, content))
       return;
 
+    utils::klog("load system.prop: " + prop);
     std::istringstream stream(content);
     std::string line;
     while (std::getline(stream, line)) {
@@ -860,8 +869,14 @@ void load_system_prop() {
         continue;
       const std::string key = utils::trim(trimmed.substr(0, eq));
       const std::string value = utils::trim(trimmed.substr(eq + 1));
-      if (!key.empty())
+      if (key.empty())
+        continue;
+      if (direct) {
+        if (sys.Set(key, value) != 0)
+          std::cerr << "[module] failed to set " << key << std::endl;
+      } else {
         utils::setprop(key, value);
+      }
     }
   });
 }
