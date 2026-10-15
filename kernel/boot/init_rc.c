@@ -82,6 +82,8 @@ static ssize_t (*nksu_orig_read_iter)(struct kiocb *, struct iov_iter *);
 /* saved originals for the two syscall-table hooks */
 static syscall_fn_t nksu_orig_read_sys;
 static syscall_fn_t nksu_orig_fstat_sys;
+/* whether those two slots are currently hooked (guards nksu_init_rc_exit) */
+static bool nksu_rc_sys_hooked;
 
 /* Same match as KernelSU's is_init_rc(): only init, only the hw init.rc. */
 static bool nksu_rc_is_init_rc(struct file *file)
@@ -246,14 +248,25 @@ int nksu_init_rc_init(void)
     ret = syscall_slot_hook(__NR_fstat, nksu_sys_fstat, &nksu_orig_fstat_sys, "nksu_rc_fstat");
     if (ret) {
         pr_err("nksu: cannot hook __NR_fstat: %d\n", ret);
+        syscall_slot_unhook(__NR_read);
         return ret;
     }
 
+    nksu_rc_sys_hooked = true;
     return 0;
 }
 
 /*
- * There is no nksu_init_rc_exit(): the read/fstat syscall hops are torn down
- * together with the temporary boot watcher (nksu_dispatch_exit ->
- * syscall_slots_restore_all), so there is nothing to unhook.
+ * The read/fstat proxies are only needed until init has read init.rc.  The
+ * temporary boot watcher calls this when it is dropped at the zygote stage.
+ * Idempotent, so the error/unload paths can call it unconditionally.
  */
+void nksu_init_rc_exit(void)
+{
+    if (!nksu_rc_sys_hooked)
+        return;
+
+    nksu_rc_sys_hooked = false;
+    syscall_slot_unhook(__NR_read);
+    syscall_slot_unhook(__NR_fstat);
+}

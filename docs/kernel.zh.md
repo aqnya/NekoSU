@@ -23,7 +23,7 @@ kernel/
 ├── hook/
 │   ├── handle.c/.h        稳态系统调用处理函数
 │   ├── syscall.c/.h       sys_call_table 槽位修补/恢复
-│   ├── dispatch.c/.h      随机 ni 槽位系统调用重定向分发器
+│   ├── dispatch.c/.h      单系统调用重定向分发器（共享入口）
 │   ├── get_arg.c          从用户内存读取 argv
 │   ├── patch.c/.h         通过 fixmap + stop_machine 修补文本
 │   └── lsm_hook.c/.h      运行时修补 LSM security_hook_list
@@ -81,7 +81,7 @@ typedef struct {
 
 - `early_components[]` —— 安全模式（`nksu_safe_mode_init` / `nksu_safe_mode_exit`）；在 `second_stage` 武装，早于 `/data` 与 zygote。
 - `selinux_components[]` —— `init_selinux_hook` / `selinux_exit`。
-- `feature_components[]`，按顺序：匿名 FD、uid 档案、档案存储、tracepoint hook（仅在 `!CONFIG_NKSU_SYSCALL` 时）、管理器扫描、SELinux 隐藏、系统调用分发 + 系统调用 hook（`CONFIG_NKSU_SYSCALL`），最后是 daemon fd（在临时观察器拆除后继续让 root 通过 `prctl(204)` 拿到控制 fd）。
+- `feature_components[]`，按顺序：匿名 FD、uid 档案、档案存储、tracepoint hook（仅在 `!CONFIG_NKSU_SYSCALL` 时）、管理器扫描、SELinux 隐藏、系统调用 hook（`CONFIG_NKSU_SYSCALL`），最后是 daemon fd（在临时观察器拆除后继续让 root 通过 `prctl(204)` 拿到控制 fd）。
 
 `core.c` 导出 `nksu_init_early_components()`、`nksu_exit_early_components()`、`nksu_init_selinux_components()`、`nksu_exit_selinux_components()`、`nksu_init_feature_components()`、`nksu_exit_feature_components()`（供分阶段引导观察器使用）与 `nksu_version()`。
 
@@ -115,7 +115,7 @@ typedef struct {
 ### 两种拦截策略 {#strategies}
 
 - **默认（tracepoint）**，`!CONFIG_NKSU_SYSCALL`：`sys_enter` tracepoint 上的 `probe_sys_enter`（受 `nksu_profile_has_uid` 门控）、`sched_process_fork` 上的 `probe_sched_fork`，以及 `mark_threads_by_pid()`。
-- **`CONFIG_NKSU_SYSCALL`**：`dispatch.c` 把系统调用表条目重定向到随机 `ni_syscall` 槽位，并按系统调用号分发（`nksu_redirect_syscall`、`nksu_register_handler`、`nksu_unregister_handler`）。
+- **`CONFIG_NKSU_SYSCALL`**：`dispatch.c` 把选定的系统调用表条目指向单一共享入口（`nksu_dispatch_fast`），按系统调用号经 `virt_table` 分发。每个系统调用独立安装/移除 hook（`nksu_redirect_syscall`、`nksu_register_handler`、`nksu_unhook_syscall`），没有统一还原。
 
 文本修补（`patch.c`）使用 `stop_machine()` + `set_fixmap_offset(FIX_TEXT_POKE0, …)` + `copy_to_kernel_nofault`。`syscall.c` 在 `hook_table[256]` 中记录它修补过的每个槽位，以便全部恢复。
 

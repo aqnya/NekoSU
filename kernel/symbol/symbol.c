@@ -740,9 +740,9 @@ static int consume_buffer(const u8 *buf, unsigned long len,
          * address-taken function (foo.cfi_jt); sys_call_table holds those
          * stub addresses, not the plain function addresses. The stubs live
          * at the end of .text, so the plain symbol is always seen first and
-         * would otherwise win the stripped name. resolve_ni_syscall() looks
-         * up "__arm64_sys_ni_syscall.cfi_jt" and must get the stub, so the
-         * exact name has to stay resolvable too.
+         * would otherwise win the stripped name. A caller that resolves a
+         * sys_call_table entry must get the stub, so the exact name has to
+         * stay resolvable too.
          */
         strscpy(raw, nm, sizeof(raw));
         strip_symbol_suffix(nm);

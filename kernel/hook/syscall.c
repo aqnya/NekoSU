@@ -71,7 +71,7 @@ static int restore_slot(unsigned long addr)
     }
     if (i == hook_count) {
         spin_unlock_irqrestore(&hook_lock, flags);
-        pr_err("nksu: restore: slot not recorded\n");
+        pr_debug("nksu: restore: slot not recorded\n");
         return -ENOENT;
     }
     previous = hook_table[i].previous;
@@ -104,8 +104,17 @@ static syscall_fn_t recorded_previous(unsigned long addr)
 int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous,
                       const char *tag)
 {
-    unsigned long addr = (unsigned long)&syscall_table[nr];
-    int ret = record_slot(addr, fn);
+    unsigned long addr;
+    int ret;
+
+    if (!syscall_table) {
+        ret = syscall_table_resolve();
+        if (ret)
+            return ret;
+    }
+
+    addr = (unsigned long)&syscall_table[nr];
+    ret = record_slot(addr, fn);
 
     if (ret) {
         pr_err("nksu: failed to hook %s: %d\n", tag, ret);
@@ -125,9 +134,8 @@ int syscall_slot_unhook(int nr)
 int syscall_table_resolve(void)
 {
     /*
-     * init_mm belongs to the patcher (hook/patch.c); failing here keeps
-     * nksu_dispatch_init() erroring out early when the kernel cannot be
-     * patched at all.
+     * init_mm belongs to the patcher (hook/patch.c); failing here keeps the
+     * syscall-hook callers from patching a table they cannot reach.
      */
     int ret = nksu_patch_init();
     if (ret) {
@@ -142,10 +150,4 @@ int syscall_table_resolve(void)
     }
     pr_info("nksu: syscall table at %px\n", syscall_table);
     return 0;
-}
-
-void syscall_slots_restore_all(void)
-{
-    while (hook_count > 0)
-        restore_slot(hook_table[hook_count - 1].addr);
 }

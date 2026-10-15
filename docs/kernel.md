@@ -23,7 +23,7 @@ kernel/
 ├── hook/
 │   ├── handle.c/.h        steady-state syscall handlers
 │   ├── syscall.c/.h       sys_call_table slot patch/restore
-│   ├── dispatch.c/.h      random-ni-slot syscall redirect dispatcher
+│   ├── dispatch.c/.h      per-syscall redirect dispatcher (shared entry)
 │   ├── get_arg.c          get argv from user memory
 │   ├── patch.c/.h         text patching via fixmap + stop_machine
 │   └── lsm_hook.c/.h      runtime LSM security_hook_list patching
@@ -81,7 +81,7 @@ Component groups:
 
 - `early_components[]` — safe mode (`nksu_safe_mode_init` / `nksu_safe_mode_exit`); armed at `second_stage`, before `/data` and the zygote.
 - `selinux_components[]` — `init_selinux_hook` / `selinux_exit`.
-- `feature_components[]`, in order: anonymous FD, uid profile, profile store, tracepoint hook (only when `!CONFIG_NKSU_SYSCALL`), manager scan, SELinux hide, syscall dispatch + syscall hook (`CONFIG_NKSU_SYSCALL`), and daemon fd last (keeps `prctl(204)` granting the control fd to root after the temporary watcher is gone).
+- `feature_components[]`, in order: anonymous FD, uid profile, profile store, tracepoint hook (only when `!CONFIG_NKSU_SYSCALL`), manager scan, SELinux hide, syscall hook (`CONFIG_NKSU_SYSCALL`), and daemon fd last (keeps `prctl(204)` granting the control fd to root after the temporary watcher is gone).
 
 `core.c` exposes `nksu_init_early_components()`, `nksu_exit_early_components()`, `nksu_init_selinux_components()`, `nksu_exit_selinux_components()`, `nksu_init_feature_components()`, `nksu_exit_feature_components()` (used by the staged boot watcher) and `nksu_version()`.
 
@@ -115,7 +115,7 @@ Component groups:
 ### Two interception strategies {#strategies}
 
 - **Default (tracepoints)**, `!CONFIG_NKSU_SYSCALL`: `probe_sys_enter` on the `sys_enter` tracepoint (gated by `nksu_profile_has_uid`), `probe_sched_fork` on `sched_process_fork`, plus `mark_threads_by_pid()`.
-- **`CONFIG_NKSU_SYSCALL`**: `dispatch.c` redirects syscall-table entries to a random `ni_syscall` slot and dispatches by syscall number (`nksu_redirect_syscall`, `nksu_register_handler`, `nksu_unregister_handler`).
+- **`CONFIG_NKSU_SYSCALL`**: `dispatch.c` points selected syscall-table entries at one shared entry (`nksu_dispatch_fast`) that dispatches by syscall number through `virt_table`. Hooks are installed and removed per syscall (`nksu_redirect_syscall`, `nksu_register_handler`, `nksu_unhook_syscall`); there is no group restore.
 
 Text patching (`patch.c`) uses `stop_machine()` + `set_fixmap_offset(FIX_TEXT_POKE0, …)` + `copy_to_kernel_nofault`. `syscall.c` tracks every slot it patched in a `hook_table[256]` so it can restore them all.
 

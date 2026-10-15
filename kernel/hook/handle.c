@@ -215,12 +215,16 @@ int init_syscall_hook(void)
 {
 	int ret, i;
 
+	/* Steady state is profile-gated; the temporary watcher may have left
+	 * this on. */
+	nksu_dispatch_set_unconditional(false);
+
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++) {
 		ret = nksu_redirect_syscall(syscall_hooks[i].nr);
 		if (ret) {
 			pr_err("[hook]: can't redirect syscall %d: %d\n",
 			       syscall_hooks[i].nr, ret);
-			return ret;
+			goto err;
 		}
 	}
 
@@ -230,12 +234,28 @@ int init_syscall_hook(void)
 		if (ret) {
 			pr_err("[hook]: can't register handler for syscall %d: %d\n",
 			       syscall_hooks[i].nr, ret);
-			return ret;
+			goto err;
 		}
 	}
 
 	pr_info("[hook]: loaded syscall hook\n");
 	return 0;
+
+err:
+	/* Undo a partial install. */
+	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++)
+		nksu_unhook_syscall(syscall_hooks[i].nr);
+	return ret;
+}
+
+void exit_syscall_hook(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++)
+		nksu_unhook_syscall(syscall_hooks[i].nr);
+
+	pr_info("[hook]: unloaded syscall hook\n");
 }
 #endif /* CONFIG_NKSU_SYSCALL */
 

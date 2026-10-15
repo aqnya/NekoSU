@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0
+/*
+ * Per-syscall redirection through a single shared entry point.
+ *
+ * nksu_dispatch_fast() is installed into the slots nksu wants to observe; it
+ * looks up the real handler and the registered handler for the incoming syscall
+ * number and applies the profile gate.  There is no group init/exit: callers
+ * use nksu_redirect_syscall() / nksu_unhook_syscall() and manage their own
+ * lifetimes.
+ */
 #include "klog.h"
 #include <linux/cred.h>
 #include <linux/kallsyms.h>
-#include <linux/random.h>
 #include <linux/sched.h>
-#include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/nospec.h>
 
@@ -15,7 +22,6 @@
 syscall_fn_t nksu_orig_table[__NR_syscalls] ____cacheline_aligned;
 nksu_handler_t virt_table[__NR_syscalls] ____cacheline_aligned;
 
-static int nksu_syscall_nr = -1;
 static bool dispatch_unconditional;
 
 void nksu_dispatch_set_unconditional(bool on)
@@ -23,13 +29,19 @@ void nksu_dispatch_set_unconditional(bool on)
 	WRITE_ONCE(dispatch_unconditional, on);
 }
 
-int hook_and_save(int nr, syscall_fn_t new_fn, const char *tag)
+static int hook_and_save(int nr, syscall_fn_t new_fn, const char *tag)
 {
     syscall_fn_t orig = NULL;
     int ret;
 
     if ((unsigned int)nr >= (unsigned int)__NR_syscalls)
         return -EINVAL;
+
+    if (!syscall_table) {
+        ret = syscall_table_resolve();
+        if (ret)
+            return ret;
+    }
 
     ret = syscall_slot_hook(nr, new_fn, &orig, tag);
     if (ret)
@@ -91,83 +103,16 @@ int nksu_redirect_syscall(int real_nr)
     return hook_and_save(real_nr, nksu_dispatch_fast, "nksu_redirect");
 }
 
-int nksu_get_syscall_nr(void)
+/*
+ * Restore one redirected syscall and forget its handler.  Idempotent enough
+ * for the owners: syscall_slot_unhook() reports a slot it never recorded.
+ */
+void nksu_unhook_syscall(int nr)
 {
-    return nksu_syscall_nr;
-}
-
-static unsigned long resolve_ni_syscall(void)
-{
-    static const char *const names[] = {
-        "__arm64_sys_ni_syscall.cfi_jt", "__arm64_sys_ni_syscall", "sys_ni_syscall", "__sys_ni_syscall", NULL,
-    };
-    int i;
-
-    for (i = 0; names[i]; i++) {
-        unsigned long addr = nksu_ksym_lookup(names[i]);
-        if (addr)
-            return addr;
-    }
-    return 0;
-}
-
-static int find_random_ni_slot(void)
-{
-    unsigned long ni_addr = resolve_ni_syscall();
-    int selected = -1, count = 0, i;
-
-    if (!ni_addr)
-        return -ENOENT;
-
-    for (i = 0; i < __NR_syscalls; i++) {
-        unsigned long slot = (unsigned long)READ_ONCE(syscall_table[i]);
-        if (slot != ni_addr)
-            continue;
-        count++;
-        if ((get_random_u32() % count) == 0)
-            selected = i;
-    }
-    return selected;
-}
-
-int nksu_dispatch_init(void)
-{
-    int rc, ret;
-
-    nksu_dispatch_set_unconditional(false);
-
-    rc = syscall_table_resolve();
-    if (rc < 0)
-        return rc;
-
-    memset(nksu_orig_table, 0, sizeof(nksu_orig_table));
-    memset(virt_table, 0, sizeof(virt_table));
-
-    nksu_syscall_nr = find_random_ni_slot();
-    if (nksu_syscall_nr < 0) {
-        syscall_slots_restore_all();
-        return -ENOENT;
-    }
-
-    ret = hook_and_save(nksu_syscall_nr, nksu_dispatch_fast, "nksu_dispatch_fast");
-    if (ret) {
-        nksu_syscall_nr = -1;
-        syscall_slots_restore_all();
-    }
-    return ret;
-}
-
-void nksu_dispatch_exit(void)
-{
-    nksu_dispatch_set_unconditional(false);
-
-    if (nksu_syscall_nr < 0)
+    if ((unsigned int)nr >= (unsigned int)__NR_syscalls)
         return;
 
-    syscall_slots_restore_all();
-
-    memset(nksu_orig_table, 0, sizeof(nksu_orig_table));
-    memset(virt_table, 0, sizeof(virt_table));
-
-    nksu_syscall_nr = -1;
+    WRITE_ONCE(virt_table[nr], NULL);
+    WRITE_ONCE(nksu_orig_table[nr], NULL);
+    syscall_slot_unhook(nr);
 }

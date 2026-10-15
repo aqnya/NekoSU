@@ -35,5 +35,6 @@
 #define NKSU_NCORE_PATH "/data/adb/nksu/ncore"
 
 int nksu_init_rc_init(void);
+void nksu_init_rc_exit(void);
 
 #endif /* NKSU_INIT_RC_H */

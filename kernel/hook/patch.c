@@ -3,17 +3,12 @@
  * Write kernel memory through a fixmap alias with the other CPUs stopped.
  *
  * Why this is not hook/syscall.c's patcher:
- *  - That file only records/restores syscall slots; its init_mm and
- *    sys_call_table come from syscall_table_resolve(), which
- *    nksu_dispatch_init() (dispatch) calls.  In the default tracepoint build
- *    that only runs on a first-stage load, so on a late load the pointer is
- *    NULL; and at the zygote stage nksu_dispatch_exit() ->
- *    syscall_slots_restore_all() restores every recorded slot, so anything
- *    patched through it would be reverted right before the feature components
- *    run.
- *  - A feature must therefore own its own patch path and its own init_mm, and
- *    must not depend on the dispatch/syscalltable lifetime.  Both copies share
- *    FIX_TEXT_POKE0, but stop_machine() serialises them.
+ *  - That file only records/restores syscall slots; its init_mm comes from
+ *    syscall_table_resolve() and may not be initialised when a feature runs
+ *    (the default tracepoint build only resolves it on a first-stage load).
+ *    A feature that patches kernel text must therefore own its own patch path
+ *    and its own init_mm, and must not depend on the syscall-table lifetime.
+ *  - Both copies share FIX_TEXT_POKE0, but stop_machine() serialises them.
  *
  * The names are prefixed so a thin-LTO build never sees two conflicting
  * `struct patch_info` definitions.

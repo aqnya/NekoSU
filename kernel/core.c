@@ -111,14 +111,9 @@ static const module_component_t feature_components[] = {
     },
 #ifdef CONFIG_NKSU_SYSCALL
     {
-        .name = "syscall dispatch",
-        .init = nksu_dispatch_init,
-        .exit = nksu_dispatch_exit,
-    },
-    {
         .name = "syscall hook",
         .init = init_syscall_hook,
-        .exit = NULL,
+        .exit = exit_syscall_hook,
     },
 #endif
     {

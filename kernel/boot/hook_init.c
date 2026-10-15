@@ -161,14 +161,16 @@ static long handle__NR_prctl_daemon(struct pt_regs *regs)
  * the sys_enter tracepoint + TIF_SYSCALL_TRACEPOINT), this one is driven from
  * the syscall table because it must be live from the first-stage (vendor_boot)
  * load, before any managed thread exists.  It follows init through
- * execve/execveat and hands the daemon its control fd via prctl; init_thread_fn
- * later calls nksu_dispatch_exit() to restore these slots.
+ * execve/execveat and hands the daemon its control fd via prctl; the slots are
+ * restored by unload_temp_syscall() at the zygote stage.
  */
 static const struct syscall_hook boot_syscall_hooks[] = {
     { __NR_execve, handle__NR_execve },
     { __NR_execveat, handle__NR_execveat },
     { __NR_prctl, handle__NR_prctl_daemon },
 };
+
+static bool temp_syscall_loaded;
 
 int load_temp_syscall(void)
 {
@@ -184,7 +186,7 @@ int load_temp_syscall(void)
         ret = nksu_redirect_syscall(boot_syscall_hooks[i].nr);
         if (ret) {
             pr_err("[hook]: can't redirect syscall %d: %d\n", boot_syscall_hooks[i].nr, ret);
-            return ret;
+            goto err;
         }
     }
 
@@ -192,10 +194,36 @@ int load_temp_syscall(void)
         ret = nksu_register_handler(boot_syscall_hooks[i].nr, boot_syscall_hooks[i].handler);
         if (ret) {
             pr_err("[hook]: can't register handler for syscall %d: %d\n", boot_syscall_hooks[i].nr, ret);
-            return ret;
+            goto err;
         }
     }
+    temp_syscall_loaded = true;
     return 0;
+
+err:
+    /* Undo a partial install; unhooking an unrecorded slot is a no-op. */
+    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
+        nksu_unhook_syscall(boot_syscall_hooks[i].nr);
+    nksu_dispatch_set_unconditional(false);
+    return ret;
+}
+
+/*
+ * Restore every slot the temporary watcher touched.  Called once, at the
+ * zygote stage (or on the unload/error path); the flag keeps it idempotent.
+ */
+static void unload_temp_syscall(void)
+{
+    int i;
+
+    if (!temp_syscall_loaded)
+        return;
+    temp_syscall_loaded = false;
+
+    nksu_init_rc_exit();
+    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
+        nksu_unhook_syscall(boot_syscall_hooks[i].nr);
+    nksu_dispatch_set_unconditional(false);
 }
 
 static int init_thread_fn(void *data)
@@ -243,10 +271,10 @@ static int init_thread_fn(void *data)
 
         if (READ_ONCE(zygote_seen) && !features_loaded) {
             /*
-             * Drop the temporary boot watcher first: the real syscall
-             * hooks reuse the same dispatcher tables.
+             * Drop the temporary boot watcher first: the steady-state hooks
+             * (and the daemon fd grant) install into the same slots.
              */
-            nksu_dispatch_exit();
+            unload_temp_syscall();
 
             /* Let the execve() that announced zygote settle. */
             msleep(100);
@@ -306,10 +334,6 @@ int hook_init(void)
 {
     int ret;
 
-    ret = nksu_dispatch_init();
-    if (ret)
-        return ret;
-
     ret = load_temp_syscall();
     if (ret)
         goto err_dispatch;
@@ -335,7 +359,7 @@ err_thread:
     stop_init_thread();
 
 err_dispatch:
-    nksu_dispatch_exit();
+    unload_temp_syscall();
     return ret;
 }
 
@@ -352,5 +376,5 @@ void hook_exit(void)
     if (READ_ONCE(early_loaded))
         nksu_exit_early_components();
 
-    nksu_dispatch_exit();
+    unload_temp_syscall();
 }
