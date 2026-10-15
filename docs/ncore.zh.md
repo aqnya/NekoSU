@@ -111,6 +111,24 @@ userspace/ncore/
 
 身份处理通过 `getpwuid`/`getpwnam`/`getgrnam` 解析名称；未知数字 uid 保持 `gid == uid`（Android `u0_aNNN`）。`can_switch_user()` 通过检查 root 或 `CAP_SETUID|CAP_SETGID` 来守护 `setgroups`/`setgid`/`setuid` 路径（避免 seccomp `SIGSYS`）。除非指定 `-p`，否则会设置 `HOME`/`USER`/`LOGNAME`/`SHELL`，把 `/data/adb/nksu` 前置到 `PATH`，并执行 `umask(022)`。默认 shell 为 `/system/bin/sh`。
 
+## resetprop {#resetprop}
+
+`ncore resetprop` 是 Magisk 兼容的系统属性工具，在 argparse CLI 之前拦截（与 `su` 相同）。它遵循 AOSP：bionic 的 `prop_area`/`prop_info` 布局与单写者 serial 协议（`libc/system_properties`）、`system/core/property_service/libpropertyinfoparser` 的 `property_info` 上下文 trie，以及 `system/core/init/persistent_properties` 的持久化属性文件。与 bionic 不同的是，ncore 以可写方式映射属性区，使 root 进程能直接新增/更新/删除属性（即 `-n` 的“跳过 property_service”行为），因此也能修改 `ro.*` 属性。
+
+| 用法 | 含义 |
+| --- | --- |
+| `resetprop NAME` | 打印值 |
+| `resetprop NAME VALUE` | 设置（经 property_service；`ro.*` 走直接写入） |
+| `resetprop -n NAME VALUE` | 强制直接写共享内存 |
+| `resetprop -d NAME` | 删除 |
+| `resetprop [-Z]` | 列出所有属性（`-Z` 时附带上下文） |
+| `resetprop -Z NAME` | 打印 NAME 的 SELinux 上下文 |
+| `resetprop -f FILE` | 从 FILE 加载 `NAME=VALUE` 行 |
+| `resetprop -w [--timeout S] NAME [VALUE]` | 等待 NAME 出现/变化 |
+| `resetprop [-Z] -c [--force] [NAME]` | 重建属性区（压缩） |
+| `-p` / `-P` | 同时操作 / 仅读取 `/data/property/persistent_properties` |
+| `-v` | 详细输出 |
+
 ## 模块运行时 {#module-runtime}
 
 ### 布局与兼容性 {#module-layout}

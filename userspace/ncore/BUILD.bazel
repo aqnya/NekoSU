@@ -100,11 +100,30 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+cc_library(
+    name = "prop",
+    srcs = [
+        "src/prop/persist.cc",
+        "src/prop/prop.cc",
+        "src/prop/resetprop.cc",
+    ],
+    hdrs = [
+        "include/prop.hpp",
+        "src/prop/prop_internal.hpp",
+    ],
+    includes = [
+        "include",
+        "src",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 cc_binary(
     name = "ncore",
     srcs = ["src/main.cc"],
     deps = [
         ":cli",
+        ":prop",
         ":su",
     ],
     visibility = ["//visibility:public"],

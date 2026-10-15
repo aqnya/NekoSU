@@ -111,6 +111,31 @@ Supported options:
 
 Identity handling resolves names via `getpwuid`/`getpwnam`/`getgrnam`; unknown numeric uids keep `gid == uid` (Android `u0_aNNN`). `can_switch_user()` guards the `setgroups`/`setgid`/`setuid` path by checking for root or `CAP_SETUID|CAP_SETGID` (avoiding a seccomp `SIGSYS`). Unless `-p` is given, `HOME`/`USER`/`LOGNAME`/`SHELL` are set, `PATH` gets `/data/adb/nksu` prepended, and `umask(022)` is applied. The default shell is `/system/bin/sh`.
 
+## resetprop {#resetprop}
+
+`ncore resetprop` is a Magisk-compatible system-property tool, reached before the
+argparse CLI (like `su`). It follows AOSP: the `prop_area`/`prop_info` layout and
+single-writer serial protocol from bionic (`libc/system_properties`), the
+`property_info` context trie from `system/core/property_service/libpropertyinfoparser`,
+and the persistent-property file from `system/core/init/persistent_properties`.
+Unlike bionic, ncore maps the areas read-write so a root process can add, update
+and delete properties directly (the `-n` "skip property_service" behaviour), which
+also lets `ro.*` properties be changed.
+
+| Usage | Meaning |
+| --- | --- |
+| `resetprop NAME` | Print the value |
+| `resetprop NAME VALUE` | Set (via property_service; `ro.*` goes direct) |
+| `resetprop -n NAME VALUE` | Force a direct shared-memory write |
+| `resetprop -d NAME` | Delete |
+| `resetprop [-Z]` | List all properties (with context when `-Z`) |
+| `resetprop -Z NAME` | Print NAME's SELinux context |
+| `resetprop -f FILE` | Load `NAME=VALUE` lines from FILE |
+| `resetprop -w [--timeout S] NAME [VALUE]` | Wait for NAME to exist / change |
+| `resetprop [-Z] -c [--force] [NAME]` | Rebuild a property area (compaction) |
+| `-p` / `-P` | Also touch / read only `/data/property/persistent_properties` |
+| `-v` | Verbose |
+
 ## Module runtime {#module-runtime}
 
 ### Layout and compatibility {#module-layout}

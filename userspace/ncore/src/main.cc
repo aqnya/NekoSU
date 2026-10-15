@@ -1,4 +1,5 @@
 #include "cli.hpp"
+#include "prop.hpp"
 #include "su/su.hpp"
 
 #include <cstring>
@@ -12,6 +13,9 @@ int main(int argc, char **argv) {
 
   if (argc > 1 && std::strcmp(argv[1], "su") == 0)
     return su::run(argc - 1, argv + 1);
+
+  if (argc > 1 && std::strcmp(argv[1], "resetprop") == 0)
+    return resetprop_main(argc - 1, argv + 1);
 
   cli::arguments args;
   const int rc = cli::parse_cli(argc, argv, args);
