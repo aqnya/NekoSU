@@ -1,37 +1,44 @@
-**English** | [简体中文](README.zh.md)
+# NekoSU
 
-# NekoSU Documentation
+[![Android CI](https://github.com/nksu-crew/NekoSU/actions/workflows/android.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/android.yml)
+[![Build LKM](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-NekoSU is a kernel-level root solution for Android, shipped as a loadable kernel module (`nksu.ko`) plus a Material 3 manager app. Its module system, WebUI and SELinux rule wire format are all compatible with KernelSU, so KernelSU modules and WebUIs work without modification.
+Kernel-level root solution for Android: a kernel module plus a Material 3 manager app.
+KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
-## Documentation
+**English** | [简体中文](docs/README_zh.md)
 
-| Page | Audience | What you'll learn |
-| --- | --- | --- |
-| [Architecture](architecture.md) | Contributors, reviewers | How the kernel module, `ncore` and the manager app fit together, and how they talk to each other |
-| [How to build](building.md) | Developers, packagers | Building the LKM, `ncore` and the manager app, and how CI produces the artifacts |
-| [Kernel module developer guide](kernel.md) | Kernel developers | The layout of `kernel/`, the boot flow, the hook layer and the control-fd ABI |
-| [ncore](ncore.md) | Userspace developers | The `ncore` runtime: CLI, `su`, the module system and boot-image patching |
-| [Usage](usage.md) | End users | Installing NekoSU, managing root and modules, and rescuing a failed boot |
+📖 [Documentation](docs/README.md) — architecture, build guide, kernel module reference, user manual.
 
-## Quick start
+---
 
-1. Read the [requirements](usage.md#requirements).
-2. Download the manager APK from **Actions → Android CI → artifacts (`release`)**.
-3. Follow the [installation guide](usage.md#installation-methods).
+## Features
 
-::: tip
-New to kernel-based root? Start with [Architecture](architecture.md) for the big picture, then [Usage](usage.md) if you just want to use NekoSU.
-:::
+1.Kernel-based su and root access management.
 
-## Related documents
+2.A more aggressive technical choice compared to KernelSU.
 
-- [`README.md`](../README.md) / [`README_zh.md`](README_zh.md) — project overview.
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) / [`CONTRIBUTING.zh.md`](CONTRIBUTING.zh.md) — how to contribute.
+## Requirements
 
-## Conventions
+- Android 12+ (minSdk 31), **arm64-v8a** only
+- Unlocked bootloader
 
-- **LKM** — loadable kernel module; NekoSU is built as `nksu.ko`.
-- **ncore** — the userspace module runtime. It is built from `userspace/ncore`, shipped in the APK as `libncore.so`, and executed (not loaded).
-- **KMI** — Kernel Module Interface, written as `android<NN>-<major.minor>` (e.g. `android14-6.1`).
-- **Manager** — the Android app (`me.nekosu.aqnya`).
+## Installation
+
+See [Installation methods](docs/usage.md#installation-methods).
+
+## Building
+
+See [How to build](docs/building.md).
+
+## Credits
+
+- [KernelSU](https://github.com/tiann/KernelSU) — the SELinux policy/rule engine, LSM hook layout,
+  `init.rc` injection technique, SELinux hiding and the WebUI `window.ksu` interface are ported from or
+  kept compatible with KernelSU, so KernelSU modules and WebUIs work with NekoSU.
+- BusyBox, Material 3 / Jetpack Compose and the open-source libraries listed in the app's *About → Open source* screen.
+
+## License
+
+[GPL-3.0](LICENSE)
