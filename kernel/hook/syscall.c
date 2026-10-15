@@ -65,11 +65,12 @@ static int restore_slot(unsigned long addr)
     int i, ret;
 
     spin_lock_irqsave(&hook_lock, flags);
-    for (i = 0; i < hook_count; i++) {
+    /* newest first: a later hook on the same slot wraps the earlier one */
+    for (i = hook_count - 1; i >= 0; i--) {
         if (hook_table[i].addr == addr)
             break;
     }
-    if (i == hook_count) {
+    if (i < 0) {
         spin_unlock_irqrestore(&hook_lock, flags);
         pr_debug("nksu: restore: slot not recorded\n");
         return -ENOENT;
@@ -91,7 +92,7 @@ static syscall_fn_t recorded_previous(unsigned long addr)
     int i;
 
     spin_lock_irqsave(&hook_lock, flags);
-    for (i = 0; i < hook_count; i++) {
+    for (i = hook_count - 1; i >= 0; i--) {
         if (hook_table[i].addr == addr) {
             previous = hook_table[i].previous;
             break;

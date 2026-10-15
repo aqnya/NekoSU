@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Steady-state control-fd grant for the boot daemon.
+ * Root-visible control-fd grant for the boot daemon.
  *
- * The temporary boot watcher (boot/hook_init.c) lets root obtain the control
- * fd via prctl(NKSU_PRCTL_GET_DRIVER_FD) while it is alive, but it is torn
- * down at zygote.  ncore runs as a separate process at every stage, so the
- * later stages (services, boot-completed) need the grant again.  This component
- * installs a normal (non-transient) __NR_prctl slot hook at feature-init time
- * that keeps granting the fd to root for the rest of the boot, and unhooks it
- * on the way out.
+ * ncore runs as root, outside the uid profile, and is exec'd as a fresh
+ * process at every boot stage; it needs the control fd (prctl 204, the manager
+ * gate does not apply to it) to reach the safe-mode / sepolicy ioctls.  Since
+ * the temporary boot watcher (boot/hook_init.c) no longer hooks prctl and
+ * nothing group-restores slots, this component is armed in the early group at
+ * second_stage and keeps the prctl slot hooked for the whole boot.
  *
- * It is registered last in feature_components so that, in the
- * CONFIG_NKSU_SYSCALL build, it wraps the steady-state dispatcher and is
- * removed before the dispatcher's group restore runs.
+ * It is removed when ncore disarms safe mode (IOC_DISARM_SAFEMODE, its last
+ * stage) or at module unload.
  */
 
 #include <linux/cred.h>
@@ -54,14 +52,8 @@ int nksu_daemon_fd_init(void)
 {
 	int ret;
 
-	if (!syscall_table) {
-		ret = syscall_table_resolve();
-		if (ret) {
-			pr_err("[daemon] cannot resolve sys_call_table: %d\n",
-			       ret);
-			return 0;
-		}
-	}
+	if (nksu_daemon_hooked)
+		return 0;
 
 	ret = syscall_slot_hook(__NR_prctl, nksu_daemon_prctl,
 				&nksu_daemon_orig_prctl, "nksu_daemon_fd");

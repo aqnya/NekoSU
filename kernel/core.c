@@ -54,6 +54,18 @@ static const module_component_t early_components[] = {
         .init = nksu_safe_mode_init,
         .exit = nksu_safe_mode_exit,
     },
+    {
+        /*
+         * Grant the control fd to root from second_stage on.  The temporary
+         * boot watcher no longer hooks prctl and nothing group-restores slots,
+         * so this hook simply persists across zygote: ncore can query safe
+         * mode / sepolicy at post-fs-data and every later stage.  Its exit
+         * (IOC_DISARM_SAFEMODE, or module unload) removes it.
+         */
+        .name = "daemon fd",
+        .init = nksu_daemon_fd_init,
+        .exit = nksu_daemon_fd_exit,
+    },
 };
 
 /*
@@ -116,17 +128,6 @@ static const module_component_t feature_components[] = {
         .exit = exit_syscall_hook,
     },
 #endif
-    {
-        /*
-         * Last: keep the control fd obtainable by root after the temporary
-         * boot watcher is gone, so ncore can query safe mode / sepolicy at
-         * every stage.  Wrapping the syscall dispatcher here means the reverse
-         * cleanup removes it before the dispatcher is restored.
-         */
-        .name = "daemon fd",
-        .init = nksu_daemon_fd_init,
-        .exit = nksu_daemon_fd_exit,
-    },
 };
 
 static int nekosu_init_component(const module_component_t *comp, int index)

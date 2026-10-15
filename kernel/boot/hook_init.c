@@ -7,7 +7,6 @@
 #include "hook/dispatch.h"
 #include "hook/hook.h"
 #include "hook/tools.h"
-#include "manager/ioctl.h"
 #include "selinux/selinux.h"
 #include "nksu.h"
 #include "boot/init_rc.h"
@@ -130,44 +129,17 @@ static long handle__NR_execveat(struct pt_regs *regs)
 }
 
 /*
- * Daemon control fd: the boot-time ncore runs as root and cannot call the
- * manager-gated prctl 203, so grant it the [fmac_ctl] fd here.  The temporary
- * watcher dispatches unconditionally, so this reaches the daemon even though
- * it is not in the profile.
- */
-static long handle__NR_prctl_daemon(struct pt_regs *regs)
-{
-#if defined(__aarch64__)
-    unsigned long option = regs->regs[0];
-#elif defined(__x86_64__)
-    unsigned long option = regs->di;
-#else
-    unsigned long option = 0;
-#endif
-
-    if (option != NKSU_PRCTL_GET_DRIVER_FD)
-        return 0;
-
-    if (!uid_eq(current_uid(), GLOBAL_ROOT_UID) &&
-        !uid_eq(current_euid(), GLOBAL_ROOT_UID))
-        return 0;
-
-    fmac_ctlfd_get();
-    return 1;
-}
-
-/*
  * Stage-period-only watcher.  Unlike handle.c's steady-state hooks (which use
  * the sys_enter tracepoint + TIF_SYSCALL_TRACEPOINT), this one is driven from
  * the syscall table because it must be live from the first-stage (vendor_boot)
  * load, before any managed thread exists.  It follows init through
- * execve/execveat and hands the daemon its control fd via prctl; the slots are
- * restored by unload_temp_syscall() at the zygote stage.
+ * execve/execveat (to detect the boot stages); the slots are restored by
+ * unload_temp_syscall() at the zygote stage.  The control-fd prctl grant lives
+ * in manager/daemon.c and is armed earlier, at second_stage.
  */
 static const struct syscall_hook boot_syscall_hooks[] = {
     { __NR_execve, handle__NR_execve },
     { __NR_execveat, handle__NR_execveat },
-    { __NR_prctl, handle__NR_prctl_daemon },
 };
 
 static bool temp_syscall_loaded;
@@ -278,9 +250,6 @@ static int init_thread_fn(void *data)
 
             /* Let the execve() that announced zygote settle. */
             msleep(100);
-
-            if (!early_loaded && nksu_init_early_components() == 0)
-                early_loaded = true;
 
             if (!selinux_loaded &&
                 nksu_init_selinux_components() == 0)
