@@ -48,7 +48,7 @@ val managerPackage: String =
     (project.findProperty("managerId") as? String)
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
-        ?: "me.nekosu.aqnya"
+        ?: "me.aqnya.nekosu"
 
 android {
     namespace = "me.nekosu.aqnya"
