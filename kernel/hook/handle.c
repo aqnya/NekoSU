@@ -48,26 +48,38 @@ long handle_prctl_hooks(struct pt_regs *regs)
 }
 
 /*
+ * The x86-64 ABI reserves the 128 bytes below the stack pointer as the red
+ * zone: live scratch that the kernel preserves across signal delivery.  The
+ * staged string must therefore sit *below* that range, or it could clobber a
+ * caller's red-zone locals.  arm64 has no red zone, but skipping the same
+ * 128 bytes there is harmless.
+ */
+#define NKSU_STACK_REDZONE 128UL
+
+/*
  * Stage a replacement path argument on the user stack and return its address,
  * or 0 on failure.
  *
  * The wrapped syscall reads the string synchronously -- we never return to
  * user mode in between -- so it only has to survive for the duration of the
- * call.  The free part of the stack just below sp is the cheapest place to
- * put it: it is already mapped, needs no allocation and cannot clash with
- * live frames.  Keep it as close to sp as possible so it stays well clear of
- * the guard page at the bottom of the stack; copy_to_user() performs its own
- * access_ok() check (a separate call is redundant and discouraged), so an
- * address outside the mapped stack simply fails the copy.
+ * call.  The area below the red zone is already mapped, needs no allocation
+ * and cannot clash with live frames; align it like the ABI stack and keep it
+ * clear of the guard page.  copy_to_user() performs its own access_ok() check
+ * (a separate call is redundant and discouraged), so an address outside the
+ * mapped stack simply fails the copy.
  */
 static unsigned long push_str(unsigned long sp, const char *str, size_t len)
 {
-    unsigned long addr;
+    unsigned long size, addr;
 
-    if (unlikely(!len || len > PAGE_SIZE || sp < len))
+    if (unlikely(!len || len > PAGE_SIZE))
         return 0;
 
-    addr = sp - len;
+    size = ALIGN(len, 16);
+    if (unlikely(sp < NKSU_STACK_REDZONE + size))
+        return 0;
+
+    addr = sp - NKSU_STACK_REDZONE - size;
     if (unlikely(copy_to_user((void __user *)addr, str, len)))
         return 0;
 
