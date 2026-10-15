@@ -591,14 +591,24 @@ static DEFINE_MUTEX(appscan_mutex);
 static int scan_and_apply(void)
 {
     const struct cred *old;
-    struct abx_package paths = { 0 };
+    struct abx_package *paths;
     uid_t uid;
     int ret = -1;
+
+    /*
+     * Off the stack: abx_package carries several 256-byte path buffers and
+     * would otherwise push this (heavily inlined) frame past the kernel's
+     * limit.
+     */
+    paths = kzalloc(sizeof(*paths), GFP_KERNEL);
+    if (!paths)
+        return -ENOMEM;
 
     mutex_lock(&appscan_mutex);
     old = nksu_borrow_creds_begin();
     if (!old) {
         mutex_unlock(&appscan_mutex);
+        kfree(paths);
         return -ENOMEM;
     }
 
@@ -608,12 +618,12 @@ static int scan_and_apply(void)
      * that declares a sharedUserId, packages.list reports the shared UID, so
      * the whole shared uid (not a single package) is what gets manager rights.
      */
-    if (!verify_package_signature(&paths))
+    if (!verify_package_signature(paths))
         goto out;
 
-    uid = get_uid_from_packages_list(paths.name);
+    uid = get_uid_from_packages_list(paths->name);
     if (uid == (uid_t)-1) {
-        pr_err("[manager] Could not find UID for %s\n", paths.name);
+        pr_err("[manager] Could not find UID for %s\n", paths->name);
         goto out;
     }
 
@@ -628,7 +638,7 @@ static int scan_and_apply(void)
     manager_kuid = make_kuid(current_user_ns(), uid);
     /* Install ncore/busybox before the profile store writes its file so
      * /data/adb/nksu exists for the first save. */
-    install_ncore_from_manager(&paths);
+    install_ncore_from_manager(paths);
     nksu_profile_set_default(uid);
 #ifndef CONFIG_NKSU_SYSCALL
     mark_zygote();
@@ -638,6 +648,7 @@ static int scan_and_apply(void)
 out:
     nksu_borrow_creds_end(old);
     mutex_unlock(&appscan_mutex);
+    kfree(paths);
 
     /*
      * No ncore means no module can run this boot, so volume-key safe mode has
