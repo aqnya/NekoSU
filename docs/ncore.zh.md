@@ -113,7 +113,7 @@ userspace/ncore/
 
 ## resetprop {#resetprop}
 
-`ncore resetprop` 是 Magisk 兼容的系统属性工具，在 argparse CLI 之前拦截（与 `su` 相同）。它遵循 AOSP：bionic 的 `prop_area`/`prop_info` 布局与单写者 serial 协议（`libc/system_properties`）、`system/core/property_service/libpropertyinfoparser` 的 `property_info` 上下文 trie，以及 `system/core/init/persistent_properties` 的持久化属性文件。与 bionic 不同的是，ncore 以可写方式映射属性区，使 root 进程能直接新增/更新/删除属性（即 `-n` 的“跳过 property_service”行为），因此也能修改 `ro.*` 属性。
+`ncore resetprop` 是 Magisk 兼容的系统属性工具，在 argparse CLI 之前拦截（与 `su` 相同）。它遵循 AOSP：bionic 的 `prop_area`/`prop_info` 布局与单写者 serial 协议（`libc/system_properties`）、`system/core/property_service/libpropertyinfoparser` 的 `property_info` 上下文 trie，以及 `system/core/init/persistent_properties` 的持久化属性文件。与 bionic 不同的是，ncore 以可写方式映射属性区，使 root 进程能直接新增/更新/删除属性（即 `-n` 的“跳过 property_service”行为），因此也能修改 `ro.*` 属性。Android 14+ 下还会加载额外的 `/dev/__properties__/appcompat_override` 目录，每次写入都会去掉 `ro.appcompat_override.` 前缀后镜像过去，与 bionic 的双写一致。
 
 | 用法 | 含义 |
 | --- | --- |

@@ -120,7 +120,10 @@ single-writer serial protocol from bionic (`libc/system_properties`), the
 and the persistent-property file from `system/core/init/persistent_properties`.
 Unlike bionic, ncore maps the areas read-write so a root process can add, update
 and delete properties directly (the `-n` "skip property_service" behaviour), which
-also lets `ro.*` properties be changed.
+also lets `ro.*` properties be changed. On Android 14+ the extra
+`/dev/__properties__/appcompat_override` directory is loaded too, and each set is
+mirrored there with the `ro.appcompat_override.` prefix stripped, matching
+bionic's dual-write.
 
 | Usage | Meaning |
 | --- | --- |

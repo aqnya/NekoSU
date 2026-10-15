@@ -37,7 +37,6 @@ class SystemProperties {
   // map the serial area read-write.  Returns false when the areas cannot be
   // reached (e.g. not root), in which case only __system_property_* reads work.
   bool Init();
-  bool initialized() const { return initialized_; }
 
   // Read a property.  Returns std::nullopt when it does not exist.
   std::optional<std::string> Get(const std::string &name);
@@ -68,25 +67,14 @@ class SystemProperties {
   bool Rebuild(const std::string &name, bool force);
 
  private:
-  SystemProperties() = default;
+  SystemProperties();
+  ~SystemProperties();
 
-  struct Area;
-
-  Area *AreaForName(const std::string &name);
-  Area *AreaForIndex(uint32_t index);
-  bool MapSerial();
-
-  bool initialized_ = false;
-  bool presplit_ = false;
-  std::string props_dir_;
-
-  // property_info (Serialized layout) kept in memory.
-  std::vector<uint8_t> info_;
-  bool serialized_ = false;
-
-  std::vector<Area *> areas_;      // indexed by context index
-  Area *serial_area_ = nullptr;
-  Area *presplit_area_ = nullptr;  // PreSplit layout only
+  // Internal per-directory state (defined in prop.cc); `appcompat_` is null
+  // when the Android 14+ override directory is absent.
+  struct PropContext;
+  PropContext *main_;
+  PropContext *appcompat_;
 };
 
 // Persistent-property file (/data/property/persistent_properties), protobuf.

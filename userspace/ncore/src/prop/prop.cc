@@ -3,6 +3,11 @@
 // See prop_internal.hpp.  Layout and ordering follow AOSP bionic
 // (libc/system_properties) and system/core (property_info parser, persistent
 // properties).
+//
+// Android 14+ keeps a second property directory, /dev/__properties__/
+// appcompat_override, whose values override the main ones for compatibility.
+// Setting a property is mirrored there (with the `ro.appcompat_override.`
+// prefix stripped), matching bionic's SystemProperties::Update/Add.
 #include "prop/prop_internal.hpp"
 
 #include <fcntl.h>
@@ -32,6 +37,8 @@ constexpr const char kLongErr[] = "Must use __system_property_read_callback() to
 constexpr const char *kDefaultContext = "u:object_r:default_prop:s0";
 constexpr const char *kPreSplitContext = "u:object_r:properties_device:s0";
 constexpr const char *kDir = "/dev/__properties__";
+constexpr const char *kAppcompatDir = "/dev/__properties__/appcompat_override";
+constexpr const char *kAppcompatPrefix = "ro.appcompat_override.";
 
 struct AreaHeader {
   uint32_t bytes_used;
@@ -68,7 +75,6 @@ static_assert(sizeof(TrieNode) == 20, "prop_trie_node size");
 static_assert(sizeof(PropInfo) == 96, "prop_info size");
 
 inline uint32_t align4(uint32_t v) { return (v + 3u) & ~3u; }
-
 inline uint32_t load(const uint32_t *p, int order) {
   return __atomic_load_n(const_cast<uint32_t *>(p), order);
 }
@@ -92,7 +98,6 @@ const char *read_cstr(const std::vector<uint8_t> &b, size_t off) {
   return reinterpret_cast<const char *>(b.data() + off);
 }
 
-// Binary search helper: f(i) returns strcmp-like ordering.
 template <typename F>
 int bsearch_index(uint32_t n, F &&f) {
   int lo = 0, hi = static_cast<int>(n) - 1;
@@ -105,13 +110,13 @@ int bsearch_index(uint32_t n, F &&f) {
   return -1;
 }
 
-} // namespace
+bool starts_with(const std::string &s, const char *p) {
+  return s.compare(0, strlen(p), p) == 0;
+}
 
 // ── property_info (context trie) parser ─────────────────────────────────────
 //
 // Layout is system/core/property_service/libpropertyinfoparser.
-
-namespace {
 
 uint32_t info_num_contexts(const std::vector<uint8_t> &d) {
   uint32_t ctx = read_u32(d, 12);
@@ -214,11 +219,9 @@ uint32_t info_context_index(const std::vector<uint8_t> &d, const char *name) {
   return ret_ctx;
 }
 
-} // namespace
-
 // ── prop area ───────────────────────────────────────────────────────────────
 
-struct SystemProperties::Area {
+struct Area {
   void *base = nullptr;
   size_t size = 0;
   size_t data_size = 0;
@@ -227,11 +230,7 @@ struct SystemProperties::Area {
   AreaHeader *hdr() { return reinterpret_cast<AreaHeader *>(base); }
   char *data() { return reinterpret_cast<char *>(base) + sizeof(AreaHeader); }
   char *dirty_backup() { return data() + sizeof(TrieNode); }
-
-  void *to_obj(uint32_t off) {
-    if (off > data_size) return nullptr;
-    return data() + off;
-  }
+  void *to_obj(uint32_t off) { return off > data_size ? nullptr : data() + off; }
 
   static Area *map_rw(const std::string &path, const std::string &context) {
     int fd = open(path.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW);
@@ -272,18 +271,6 @@ struct SystemProperties::Area {
     a->size = size;
     a->data_size = size - sizeof(AreaHeader);
     return a;
-  }
-
-  void collect(std::vector<Property> *out) {
-    auto fn = [](const PropInfo *pi, void *cookie) {
-      auto *v = static_cast<std::vector<Property> *>(cookie);
-      uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
-      const char *value = (serial & kLongFlag)
-                              ? reinterpret_cast<const char *>(pi) + pi->long_property.offset
-                              : pi->value;
-      v->push_back(Property{pi->name, value});
-    };
-    foreach (fn, out);
   }
 
   void *allocate(size_t sz, uint32_t *off) {
@@ -471,7 +458,8 @@ struct SystemProperties::Area {
 
   bool foreach (void (*fn)(const PropInfo *, void *), void *cookie) {
     return foreach_node(reinterpret_cast<TrieNode *>(to_obj(0)), fn, cookie);
-  }  bool foreach_node(TrieNode *t, void (*fn)(const PropInfo *, void *), void *cookie) {
+  }
+  bool foreach_node(TrieNode *t, void (*fn)(const PropInfo *, void *), void *cookie) {
     if (!t) return false;
     uint32_t l = __atomic_load_n(&t->left, __ATOMIC_RELAXED);
     if (l && !foreach_node(reinterpret_cast<TrieNode *>(to_obj(l)), fn, cookie)) return false;
@@ -488,194 +476,268 @@ struct SystemProperties::Area {
   }
 };
 
+} // namespace
+
+// ── one property directory (main or appcompat_override) ─────────────────────
+
+struct SystemProperties::PropContext {
+  std::vector<uint8_t> info;
+  std::string dir;
+  bool presplit = false;
+  std::vector<Area *> areas;
+  Area *serial = nullptr;
+  Area *presplit_area = nullptr;
+
+  bool Load(const std::string &path) {
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) return false;
+    if (!S_ISDIR(st.st_mode)) {
+      presplit = true;
+      dir = path;
+      presplit_area = Area::map_rw(path, kPreSplitContext);
+      serial = presplit_area;
+      return presplit_area != nullptr;
+    }
+
+    dir = path;
+    std::string info_path = path + "/property_info";
+    int fd = open(info_path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) return false;
+    struct stat ist;
+    if (fstat(fd, &ist) != 0 || ist.st_size < 24) {
+      close(fd);
+      return false;
+    }
+    info.resize(ist.st_size);
+    ssize_t n = read(fd, info.data(), info.size());
+    close(fd);
+    if (n != static_cast<ssize_t>(info.size())) return false;
+
+    serial = Area::map_rw(path + "/properties_serial", "properties_serial");
+    if (!serial) return false;
+    areas.assign(info_num_contexts(info), nullptr);
+    return true;
+  }
+
+  uint32_t index_for_name(const std::string &name) {
+    if (presplit) return 0;
+    return info_context_index(info, name.c_str());
+  }
+
+  Area *AreaForIndex(uint32_t index) {
+    if (presplit) return presplit_area;
+    if (index >= areas.size()) return nullptr;
+    if (areas[index]) return areas[index];
+    const char *ctx = info_context(info, index);
+    if (!ctx) return nullptr;
+    areas[index] = Area::map_rw(dir + "/" + ctx, ctx);
+    return areas[index];
+  }
+
+  Area *AreaForName(const std::string &name) {
+    uint32_t idx = index_for_name(name);
+    if (idx == ~0u) return nullptr;
+    return AreaForIndex(idx);
+  }
+
+  std::string Context(const std::string &name) {
+    if (presplit) return kPreSplitContext;
+    uint32_t idx = index_for_name(name);
+    if (idx == ~0u) return kDefaultContext;
+    const char *ctx = info_context(info, idx);
+    return ctx ? ctx : kDefaultContext;
+  }
+
+  std::vector<std::string> Contexts() {
+    std::vector<std::string> out;
+    if (presplit) {
+      out.emplace_back(kPreSplitContext);
+      return out;
+    }
+    uint32_t n = info_num_contexts(info);
+    for (uint32_t i = 0; i < n; i++) {
+      const char *ctx = info_context(info, i);
+      if (ctx) out.emplace_back(ctx);
+    }
+    return out;
+  }
+
+  void bump_serial() {
+    if (!serial) return;
+    uint32_t *s = &serial->hdr()->serial;
+    store(s, load(s, __ATOMIC_RELAXED) + 1, __ATOMIC_RELEASE);
+    futex_wake(s);
+  }
+
+  std::optional<std::string> get(const std::string &name) {
+    Area *pa = AreaForName(name);
+    if (!pa) return std::nullopt;
+    PropInfo *pi = pa->find(name.c_str());
+    if (!pi) return std::nullopt;
+
+    uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
+    if (serial & kLongFlag)
+      return std::string(reinterpret_cast<const char *>(pi) + pi->long_property.offset);
+
+    char buf[kValueMax];
+    for (;;) {
+      uint32_t len = serial >> 24;
+      if (len >= kValueMax) len = kValueMax - 1;
+      if (serial & 1) memcpy(buf, pa->dirty_backup(), len + 1);
+      else memcpy(buf, pi->value, len + 1);
+      __atomic_thread_fence(__ATOMIC_ACQUIRE);
+      uint32_t again = load(&pi->serial, __ATOMIC_RELAXED);
+      if (again == serial) break;
+      serial = again;
+      __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    }
+    return std::string(buf);
+  }
+
+  bool upsert(const std::string &name, const std::string &value) {
+    Area *pa = AreaForName(name);
+    if (!pa) return false;
+    PropInfo *pi = pa->find(name.c_str());
+    bool old_long = pi && (load(&pi->serial, __ATOMIC_RELAXED) & kLongFlag);
+    if (pi && !old_long && value.size() < kValueMax) {
+      if (pa->update(pi, value.c_str(), static_cast<uint32_t>(value.size())) != 0) return false;
+    } else {
+      if (pi) pa->remove(name.c_str());
+      if (!pa->add(name.c_str(), static_cast<uint32_t>(name.size()), value.c_str(),
+                   static_cast<uint32_t>(value.size())))
+        return false;
+    }
+    bump_serial();
+    return true;
+  }
+
+  bool remove(const std::string &name) {
+    Area *pa = AreaForName(name);
+    if (!pa) return false;
+    bool ok = pa->remove(name.c_str());
+    if (ok) bump_serial();
+    return ok;
+  }
+
+  void ForEach(const std::function<void(const Property &)> &fn) {
+    auto visitor = [](const PropInfo *pi, void *cookie) {
+      auto *cb = static_cast<const std::function<void(const Property &)> *>(cookie);
+      uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
+      const char *value = (serial & kLongFlag)
+                              ? reinterpret_cast<const char *>(pi) + pi->long_property.offset
+                              : pi->value;
+      (*cb)(Property{pi->name, value});
+    };
+    if (presplit) {
+      if (presplit_area) presplit_area->foreach (visitor, (void *)&fn);
+      return;
+    }
+    for (uint32_t i = 0; i < areas.size(); i++) {
+      Area *pa = AreaForIndex(i);
+      if (pa) pa->foreach (visitor, (void *)&fn);
+    }
+  }
+};
+
+// Area::collect needs PropContext, so define it here.
+void area_collect(Area *pa, std::vector<Property> *out) {
+  auto fn = [](const PropInfo *pi, void *cookie) {
+    auto *v = static_cast<std::vector<Property> *>(cookie);
+    uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
+    const char *value = (serial & kLongFlag)
+                            ? reinterpret_cast<const char *>(pi) + pi->long_property.offset
+                            : pi->value;
+    v->push_back(Property{pi->name, value});
+  };
+  pa->foreach (fn, out);
+}
+
 // ── SystemProperties ────────────────────────────────────────────────────────
+
+SystemProperties::SystemProperties() : main_(nullptr), appcompat_(nullptr) {}
+
+SystemProperties::~SystemProperties() {
+  delete main_;
+  delete appcompat_;
+}
 
 SystemProperties &SystemProperties::Instance() {
   static SystemProperties inst;
   return inst;
 }
 
-bool SystemProperties::MapSerial() {
-  serial_area_ = Area::map_rw(props_dir_ + "/properties_serial", "properties_serial");
-  return serial_area_ != nullptr;
-}
-
 bool SystemProperties::Init() {
-  if (initialized_) return true;
+  if (main_) return true;
+
+  auto *main_ctx = new PropContext();
+  if (!main_ctx->Load(kDir)) {
+    delete main_ctx;
+    return false;
+  }
+  main_ = main_ctx;
 
   struct stat st;
-  if (stat(kDir, &st) != 0) {
-    // Legacy PreSplit layout: a single prop-area file.
-    if (stat("/dev/__properties__", &st) == 0 && !S_ISDIR(st.st_mode)) {
-      presplit_ = true;
-      props_dir_ = "/dev/__properties__";
-      presplit_area_ = Area::map_rw(props_dir_, kPreSplitContext);
-      serial_area_ = presplit_area_;
-      initialized_ = presplit_area_ != nullptr;
-      return initialized_;
-    }
-    return false;
+  if (stat(kAppcompatDir, &st) == 0 && S_ISDIR(st.st_mode)) {
+    auto *app = new PropContext();
+    if (app->Load(kAppcompatDir))
+      appcompat_ = app;  // optional: ignore failure
+    else
+      delete app;
   }
-  props_dir_ = kDir;
-
-  // Serialized layout: parse property_info.
-  std::string info_path = props_dir_ + "/property_info";
-  int fd = open(info_path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-  if (fd < 0) return false;
-  struct stat ist;
-  if (fstat(fd, &ist) != 0 || ist.st_size < 24) {
-    close(fd);
-    return false;
-  }
-  info_.resize(ist.st_size);
-  ssize_t n = read(fd, info_.data(), info_.size());
-  close(fd);
-  if (n != static_cast<ssize_t>(info_.size())) return false;
-  serialized_ = true;
-
-  if (!MapSerial()) return false;
-  areas_.assign(info_num_contexts(info_), nullptr);
-  initialized_ = true;
   return true;
 }
 
-SystemProperties::Area *SystemProperties::AreaForIndex(uint32_t index) {
-  if (presplit_) return presplit_area_;
-  if (index >= areas_.size()) return nullptr;
-  if (areas_[index]) return areas_[index];
-  const char *ctx = info_context(info_, index);
-  if (!ctx) return nullptr;
-  areas_[index] = Area::map_rw(props_dir_ + "/" + ctx, ctx);
-  return areas_[index];
-}
-
-SystemProperties::Area *SystemProperties::AreaForName(const std::string &name) {
-  if (!initialized_) return nullptr;
-  if (presplit_) return presplit_area_;
-  uint32_t idx = info_context_index(info_, name.c_str());
-  if (idx == ~0u) return nullptr;
-  return AreaForIndex(idx);
+std::optional<std::string> SystemProperties::Get(const std::string &name) {
+  if (!main_) return std::nullopt;
+  return main_->get(name);
 }
 
 std::string SystemProperties::GetContext(const std::string &name) {
-  if (presplit_) return kPreSplitContext;
-  uint32_t idx = info_context_index(info_, name.c_str());
-  if (idx == ~0u) return kDefaultContext;
-  const char *ctx = info_context(info_, idx);
-  return ctx ? ctx : kDefaultContext;
+  if (!main_) return kDefaultContext;
+  return main_->Context(name);
 }
 
 std::vector<std::string> SystemProperties::Contexts() {
-  std::vector<std::string> out;
-  if (presplit_) {
-    out.emplace_back(kPreSplitContext);
-    return out;
-  }
-  uint32_t n = info_num_contexts(info_);
-  for (uint32_t i = 0; i < n; i++) {
-    const char *ctx = info_context(info_, i);
-    if (ctx) out.emplace_back(ctx);
-  }
-  return out;
-}
-
-std::optional<std::string> SystemProperties::Get(const std::string &name) {
-  if (!initialized_) return std::nullopt;
-  Area *pa = AreaForName(name);
-  if (!pa) return std::nullopt;
-  PropInfo *pi = pa->find(name.c_str());
-  if (!pi) return std::nullopt;
-
-  uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
-  if (serial & kLongFlag) {
-    // Long value lives after the prop_info; it is immutable (ro.* only).
-    return std::string(reinterpret_cast<const char *>(pi) + pi->long_property.offset);
-  }
-
-  char buf[kValueMax];
-  for (;;) {
-    uint32_t len = serial >> 24;
-    if (len >= kValueMax) len = kValueMax - 1;
-    if (serial & 1) {
-      memcpy(buf, pa->dirty_backup(), len + 1);
-    } else {
-      memcpy(buf, pi->value, len + 1);
-    }
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
-    uint32_t again = load(&pi->serial, __ATOMIC_RELAXED);
-    if (again == serial) break;
-    serial = again;
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
-  }
-  return std::string(buf);
+  if (!main_) return {};
+  return main_->Contexts();
 }
 
 int SystemProperties::Set(const std::string &name, const std::string &value) {
-  if (!initialized_) return -ENODEV;
-  Area *pa = AreaForName(name);
-  if (!pa) return -ENOENT;
-  bool can_be_long = strncmp(name.c_str(), "ro.", 3) == 0;
+  if (!main_) return -ENODEV;
+  bool can_be_long = starts_with(name, "ro.");
   if (value.size() >= kValueMax && !can_be_long) return -EINVAL;
 
-  PropInfo *pi = pa->find(name.c_str());
-  bool old_long = pi && (load(&pi->serial, __ATOMIC_RELAXED) & kLongFlag);
-  if (pi && !old_long && value.size() < kValueMax) {
-    int ret = pa->update(pi, value.c_str(), static_cast<uint32_t>(value.size()));
-    if (ret != 0) return ret;
-  } else {
-    // New property, or an inline/long layout change: delete then add.
-    if (pi) pa->remove(name.c_str());
-    if (!pa->add(name.c_str(), static_cast<uint32_t>(name.size()), value.c_str(),
-                 static_cast<uint32_t>(value.size())))
-      return -ENOMEM;
-  }
-  if (serial_area_) {
-    uint32_t *s = &serial_area_->hdr()->serial;
-    store(s, load(s, __ATOMIC_RELAXED) + 1, __ATOMIC_RELEASE);
-    futex_wake(s);
+  if (!main_->AreaForName(name)) return -ENOENT;
+  if (!main_->upsert(name, value)) return -ENOMEM;
+
+  // Android 14+ dual-write: mirror into the appcompat_override area with the
+  // `ro.appcompat_override.` prefix stripped.
+  if (appcompat_) {
+    std::string ov = name;
+    if (starts_with(ov, kAppcompatPrefix)) ov.erase(0, strlen(kAppcompatPrefix));
+    if (!ov.empty() && appcompat_->AreaForName(ov)) appcompat_->upsert(ov, value);
   }
   return 0;
 }
 
 bool SystemProperties::Delete(const std::string &name) {
-  if (!initialized_) return false;
-  Area *pa = AreaForName(name);
-  if (!pa) return false;
-  bool ok = pa->remove(name.c_str());
-  if (ok && serial_area_) {
-    uint32_t *s = &serial_area_->hdr()->serial;
-    store(s, load(s, __ATOMIC_RELAXED) + 1, __ATOMIC_RELEASE);
-    futex_wake(s);
+  if (!main_) return false;
+  bool ok = main_->remove(name);
+  if (appcompat_) {
+    std::string ov = name;
+    if (starts_with(ov, kAppcompatPrefix)) ov.erase(0, strlen(kAppcompatPrefix));
+    if (!ov.empty()) appcompat_->remove(ov);
   }
   return ok;
 }
 
 void SystemProperties::ForEach(const std::function<void(const Property &)> &fn) {
-  if (!initialized_) return;
-  auto visitor = [](const PropInfo *pi, void *cookie) {
-    auto *cb = static_cast<const std::function<void(const Property &)> *>(cookie);
-    const char *value;
-    uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
-    if (serial & kLongFlag) {
-      value = reinterpret_cast<const char *>(pi) + pi->long_property.offset;
-    } else {
-      value = pi->value;
-    }
-    (*cb)(Property{pi->name, value});
-  };
-  if (presplit_) {
-    if (presplit_area_) presplit_area_->foreach (visitor, const_cast<void *>(static_cast<const void *>(&fn)));
-    return;
-  }
-  for (uint32_t i = 0; i < areas_.size(); i++) {
-    Area *pa = AreaForIndex(i);
-    if (pa) pa->foreach (visitor, const_cast<void *>(static_cast<const void *>(&fn)));
-  }
+  if (main_) main_->ForEach(fn);
 }
 
 bool SystemProperties::Wait(const std::string &name, const std::optional<std::string> &old_value,
                             double timeout_sec) {
-  if (!initialized_) return false;
+  if (!main_) return false;
   struct timespec ts;
   struct timespec *tsp = nullptr;
   if (timeout_sec >= 0) {
@@ -684,7 +746,7 @@ bool SystemProperties::Wait(const std::string &name, const std::optional<std::st
     tsp = &ts;
   }
   for (;;) {
-    Area *pa = AreaForName(name);
+    Area *pa = main_->AreaForName(name);
     PropInfo *pi = pa ? pa->find(name.c_str()) : nullptr;
     if (pi) {
       auto cur = Get(name);
@@ -693,8 +755,8 @@ bool SystemProperties::Wait(const std::string &name, const std::optional<std::st
       uint32_t serial = load(&pi->serial, __ATOMIC_RELAXED);
       if (futex_wait(&pi->serial, serial, tsp) < 0 && errno == ETIMEDOUT) return false;
     } else {
-      if (!serial_area_) return false;
-      uint32_t *s = &serial_area_->hdr()->serial;
+      if (!main_->serial) return false;
+      uint32_t *s = &main_->serial->hdr()->serial;
       uint32_t serial = load(s, __ATOMIC_RELAXED);
       if (futex_wait(s, serial, tsp) < 0 && errno == ETIMEDOUT) return false;
     }
@@ -703,12 +765,12 @@ bool SystemProperties::Wait(const std::string &name, const std::optional<std::st
 
 bool SystemProperties::Rebuild(const std::string &name, bool force) {
   (void)force;
-  if (!initialized_) return false;
+  if (!main_) return false;
 
   auto rebuild_area = [](Area *pa) -> bool {
     if (!pa) return true;
     std::vector<Property> props;
-    pa->collect(&props);
+    area_collect(pa, &props);
 
     Area *tmp = Area::create_anon(pa->size);
     if (!tmp) return false;
@@ -727,9 +789,10 @@ bool SystemProperties::Rebuild(const std::string &name, bool force) {
     return true;
   };
 
-  if (presplit_) return rebuild_area(presplit_area_);
-  if (!name.empty()) return rebuild_area(AreaForName(name));
-  for (uint32_t i = 0; i < areas_.size(); i++) rebuild_area(AreaForIndex(i));
+  if (main_->presplit) return rebuild_area(main_->presplit_area);
+  if (!name.empty()) return rebuild_area(main_->AreaForName(name));
+  for (uint32_t i = 0; i < main_->areas.size(); i++)
+    rebuild_area(main_->AreaForIndex(i));
   return true;
 }
 
