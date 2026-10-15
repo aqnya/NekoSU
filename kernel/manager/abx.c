@@ -2,9 +2,9 @@
 /*
  * Android Binary XML (ABX) reader, split out of manager.c.
  *
- * Only what the manager scan needs: locate one <package name="..."> entry, its
- * signing certificate and its codePath / nativeLibraryPath attributes.  See
- * manager/abx.h for the wire format.
+ * Only what the manager scan needs: locate the <package> belonging to a given
+ * shared user, plus its name, signing certificate and codePath /
+ * nativeLibraryPath attributes.  See manager/abx.h for the wire format.
  */
 
 #include <linux/kernel.h>
@@ -141,8 +141,9 @@ static void copy_path_attr(char *dst, size_t cap, const u8 *src, size_t len)
 	dst[n] = '\0';
 }
 
-bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
-		      struct abx_package *out)
+bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
+				     const char *shared_user,
+				     struct abx_package *out)
 {
 	struct abx_reader r = { .buf = buf, .len = len, .pos = ABX_MAGIC_LEN };
 	const u8 *name;
@@ -180,8 +181,10 @@ bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
 			break;
 		} else if (tok == ABX_TOKEN_START_TAG) {
 			bool is_sigs, is_cert, is_pkg;
-			const u8 *pkg_attr = NULL;
-			size_t pkg_attr_len = 0;
+			const u8 *name_attr = NULL;
+			size_t name_attr_len = 0;
+			const u8 *su_attr = NULL;
+			size_t su_attr_len = 0;
 			const u8 *code_attr = NULL;
 			size_t code_attr_len = 0;
 			const u8 *nlib_attr = NULL;
@@ -233,8 +236,12 @@ bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
 					    r.pos + slen > r.len)
 						goto out_free;
 					if (abx_str_eq(aname, alen, "name")) {
-						pkg_attr = r.buf + r.pos;
-						pkg_attr_len = slen;
+						name_attr = r.buf + r.pos;
+						name_attr_len = slen;
+					} else if (abx_str_eq(aname, alen,
+							      "sharedUserId")) {
+						su_attr = r.buf + r.pos;
+						su_attr_len = slen;
 					} else if (abx_str_eq(aname, alen, "codePath")) {
 						code_attr = r.buf + r.pos;
 						code_attr_len = slen;
@@ -251,8 +258,12 @@ bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
 					if (abx_read_interned(&r, &v, &vlen) < 0)
 						goto out_free;
 					if (abx_str_eq(aname, alen, "name")) {
-						pkg_attr = v;
-						pkg_attr_len = vlen;
+						name_attr = v;
+						name_attr_len = vlen;
+					} else if (abx_str_eq(aname, alen,
+							      "sharedUserId")) {
+						su_attr = v;
+						su_attr_len = vlen;
 					} else if (abx_str_eq(aname, alen, "codePath")) {
 						code_attr = v;
 						code_attr_len = vlen;
@@ -292,11 +303,13 @@ bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
 			}
 
 			is_pkg = (pkg_depth < 0) &&
-				 abx_str_eq(name, nlen, "package") && pkg_attr &&
-				 abx_str_eq(pkg_attr, pkg_attr_len, package_name);
+				 abx_str_eq(name, nlen, "package") && su_attr &&
+				 abx_str_eq(su_attr, su_attr_len, shared_user);
 
 			if (is_pkg) {
 				pkg_depth = depth;
+				copy_path_attr(out->name, sizeof(out->name),
+					       name_attr, name_attr_len);
 				copy_path_attr(out->code_path,
 					       sizeof(out->code_path),
 					       code_attr, code_attr_len);
@@ -345,7 +358,7 @@ bool abx_find_package(const u8 *buf, size_t len, const char *package_name,
 check:
 	out->cert = cert;
 	out->cert_len = cert_len;
-	found = cert && cert_len > 0;
+	found = cert && cert_len > 0 && out->name[0] != '\0';
 
 out_free:
 	kvfree(r.interned);

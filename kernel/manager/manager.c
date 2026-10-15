@@ -40,7 +40,14 @@
 #pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
 #endif
 
-#define TARGET_PACKAGE "me.nekosu.aqnya"
+/*
+ * Manager identity.  We key on the manager's shared user (its manifest
+ * sharedUserId) plus the signing certificate, never on the package name: the
+ * manager can be reinstalled under a new package name (rotation) as long as it
+ * keeps the same sharedUserId and signing key, and every app in that shared uid
+ * is then treated as the manager.
+ */
+#define TARGET_SHARED_USER "me.nekosu.shared"
 #define TARGET_HASH                                                                                                    \
     "\xd8\x09\xb6\x34\x80\xbe\xea\x60\x86\xcd\x78\x68\xe4\x2f\x2e\xb2\xb9\x20\x2c\x67\x0c\x0d\x3d\xb0\x89\x4e\x9e\x43\x12\xf1\x28\xe9"
 
@@ -95,11 +102,13 @@ static int sha256_bytes(const u8 *data, size_t len, u8 out[32])
 }
 
 /*
- * Verify the manager's signing certificate in /data/system/packages.xml and
- * capture its on-disk locations.  The ABX parsing lives in manager/abx.c; here
- * we only hash the certificate it returns and compare it with TARGET_HASH.
- * nativeLibraryPath is the extracted jniLibs directory (<codePath>/lib/<abi>);
- * codePath is the fallback for images that do not write it.
+ * Verify the manager package's signing certificate in /data/system/packages.xml
+ * and capture its on-disk locations.  The package is located by its shared user
+ * (TARGET_SHARED_USER), not by name, so a renamed manager is still found; the
+ * ABX parsing lives in manager/abx.c and here we only hash the certificate it
+ * returns and compare it with TARGET_HASH.  nativeLibraryPath is the extracted
+ * jniLibs directory (<codePath>/lib/<abi>); codePath is the fallback for images
+ * that do not write it.
  */
 static bool verify_package_signature(struct abx_package *paths)
 {
@@ -131,12 +140,16 @@ static bool verify_package_signature(struct abx_package *paths)
     if (rd != (ssize_t)fsize)
         goto out_free;
 
-    if (abx_find_package(buf, fsize, TARGET_PACKAGE, paths)) {
+    if (abx_find_package_by_shared_user(buf, fsize, TARGET_SHARED_USER, paths)) {
         u8 hash[32];
 
         if (sha256_bytes(paths->cert, paths->cert_len, hash) == 0 &&
             !memcmp(hash, TARGET_HASH, 32))
             valid = true;
+        else
+            pr_err("[manager] signature mismatch for %s\n", paths->name);
+    } else {
+        pr_err("[manager] no package found in shared user %s\n", TARGET_SHARED_USER);
     }
 
 out_free:
@@ -589,33 +602,38 @@ static int scan_and_apply(void)
         return -ENOMEM;
     }
 
-    uid = get_uid_from_packages_list(TARGET_PACKAGE);
+    /*
+     * Locate the manager by its shared user + signing certificate -- never by
+     * a fixed package name -- then resolve the UID it runs as.  For a package
+     * that declares a sharedUserId, packages.list reports the shared UID, so
+     * the whole shared uid (not a single package) is what gets manager rights.
+     */
+    if (!verify_package_signature(&paths))
+        goto out;
+
+    uid = get_uid_from_packages_list(paths.name);
     if (uid == (uid_t)-1) {
-        pr_err("[manager] Could not find UID for %s\n", TARGET_PACKAGE);
+        pr_err("[manager] Could not find UID for %s\n", paths.name);
         goto out;
     }
 
-    if (verify_package_signature(&paths)) {
-        pr_info("[manager] Verification passed. "
-                "Granting privileges to UID %u\n",
-                uid);
-        /*
-         * Record the UID before granting the profile so the store can leave
-         * the manager's own entry out of allow.profile: it is re-created on
-         * every boot from this verified scan, never restored from disk.
-         */
-        manager_kuid = make_kuid(current_user_ns(), uid);
-        /* Install ncore/busybox before the profile store writes its file so
-         * /data/adb/nksu exists for the first save. */
-        install_ncore_from_manager(&paths);
-        nksu_profile_set_default(uid);
+    pr_info("[manager] Verification passed. "
+            "Granting privileges to UID %u\n",
+            uid);
+    /*
+     * Record the UID before granting the profile so the store can leave
+     * the manager's own entry out of allow.profile: it is re-created on
+     * every boot from this verified scan, never restored from disk.
+     */
+    manager_kuid = make_kuid(current_user_ns(), uid);
+    /* Install ncore/busybox before the profile store writes its file so
+     * /data/adb/nksu exists for the first save. */
+    install_ncore_from_manager(&paths);
+    nksu_profile_set_default(uid);
 #ifndef CONFIG_NKSU_SYSCALL
-        mark_zygote();
+    mark_zygote();
 #endif
-        ret = 0;
-    } else {
-        pr_err("[manager] Signature mismatch!\n");
-    }
+    ret = 0;
 
 out:
     nksu_borrow_creds_end(old);
