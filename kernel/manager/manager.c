@@ -78,39 +78,59 @@ bool is_ncore_ready(void)
 
 /* The ABX (Android Binary XML) parser lives in manager/abx.c. */
 
-static int sha256_bytes(const u8 *data, size_t len, u8 out[32])
-{
+/*
+ * One SHA-256 transform for the whole scan.  The certificate loop hashes every
+ * candidate package, so allocating (and tearing down) a shash per call is pure
+ * overhead; allocate it once and reset it per message.
+ */
+struct sha256_hasher {
     struct crypto_shash *tfm;
     struct shash_desc *desc;
-    int ret = -1;
+};
 
-    tfm = crypto_alloc_shash("sha256", 0, 0);
-    if (IS_ERR(tfm))
+static int sha256_hasher_init(struct sha256_hasher *h)
+{
+    h->tfm = crypto_alloc_shash("sha256", 0, 0);
+    if (IS_ERR(h->tfm)) {
+        h->tfm = NULL;
         return -1;
-
-    desc = kmalloc(sizeof(*desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
-    if (desc) {
-        desc->tfm = tfm;
-        if (crypto_shash_init(desc) == 0 && crypto_shash_update(desc, data, len) == 0 &&
-            crypto_shash_final(desc, out) == 0)
-            ret = 0;
-        kfree(desc);
     }
-    crypto_free_shash(tfm);
-    return ret;
+    h->desc = kmalloc(sizeof(*h->desc) + crypto_shash_descsize(h->tfm), GFP_KERNEL);
+    if (!h->desc) {
+        crypto_free_shash(h->tfm);
+        h->tfm = NULL;
+        return -1;
+    }
+    h->desc->tfm = h->tfm;
+    return 0;
+}
+
+static void sha256_hasher_exit(struct sha256_hasher *h)
+{
+    kfree(h->desc);
+    if (h->tfm)
+        crypto_free_shash(h->tfm);
+}
+
+static int sha256_hasher_run(struct sha256_hasher *h, const u8 *data, size_t len, u8 out[32])
+{
+    if (crypto_shash_init(h->desc) || crypto_shash_update(h->desc, data, len) ||
+        crypto_shash_final(h->desc, out))
+        return -1;
+    return 0;
 }
 
 /*
  * Accept a package whose signing certificate hashes to TARGET_HASH.  This is
  * the only thing that identifies the manager, so its package name is free to
- * change between installs.
+ * change between installs.  `ctx` is the scan-wide sha256_hasher.
  */
 static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
 {
+    struct sha256_hasher *h = ctx;
     u8 hash[32];
 
-    (void)ctx;
-    return sha256_bytes(cert, cert_len, hash) == 0 &&
+    return sha256_hasher_run(h, cert, cert_len, hash) == 0 &&
            !memcmp(hash, TARGET_HASH, 32);
 }
 
@@ -129,6 +149,7 @@ static bool verify_package_signature(struct abx_package *paths)
     ssize_t rd;
     size_t fsize;
     u8 *buf;
+    struct sha256_hasher hasher;
     bool valid = false;
 
     fp = filp_open(PACKAGES_XML_PATH, O_RDONLY, 0);
@@ -152,13 +173,17 @@ static bool verify_package_signature(struct abx_package *paths)
     if (rd != (ssize_t)fsize)
         goto out_free;
 
-    if (abx_find_package_by_cert(buf, fsize, manager_cert_match, NULL, paths)) {
-        valid = true;
+    if (sha256_hasher_init(&hasher))
+        goto out_free;
+
+    valid = abx_find_package_by_cert(buf, fsize, manager_cert_match, &hasher, paths);
+    sha256_hasher_exit(&hasher);
+
+    if (valid)
         pr_info("[manager] %s (uid %u) has the manager signature\n",
                 paths->name, paths->uid);
-    } else {
+    else
         pr_err("[manager] no package signed with the manager certificate\n");
-    }
 
 out_free:
     kvfree(buf);
@@ -269,10 +294,17 @@ static int mark_zygote(void)
      * access_process_vm()), so it must not run under rcu_read_lock() -- that
      * warns "Voluntary context switch within RCU read-side critical section".
      * Pin every candidate under RCU, then read the cmdlines after unlocking.
+     *
+     * The tracepoint flag is only ever set (and new threads inherit it), so a
+     * process already carrying it needs no re-check: skip it here and never
+     * pay for its cmdline copy.  This makes every scan after the first one
+     * touch only newly created processes.
      */
     rcu_read_lock();
     for_each_process(p) {
         if (p->flags & PF_KTHREAD)
+            continue;
+        if (test_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT))
             continue;
         if (n == NKSU_ZYGOTE_SNAPSHOT_MAX)
             break;

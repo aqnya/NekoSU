@@ -154,6 +154,9 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 	bool found = false;
 	const u8 *cert = NULL;
 	size_t cert_len = 0;
+	/* Whether the current package's certificate has been offered to match().
+	 * Only the first <cert> (the current signer) is checked. */
+	bool cert_checked = false;
 
 	memset(out, 0, sizeof(*out));
 
@@ -322,6 +325,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 				pkg_depth = depth;
 				cert = NULL;
 				cert_len = 0;
+				cert_checked = false;
 				copy_path_attr(out->name, sizeof(out->name),
 					       name_attr, name_attr_len);
 				copy_path_attr(out->code_path,
@@ -337,10 +341,13 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 				sigs_depth = depth;
 
 			if (cert && cert_len > 0) {
-				if (match(cert, cert_len, ctx))
-					goto check;
-				/* Not the package we want; forget this cert and
-				 * keep scanning the rest of the document. */
+				if (!cert_checked) {
+					cert_checked = true;
+					if (match(cert, cert_len, ctx))
+						goto check;
+				}
+				/* Not the package we want (or a past cert we do not
+				 * check); forget it and keep scanning. */
 				cert = NULL;
 				cert_len = 0;
 			}
