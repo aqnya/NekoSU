@@ -2,8 +2,8 @@
 /*
  * Android Binary XML (ABX) reader, split out of manager.c.
  *
- * Only what the manager scan needs: locate the <package> belonging to a given
- * shared user, plus its name, signing certificate and codePath /
+ * Only what the manager scan needs: find the <package> whose signing
+ * certificate the caller accepts, plus its name, user id and codePath /
  * nativeLibraryPath attributes.  See manager/abx.h for the wire format.
  */
 
@@ -141,9 +141,9 @@ static void copy_path_attr(char *dst, size_t cap, const u8 *src, size_t len)
 	dst[n] = '\0';
 }
 
-bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
-				     const char *shared_user,
-				     struct abx_package *out)
+bool abx_find_package_by_cert(const u8 *buf, size_t len,
+			      abx_cert_match match, void *ctx,
+			      struct abx_package *out)
 {
 	struct abx_reader r = { .buf = buf, .len = len, .pos = ABX_MAGIC_LEN };
 	const u8 *name;
@@ -157,7 +157,8 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 
 	memset(out, 0, sizeof(*out));
 
-	if (len < ABX_MAGIC_LEN || memcmp(buf, ABX_MAGIC, ABX_MAGIC_LEN) != 0)
+	if (!match || len < ABX_MAGIC_LEN ||
+	    memcmp(buf, ABX_MAGIC, ABX_MAGIC_LEN) != 0)
 		return false;
 
 	r.interned = kvmalloc_array(ABX_MAX_INTERNED_STRINGS,
@@ -183,12 +184,12 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 			bool is_sigs, is_cert, is_pkg;
 			const u8 *name_attr = NULL;
 			size_t name_attr_len = 0;
-			const u8 *su_attr = NULL;
-			size_t su_attr_len = 0;
 			const u8 *code_attr = NULL;
 			size_t code_attr_len = 0;
 			const u8 *nlib_attr = NULL;
 			size_t nlib_attr_len = 0;
+			u32 shared_uid = 0, own_uid = 0;
+			bool shared_seen = false, own_seen = false;
 
 			if (abx_read_interned(&r, &name, &nlen) < 0)
 				goto out_free;
@@ -238,10 +239,6 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 					if (abx_str_eq(aname, alen, "name")) {
 						name_attr = r.buf + r.pos;
 						name_attr_len = slen;
-					} else if (abx_str_eq(aname, alen,
-							      "sharedUserId")) {
-						su_attr = r.buf + r.pos;
-						su_attr_len = slen;
 					} else if (abx_str_eq(aname, alen, "codePath")) {
 						code_attr = r.buf + r.pos;
 						code_attr_len = slen;
@@ -252,25 +249,41 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 					}
 					r.pos += slen;
 				} else if (typ2 == ABX_TYPE_STRING_INTERNED) {
-					const u8 *v;
-					size_t vlen;
+					const u8 *sv;
+					size_t svlen;
 
-					if (abx_read_interned(&r, &v, &vlen) < 0)
+					if (abx_read_interned(&r, &sv, &svlen) < 0)
 						goto out_free;
 					if (abx_str_eq(aname, alen, "name")) {
-						name_attr = v;
-						name_attr_len = vlen;
-					} else if (abx_str_eq(aname, alen,
-							      "sharedUserId")) {
-						su_attr = v;
-						su_attr_len = vlen;
+						name_attr = sv;
+						name_attr_len = svlen;
 					} else if (abx_str_eq(aname, alen, "codePath")) {
-						code_attr = v;
-						code_attr_len = vlen;
+						code_attr = sv;
+						code_attr_len = svlen;
 					} else if (abx_str_eq(aname, alen,
 							      "nativeLibraryPath")) {
-						nlib_attr = v;
-						nlib_attr_len = vlen;
+						nlib_attr = sv;
+						nlib_attr_len = svlen;
+					}
+				} else if (typ2 == ABX_TYPE_INT ||
+					   typ2 == ABX_TYPE_INT_HEX) {
+					u32 v;
+
+					if (r.pos + 4 > r.len)
+						goto out_free;
+					v = ((u32)r.buf[r.pos] << 24) |
+					    ((u32)r.buf[r.pos + 1] << 16) |
+					    ((u32)r.buf[r.pos + 2] << 8) |
+					    (u32)r.buf[r.pos + 3];
+					r.pos += 4;
+					if (abx_str_eq(aname, alen,
+						       "sharedUserId")) {
+						shared_uid = v;
+						shared_seen = true;
+					} else if (abx_str_eq(aname, alen,
+							      "userId")) {
+						own_uid = v;
+						own_seen = true;
 					}
 				} else if (typ2 == ABX_TYPE_BYTES_HEX ||
 					   typ2 == ABX_TYPE_BYTES_BASE64) {
@@ -280,18 +293,16 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 					    r.pos + blen > r.len)
 						goto out_free;
 					r.pos += blen;
-				} else if (typ2 == ABX_TYPE_INT ||
-					   typ2 == ABX_TYPE_INT_HEX ||
-					   typ2 == ABX_TYPE_FLOAT) {
+				} else if (typ2 == ABX_TYPE_FLOAT) {
 					if (r.pos + 4 > r.len)
 						goto out_free;
 					r.pos += 4;
 				} else if (typ2 == ABX_TYPE_LONG ||
 					   typ2 == ABX_TYPE_LONG_HEX ||
 					   typ2 == ABX_TYPE_DOUBLE) {
-					u64 v;
+					u64 lv;
 
-					if (abx_read_u64(&r, &v) < 0)
+					if (abx_read_u64(&r, &lv) < 0)
 						goto out_free;
 				} else if (typ2 == ABX_TYPE_BOOLEAN_TRUE ||
 					   typ2 == ABX_TYPE_BOOLEAN_FALSE ||
@@ -302,12 +313,15 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 				}
 			}
 
+			/* Every top-level <package> is a candidate; the caller's
+			 * match() decides which one is the manager. */
 			is_pkg = (pkg_depth < 0) &&
-				 abx_str_eq(name, nlen, "package") && su_attr &&
-				 abx_str_eq(su_attr, su_attr_len, shared_user);
+				 abx_str_eq(name, nlen, "package");
 
 			if (is_pkg) {
 				pkg_depth = depth;
+				cert = NULL;
+				cert_len = 0;
 				copy_path_attr(out->name, sizeof(out->name),
 					       name_attr, name_attr_len);
 				copy_path_attr(out->code_path,
@@ -316,16 +330,28 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 				copy_path_attr(out->native_lib_path,
 					       sizeof(out->native_lib_path),
 					       nlib_attr, nlib_attr_len);
+				out->uid = shared_seen ? shared_uid : own_uid;
+				out->has_uid = shared_seen || own_seen;
 			}
 			if (is_sigs)
 				sigs_depth = depth;
-			if (cert && cert_len > 0)
-				goto check;
+
+			if (cert && cert_len > 0) {
+				if (match(cert, cert_len, ctx))
+					goto check;
+				/* Not the package we want; forget this cert and
+				 * keep scanning the rest of the document. */
+				cert = NULL;
+				cert_len = 0;
+			}
 		} else if (tok == ABX_TOKEN_END_TAG) {
 			if (abx_read_interned(&r, &name, &nlen) < 0)
 				goto out_free;
-			if (depth == pkg_depth)
+			if (depth == pkg_depth) {
 				pkg_depth = -1;
+				cert = NULL;
+				cert_len = 0;
+			}
 			if (depth == sigs_depth)
 				sigs_depth = -1;
 			depth--;
@@ -358,7 +384,7 @@ bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
 check:
 	out->cert = cert;
 	out->cert_len = cert_len;
-	found = cert && cert_len > 0 && out->name[0] != '\0';
+	found = true;
 
 out_free:
 	kvfree(r.interned);

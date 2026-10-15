@@ -7,7 +7,7 @@
 /*
  * Minimal parser for Android Binary XML (ABX), the format
  * com.android.modules.utils.BinaryXmlSerializer produces.  Used to pull a
- * package's signing certificate and on-disk paths out of
+ * package's signing certificate, user id and on-disk paths out of
  * /data/system/packages.xml.
  *
  * The wire format: every event is a single byte whose low nibble is an
@@ -23,24 +23,29 @@ struct abx_package {
 	 * caller's buffer, not NUL-terminated. */
 	const u8 *cert;
 	size_t cert_len;
-	/* The matched package's own name attribute (its installed name), so the
-	 * caller can resolve its uid without hard-coding the name. */
+	/* The package's own name attribute (its installed name). */
 	char name[256];
+	/* The package's user id: the numeric sharedUserId for a shared-user
+	 * member, otherwise the numeric userId.  Both are written as ints. */
+	u32 uid;
+	bool has_uid;
 	/* codePath / nativeLibraryPath attributes, NUL-terminated. */
 	char code_path[256];
 	char native_lib_path[256];
 };
 
+/* Accept or reject a package by its DER certificate.  Return true to take it. */
+typedef bool (*abx_cert_match)(const u8 *cert, size_t cert_len, void *ctx);
+
 /*
- * Find the first <package> whose sharedUserId attribute equals `shared_user`
- * in the ABX document buf[0..len) and fill `out`.  Matching the shared user
- * (instead of a fixed package name) lets the manager be reinstalled under a
- * new package name as long as it keeps the same sharedUserId and signing key,
- * and lets every app in that shared uid count as the manager.  Returns true
- * when such a package and a certificate were found.
+ * Find the first <package> whose certificate is accepted by `match` and fill
+ * `out` (including its name and user id).  Matching the signing certificate
+ * means the manager is recognised no matter what package name it is installed
+ * under, and lets the caller read the shared uid straight from the entry.
+ * Returns true when such a package and a certificate were found.
  */
-bool abx_find_package_by_shared_user(const u8 *buf, size_t len,
-				     const char *shared_user,
-				     struct abx_package *out);
+bool abx_find_package_by_cert(const u8 *buf, size_t len,
+			      abx_cert_match match, void *ctx,
+			      struct abx_package *out);
 
 #endif /* NKSU_MANAGER_ABX_H */
