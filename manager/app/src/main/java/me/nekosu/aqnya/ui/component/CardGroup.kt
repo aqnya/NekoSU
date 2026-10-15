@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -118,9 +119,14 @@ fun ListRow(
     supporting: @Composable (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
+    val shapes = currentListItemShapes()
     SegmentedListItem(
-        modifier = modifier,
-        shapes = currentListItemShapes(),
+        // Clip to the segmented shape first: callers attach clickable()/
+        // toggleable() through `modifier`, and the item's Surface applies its
+        // rounded shape only inside this chain -- so the press ripple would
+        // otherwise spill over the square corners.
+        modifier = Modifier.clip(shapes.shape).then(modifier),
+        shapes = shapes,
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
         leadingContent = icon,
         supportingContent = supporting,
