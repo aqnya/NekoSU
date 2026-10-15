@@ -20,4 +20,9 @@ static inline bool argv_eq(const char *buf, int n, size_t buflen,
 int get_argvx(struct pt_regs *regs, unsigned int argno,
               unsigned int idx, char *buf, size_t len);
 
+/* Copy a plain string argument (e.g. the exec filename) into buf; the result
+ * is always NUL-terminated.  Bounded to len bytes. */
+int get_path_arg(struct pt_regs *regs, unsigned int argno,
+                 char *buf, size_t len);
+
 int get_argc(struct pt_regs *regs, unsigned int argno);

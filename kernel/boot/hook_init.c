@@ -3,6 +3,7 @@
 #include <linux/delay.h>
 #include <linux/completion.h>
 #include <linux/cred.h>
+#include <linux/string.h>
 #include "hook/syscall.h"
 #include "hook/dispatch.h"
 #include "hook/hook.h"
@@ -78,6 +79,37 @@ static int read_argv1(struct pt_regs *regs, unsigned int argv_argno,
 }
 
 /*
+ * Boot-stage exec targets, matched on the exec *path* before any argv is
+ * read:
+ *   - init (pid 1) re-execs itself (execve, not execveat) to advance its own
+ *     stages; pid 1 is handled directly, so it needs no path filter;
+ *   - the first zygote is /system/bin/app_process{,32,64} with "-Xzygote".
+ *
+ * Reading argv is the expensive part (a get_user for the pointer plus a
+ * strncpy_from_user of up to MAX_ARG_LEN), and it would otherwise run for
+ * every process until zygote appears.  Matching the path first -- a single
+ * bounded copy of at most 32 bytes -- keeps that cost to the two exec
+ * programs that can actually matter.
+ */
+#define NKSU_APP_PROCESS_PATH "/system/bin/app_process"
+#define NKSU_EXEC_PATH_MAX    32
+
+/* "/system/bin/app_process" with an optional 32/64 ABI suffix. */
+static bool exec_path_is_app_process(const char *path, int n)
+{
+    const size_t base = sizeof(NKSU_APP_PROCESS_PATH) - 1;
+
+    if (unlikely(n < (int)base))
+        return false;
+    if (memcmp(path, NKSU_APP_PROCESS_PATH, base) != 0)
+        return false;
+
+    return path[base] == '\0' ||
+           strcmp(path + base, "32") == 0 ||
+           strcmp(path + base, "64") == 0;
+}
+
+/*
  * init re-execs itself with execve() (not execveat): first "selinux_setup"
  * once the policy is about to be loaded, later "second_stage".  The first
  * zygote is exec'd even later, when /data is ready.
@@ -85,9 +117,10 @@ static int read_argv1(struct pt_regs *regs, unsigned int argv_argno,
 static void watch_exec(struct pt_regs *regs, unsigned int argv_argno)
 {
     char arg1[MAX_ARG_LEN];
+    char path[NKSU_EXEC_PATH_MAX];
     int n;
 
-    if (current->pid == 1) {
+    if (unlikely(current->pid == 1)) {
         n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
         if (n < 0) {
             pr_warn("nksu: get_argvx failed: %d\n", n);
@@ -106,13 +139,27 @@ static void watch_exec(struct pt_regs *regs, unsigned int argv_argno)
         return;
     }
 
-    if (!READ_ONCE(zygote_seen)) {
-        n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
-        if (n > 0 && argv_eq(arg1, n, sizeof(arg1), "-Xzygote")) {
-            WRITE_ONCE(zygote_seen, true);
-            pr_info("nksu: zygote is starting\n");
-            notify_stage();
-        }
+    if (READ_ONCE(zygote_seen))
+        return;
+
+    /*
+     * The zygote is the first app_process* exec'd by init while still root
+     * (its service has `user root`; it only drops uid once it forks apps).
+     * Reject everything else before touching user memory: most boot execs
+     * are non-root services, and the rest fail the path match.
+     */
+    if (unlikely(!uid_eq(current_euid(), GLOBAL_ROOT_UID)))
+        return;
+
+    n = get_path_arg(regs, argv_argno - 1, path, sizeof(path));
+    if (n < 0 || !exec_path_is_app_process(path, n))
+        return;
+
+    n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
+    if (n > 0 && argv_eq(arg1, n, sizeof(arg1), "-Xzygote")) {
+        WRITE_ONCE(zygote_seen, true);
+        pr_info("nksu: zygote is starting\n");
+        notify_stage();
     }
 }
 

@@ -83,6 +83,32 @@ static int get_argc_at(const char __user *const __user *uargv)
     return get_argvx_at(regs_uargv(regs, argno), idx, buf, len);
 }
 
+/*
+ * Read a plain string argument (not an argv entry).  Used for the exec
+ * filename: execve arg0, execveat arg1.  One bounded copy_from_user, and the
+ * buffer is always NUL-terminated on success.
+ */
+ int get_path_arg(struct pt_regs *regs, unsigned int argno,
+                         char *buf, size_t len)
+{
+    const char __user *upath;
+    long n;
+
+    if (unlikely(!current->mm || !buf || len < 2))
+        return -EINVAL;
+
+    upath = (const char __user *)regs_arg(regs, argno);
+    if (unlikely(!upath))
+        return -EINVAL;
+
+    n = strncpy_from_user(buf, upath, len);
+    if (unlikely(n < 0))
+        return -EFAULT;
+
+    buf[len - 1] = '\0';
+    return (int)n;
+}
+
  int get_argc(struct pt_regs *regs, unsigned int argno)
 {
     if (unlikely(!current->mm))
