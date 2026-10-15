@@ -49,12 +49,15 @@ long handle_prctl_hooks(struct pt_regs *regs)
 
 /*
  * The x86-64 ABI reserves the 128 bytes below the stack pointer as the red
- * zone: live scratch that the kernel preserves across signal delivery.  The
- * staged string must therefore sit *below* that range, or it could clobber a
- * caller's red-zone locals.  arm64 has no red zone, but skipping the same
- * 128 bytes there is harmless.
+ * zone: live scratch that the kernel preserves across signal delivery, so the
+ * staged string has to sit below it or it could clobber a caller's red-zone
+ * locals.  aarch64 has no red zone, so there is nothing to skip there.
  */
+#if defined(__x86_64__)
 #define NKSU_STACK_REDZONE 128UL
+#else
+#define NKSU_STACK_REDZONE 0UL
+#endif
 
 /*
  * Stage a replacement path argument on the user stack and return its address,
@@ -62,11 +65,11 @@ long handle_prctl_hooks(struct pt_regs *regs)
  *
  * The wrapped syscall reads the string synchronously -- we never return to
  * user mode in between -- so it only has to survive for the duration of the
- * call.  The area below the red zone is already mapped, needs no allocation
- * and cannot clash with live frames; align it like the ABI stack and keep it
- * clear of the guard page.  copy_to_user() performs its own access_ok() check
- * (a separate call is redundant and discouraged), so an address outside the
- * mapped stack simply fails the copy.
+ * call.  The area below the red zone (see above) is already mapped, needs no
+ * allocation and cannot clash with live frames; align it like the ABI stack
+ * and keep it clear of the guard page.  copy_to_user() performs its own
+ * access_ok() check (a separate call is redundant and discouraged), so an
+ * address outside the mapped stack simply fails the copy.
  */
 static unsigned long push_str(unsigned long sp, const char *str, size_t len)
 {
