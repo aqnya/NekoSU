@@ -110,7 +110,7 @@ Component groups:
 | `__NR_setresuid` | `hook__NR_setresuid` | credential handling for escalated processes |
 | `__NR_faccessat` / `__NR_newfstatat` | `hook_path_at` | path redirect for `su`/`sh` |
 
-`try_redirect_path()` rewrites `/system/bin/su` and `/system/bin/sh` to `REDIRECT_TARGET` (= `NKSU_NCORE_PATH`), then calls `privilege_escalate_from_profile(NULL)` and `nksu_relabel_tty_fds()`.
+`try_redirect_path()` rewrites `/system/bin/su` and `/system/bin/sh` to `REDIRECT_TARGET` (= `NKSU_NCORE_PATH`), then calls `privilege_escalate_from_profile(NULL)`.
 
 ### Two interception strategies {#strategies}
 
@@ -202,7 +202,7 @@ struct privilege_desc {
 
 ## selinux {#selinux}
 
-- `selinux.c` — domain constants `DOMAIN "nksu"`, `DOMAIN_FILE "nksu_file"`, contexts `u:r:nksu:s0` / `u:object_r:nksu_file:s0`. Provides `setenforce`/`getenforce`, `set_domain`, `nksu_borrow_creds_begin/end/release` (a cached `CAP_FULL_SET` credential), `nksu_relabel_path` (in-memory SID + `security.selinux` xattr), and `nksu_relabel_tty_fds` (relabels the caller's pty to the generic `devpts` type and leaves its owner alone, so it is not a `*ksu_file`-labeled root pty).
+- `selinux.c` — domain constants `DOMAIN "nksu"`, `DOMAIN_FILE "nksu_file"`, contexts `u:r:nksu:s0` / `u:object_r:nksu_file:s0`. Provides `setenforce`/`getenforce`, `set_domain`, `nksu_borrow_creds_begin/end/release` (a cached `CAP_FULL_SET` credential), and `nksu_relabel_path` (in-memory SID + `security.selinux` xattr). A root shell's tty is left with its own app devpts label; `load_policy()` instead grants `system_server` access to the app devpts types so `cmd`/`pm` output flows without relabeling the pty.
 - `policy.c` — `sepolicy_dup_and_apply()` deep-copies the live policy via `policydb_write/read` and RCU-swaps it, keeping `nksu_orig_policy` for `sepolicy_restore()`. `load_policy()` applies a static KernelSU-aligned rule set.
 - `rule.c` — the rule engine: `sepolicy_add_rule/xperm/type/attribute/typeattribute/type_transition/type_change/type_member/genfscon`, `sepolicy_set_permissive/enforce`, `sepolicy_add_domain`, plus `avc_reset()`.
 - `rule_file.c` — `sepolicy_apply_batch()` decodes the wire format below.

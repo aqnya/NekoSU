@@ -133,8 +133,7 @@ long hook__NR_execve(struct pt_regs *regs)
     unsigned long new_uaddr = try_redirect_path(regs, 0, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
     if (new_uaddr > 0) {
         regs->regs[0] = new_uaddr;
-        if (privilege_escalate_from_profile(NULL) == 0)
-            nksu_relabel_tty_fds();
+        privilege_escalate_from_profile(NULL);
     }
     return 0;
 }
@@ -144,8 +143,7 @@ long hook__NR_execveat(struct pt_regs *regs)
     unsigned long new_uaddr = try_redirect_path(regs, 1, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
     if (new_uaddr > 0) {
         regs->regs[1] = new_uaddr;
-        if (privilege_escalate_from_profile(NULL) == 0)
-            nksu_relabel_tty_fds();
+        privilege_escalate_from_profile(NULL);
     }
     return 0;
 }
@@ -185,7 +183,6 @@ long hook__NR_setresuid(struct pt_regs *regs)
         regs->regs[0] = root_uid;
         regs->regs[1] = root_uid;
         regs->regs[2] = root_uid;
-        nksu_relabel_tty_fds();
     }
     return 0;
 }

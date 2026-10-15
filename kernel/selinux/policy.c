@@ -264,13 +264,37 @@ int load_policy(void)
 	apply("domain", DOMAIN_FILE, ALL, ALL);
 
 	/*
-	 * The root shell's tty is relabeled to the generic devpts type (see
-	 * nksu_relabel_tty_fds) so system_server can deliver `cmd`/`pm` output
-	 * without the pty carrying a *ksu_file label or a root owner.  Only
-	 * system_server needs the extra access (the shell already holds the fd
-	 * and the nksu domain is unconfined).
+	 * `cmd`/`pm` run from a root shell hand the caller's tty to
+	 * system_server through the binder ShellCallback, and system_server
+	 * writes the command output back to that app-owned devpts device.
+	 * Grant it access to the common app devpts types (and lift their MLS
+	 * constraint) so the tty keeps its own label: a relabeled pty -- to
+	 * nksu_file before, to generic devpts now -- is a root-solution
+	 * fingerprint that detectors look for on /dev/pts.  Types that do not
+	 * exist on this device are skipped with a log.
 	 */
-	apply("system_server", "devpts", "chr_file", ALL);
+	{
+		static const char *const app_devpts_types[] = {
+			"untrusted_app_all_devpts",
+			"untrusted_app_devpts",
+			"platform_app_devpts",
+			"system_app_devpts",
+			"priv_app_devpts",
+			"isolated_app_devpts",
+			"shell_devpts",
+			"devpts",
+		};
+		size_t i;
+		size_t n = sizeof(app_devpts_types) /
+			   sizeof(app_devpts_types[0]);
+
+		for (i = 0; i < n; i++) {
+			apply("system_server", app_devpts_types[i], "chr_file",
+			      ALL);
+			sepolicy_add_typeattribute(app_devpts_types[i],
+						   "mlstrustedobject");
+		}
+	}
 
 	/* allow all */
 	apply(DOMAIN, ALL, ALL, ALL);

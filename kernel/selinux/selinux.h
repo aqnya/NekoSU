@@ -37,17 +37,6 @@ void nksu_borrow_creds_end(const struct cred *old);
 void nksu_borrow_creds_release(void);
 
 /*
- * Relabel the caller's terminal (pts) fds to the generic devpts type.  The
- * package manager hands the caller's tty to system_server through the binder
- * ShellCallback; without this, system_server's write to the pty is denied and
- * `pm`/`cmd` fail with "Failure calling service package: Failed transaction".
- * A normal devpts label is used (and the owner is left alone) so the pty does
- * not look like a root solution's *ksu_file-labeled, root-owned tty.  Called
- * right after a `su` escalation.
- */
-void nksu_relabel_tty_fds(void);
-
-/*
  * Relabel an existing path's inode to DOMAIN_FILE.  Used by the manager
  * bootstrap to label /data/adb/nksu/{ncore,bin/busybox} so the init.rc exec
  * (which runs them as DOMAIN) is allowed -- the policy only grants init access
