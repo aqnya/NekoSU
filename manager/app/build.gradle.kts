@@ -37,6 +37,19 @@ fun nksuVersion(): String =
         ?.ifEmpty { null }
         ?: "unknown"
 
+// The manager's own package name (applicationId).  It is deliberately
+// rotatable: the kernel authenticates the manager by its signing certificate
+// and shared uid (android:sharedUserId="me.nekosu.shared"), never by this name,
+// so switching it dodges package-name based detection without touching the
+// certificate or the shared uid.  Rotate at build time with, e.g.:
+//   ./gradlew -PmanagerId=me.nekosu.manager assembleRelease
+// The Kotlin namespace stays fixed (source/R/BuildConfig do not move).
+val managerPackage: String =
+    (project.findProperty("managerId") as? String)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: "me.nekosu.aqnya"
+
 android {
     namespace = "me.nekosu.aqnya"
     compileSdk {
@@ -47,7 +60,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "me.nekosu.aqnya"
+        applicationId = managerPackage
         minSdk = 31
         targetSdk = 37
         versionCode = gitCommitCount()
