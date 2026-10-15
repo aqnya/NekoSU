@@ -4,31 +4,29 @@ import android.app.Activity
 import android.os.Build
 
 /**
- * ROM 会按应用决定刷新率，未主动声明的应用常被压到 60Hz。这里让窗口偏好设备支持的
- * 最高刷新率，并关闭 Android 15+ 的省电降帧。
+ * 只放宽 Android 15+ 的省电降帧策略，**不**声明窗口偏好刷新率/模式。
+ *
+ * 背景（实测 HyperOS / Android 16，1440x3200 60/120/90Hz）：
+ * 只要窗口写了 `WindowManager.LayoutParams.preferredRefreshRate`，SurfaceFlinger
+ * 就把整块屏切到基础模式 id 0（60Hz）：
+ *
+ *   - 打开 NekoSU  -> dumpsys SurfaceFlinger: activeMode id=0 vsyncRate=60Hz
+ *   - 打开 KernelSU-> activeMode id=1 vsyncRate=120Hz
+ *
+ * 两个窗口的 LayoutParams 只差一项：NekoSU 有
+ * `preferredRefreshRate=120.00001`，KernelSU 什么都不写。也就是说，主动“请求高刷”
+ * 反而被系统降到了 60Hz；不声明则保持默认 120Hz。
+ *
+ * 因此这里不再写 preferredRefreshRate / preferredDisplayModeId，与 KernelSU 一致，
+ * 只保留对帧率策略（非 display mode）的放宽。
  */
 object DisplayRefreshRate {
     fun requestHighest(activity: Activity) {
-        val display = activity.display ?: return
-        val best =
-            display.supportedModes
-                .filter { it.refreshRate > 0f }
-                .maxByOrNull { it.refreshRate }
-                ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
 
         val window = activity.window
-        window.attributes =
-            window.attributes.apply {
-                preferredRefreshRate = best.refreshRate
-                // 不锁具体 modeId：由系统在候选模式中自行选择，避免被高刷黑名单
-                // 按固定模式锁死，也避免顺带改变分辨率。
-                preferredDisplayModeId = 0
-            }
-
-        // Android 15+：关闭省电降帧、保留触摸升帧。（受系统特性开关保护，为空操作。）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            window.setFrameRatePowerSavingsBalanced(false)
-            window.setFrameRateBoostOnTouchEnabled(true)
-        }
+        // 这两项只影响帧率策略，不会锁定 display mode。
+        window.setFrameRatePowerSavingsBalanced(false)
+        window.setFrameRateBoostOnTouchEnabled(true)
     }
 }
