@@ -202,7 +202,7 @@ struct privilege_desc {
 
 ## selinux {#selinux}
 
-- `selinux.c` —— 域常量 `DOMAIN "nksu"`、`DOMAIN_FILE "nksu_file"`，上下文 `u:r:nksu:s0` / `u:object_r:nksu_file:s0`。提供 `setenforce`/`getenforce`、`set_domain`、`nksu_borrow_creds_begin/end/release`（缓存的 `CAP_FULL_SET` 凭证）、`nksu_relabel_path`（内存 SID + `security.selinux` xattr）、`nksu_relabel_tty_fds`。
+- `selinux.c` —— 域常量 `DOMAIN "nksu"`、`DOMAIN_FILE "nksu_file"`，上下文 `u:r:nksu:s0` / `u:object_r:nksu_file:s0`。提供 `setenforce`/`getenforce`、`set_domain`、`nksu_borrow_creds_begin/end/release`（缓存的 `CAP_FULL_SET` 凭证）、`nksu_relabel_path`（内存 SID + `security.selinux` xattr）、以及 `nksu_relabel_tty_fds`（把调用者的 pty 重标为通用 `devpts` 类型且不改属主，因此不会呈现为带 `*ksu_file` 标签的 root pty）。
 - `policy.c` —— `sepolicy_dup_and_apply()` 通过 `policydb_write/read` 深拷贝活动策略并做 RCU 替换，保留 `nksu_orig_policy` 供 `sepolicy_restore()` 使用。`load_policy()` 应用一套与 KernelSU 对齐的静态规则。
 - `rule.c` —— 规则引擎：`sepolicy_add_rule/xperm/type/attribute/typeattribute/type_transition/type_change/type_member/genfscon`、`sepolicy_set_permissive/enforce`、`sepolicy_add_domain`，以及 `avc_reset()`。
 - `rule_file.c` —— `sepolicy_apply_batch()` 解码下方线上格式。

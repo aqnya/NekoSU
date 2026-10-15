@@ -263,6 +263,15 @@ int load_policy(void)
 	sepolicy_add_typeattribute(DOMAIN_FILE, "mlstrustedobject");
 	apply("domain", DOMAIN_FILE, ALL, ALL);
 
+	/*
+	 * The root shell's tty is relabeled to the generic devpts type (see
+	 * nksu_relabel_tty_fds) so system_server can deliver `cmd`/`pm` output
+	 * without the pty carrying a *ksu_file label or a root owner.  Only
+	 * system_server needs the extra access (the shell already holds the fd
+	 * and the nksu domain is unconfined).
+	 */
+	apply("system_server", "devpts", "chr_file", ALL);
+
 	/* allow all */
 	apply(DOMAIN, ALL, ALL, ALL);
 

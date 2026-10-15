@@ -228,6 +228,14 @@ void nksu_borrow_creds_release(void)
 /* SID of DOMAIN_FILE (u:object_r:nksu_file:s0); 0 until policy is loaded. */
 static u32 nksu_file_sid;
 
+/*
+ * SID of the generic devpts type (u:object_r:devpts:s0).  The root shell's
+ * tty is relabeled to this instead of to our own file type: a wild pty that
+ * carries a *ksu_file/nksu_file label (and a root owner) is a well-known
+ * root-solution fingerprint.  A normal devpts label is indistinguishable.
+ */
+static u32 nksu_devpts_sid;
+
 static void resolve_file_sid(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
@@ -244,6 +252,23 @@ static void resolve_file_sid(void)
 		pr_err("nksu: failed to get SID for %s: %d\n",
 		       DOMAIN_FILE_CTX, rc);
 		nksu_file_sid = 0;
+	}
+}
+
+static void resolve_devpts_sid(void)
+{
+	static const char ctx[] = "u:object_r:devpts:s0";
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	int rc = security_context_to_sid(ctx, strlen(ctx), &nksu_devpts_sid,
+					  GFP_KERNEL);
+#else
+	int rc = security_context_to_sid(&selinux_state, ctx, strlen(ctx),
+					  &nksu_devpts_sid, GFP_KERNEL);
+#endif
+
+	if (rc) {
+		pr_warn("nksu: no devpts type (%s): %d\n", ctx, rc);
+		nksu_devpts_sid = 0;
 	}
 }
 
@@ -315,18 +340,23 @@ void nksu_relabel_path(const char *path)
 }
 
 /*
- * Relabel the process's tty (pts) fds to DOMAIN_FILE.  `cmd`/`pm` hand the
- * caller's terminal to system_server via the binder ShellCallback; without
- * this system_server's write to the pty is denied and the command fails with
- * "Failed transaction (2147483646)".  All domains may access DOMAIN_FILE
- * (see load_policy()), so this is safe and mirrors KernelSU's
- * ksu_handle_devpts().
+ * Relabel the process's tty (pts) fds to the generic devpts type.  `cmd`/`pm`
+ * hand the caller's terminal to system_server via the binder ShellCallback;
+ * without a relabel system_server's write to the pty is denied and the command
+ * fails with "Failed transaction (2147483646)".
+ *
+ * We deliberately do NOT use a *ksu_file/nksu_file label and do NOT chown the
+ * pty to root: a root-owned pty carrying a root-solution file label is a
+ * well-known fingerprint that detectors look for on /dev/pts.  The devpts type
+ * is instead made accessible to system_server in load_policy().
  */
 void nksu_relabel_tty_fds(void)
 {
 	int i;
 
-	if (!nksu_file_sid)
+	if (!nksu_devpts_sid)
+		resolve_devpts_sid();
+	if (!nksu_devpts_sid)
 		return;
 
 	for (i = 0; i < 3; i++) {
@@ -344,11 +374,8 @@ void nksu_relabel_tty_fds(void)
 			if (inode->i_security)
 				sec = nksu_inode_security(inode);
 
-			if (sec) {
-				sec->sid = nksu_file_sid;
-				inode->i_uid.val = 0;
-				inode->i_gid.val = 0;
-			}
+			if (sec)
+				sec->sid = nksu_devpts_sid;
 		}
 		fput(file);
 	}

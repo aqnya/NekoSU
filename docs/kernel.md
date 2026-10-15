@@ -202,7 +202,7 @@ struct privilege_desc {
 
 ## selinux {#selinux}
 
-- `selinux.c` — domain constants `DOMAIN "nksu"`, `DOMAIN_FILE "nksu_file"`, contexts `u:r:nksu:s0` / `u:object_r:nksu_file:s0`. Provides `setenforce`/`getenforce`, `set_domain`, `nksu_borrow_creds_begin/end/release` (a cached `CAP_FULL_SET` credential), `nksu_relabel_path` (in-memory SID + `security.selinux` xattr), and `nksu_relabel_tty_fds`.
+- `selinux.c` — domain constants `DOMAIN "nksu"`, `DOMAIN_FILE "nksu_file"`, contexts `u:r:nksu:s0` / `u:object_r:nksu_file:s0`. Provides `setenforce`/`getenforce`, `set_domain`, `nksu_borrow_creds_begin/end/release` (a cached `CAP_FULL_SET` credential), `nksu_relabel_path` (in-memory SID + `security.selinux` xattr), and `nksu_relabel_tty_fds` (relabels the caller's pty to the generic `devpts` type and leaves its owner alone, so it is not a `*ksu_file`-labeled root pty).
 - `policy.c` — `sepolicy_dup_and_apply()` deep-copies the live policy via `policydb_write/read` and RCU-swaps it, keeping `nksu_orig_policy` for `sepolicy_restore()`. `load_policy()` applies a static KernelSU-aligned rule set.
 - `rule.c` — the rule engine: `sepolicy_add_rule/xperm/type/attribute/typeattribute/type_transition/type_change/type_member/genfscon`, `sepolicy_set_permissive/enforce`, `sepolicy_add_domain`, plus `avc_reset()`.
 - `rule_file.c` — `sepolicy_apply_batch()` decodes the wire format below.
