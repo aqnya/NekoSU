@@ -26,7 +26,11 @@ namespace su {
 namespace {
 
 constexpr const char *kDefaultShell = "/system/bin/sh";
-constexpr const char *kNksuBinDir = "/data/adb/nksu";
+// Root-shell PATH entries: the KernelSU-compatible bin dir (which holds the
+// resetprop symlink and busybox) and its nksu alias.
+constexpr const char *kNksuBinDir = "/data/adb/nksu/bin";
+constexpr const char *kKsuBinDir = "/data/adb/ksu/bin";
+constexpr const char *kNksuDir = "/data/adb/nksu";
 
 std::string base_name(const std::string &path) {
   const size_t slash = path.find_last_of('/');
@@ -51,15 +55,23 @@ void print_usage() {
             << std::endl;
 }
 
-// Append a directory to PATH if it is not there yet.
+// Prepend a directory to PATH if it is not already a path component.
 void prepend_path_dir(const std::string &dir) {
   const char *path_env = ::getenv("PATH");
   const std::string path =
       path_env != nullptr ? path_env : "/sbin:/system/sbin:/system/bin:/system/xbin";
-  if (path.find(dir) != std::string::npos)
-    return;
-  const std::string combined = dir + ":" + path;
-  ::setenv("PATH", combined.c_str(), 1);
+  size_t start = 0;
+  while (start <= path.size()) {
+    const size_t end = path.find(':', start);
+    const std::string comp =
+        path.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    if (comp == dir)
+      return;
+    if (end == std::string::npos)
+      break;
+    start = end + 1;
+  }
+  ::setenv("PATH", (dir + ":" + path).c_str(), 1);
 }
 
 void switch_to_global_mount_ns() {
@@ -394,6 +406,8 @@ int run(int argc, char *argv[]) {
   }
 
   prepend_path_dir(kNksuBinDir);
+  prepend_path_dir(kKsuBinDir);
+  prepend_path_dir(kNksuDir);
   ::umask(022);
 
   std::vector<char *> args;

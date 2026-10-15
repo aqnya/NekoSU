@@ -595,30 +595,65 @@ bool metamodule_ensure_symlink(const std::string &module_path) {
 // when running under nksu (Zygisk Next installs its znctl at
 // /data/adb/ksu/bin/znctl), so point that path at ncore's runtime directory.
 // A pre-existing real KernelSU directory is left untouched.
+//
+// We also expose the root-shell helper `resetprop` under bin/ (a symlink back
+// to the ncore binary), so it is on PATH as both /data/adb/nksu/bin/resetprop
+// and, through the alias, /data/adb/ksu/bin/resetprop.
+static void ensure_bin_tool(const std::string &name, const std::string &target) {
+  const std::string link = defs::binary_dir() + name;
+  if (utils::is_symlink(link)) {
+    char buf[4096];
+    const ssize_t n = ::readlink(link.c_str(), buf, sizeof(buf) - 1);
+    if (n >= 0) {
+      buf[n] = '\0';
+      if (target == buf)
+        return;
+    }
+    ::unlink(link.c_str());
+  } else if (utils::exists(link)) {
+    return; // a real file we do not own; leave it alone
+  }
+  if (::symlink(target.c_str(), link.c_str()) != 0)
+    std::cerr << "[module] failed to link " << link << " -> " << target << ": "
+              << std::strerror(errno) << std::endl;
+}
+
 static void ensure_ksu_dir_alias() {
   const std::string nksu = utils::strip_trailing_slash(defs::working_dir());
   const std::string ksu =
       utils::strip_trailing_slash(defs::adb_dir()) + "/ksu";
 
+  bool need_link = false;
   if (utils::is_symlink(ksu)) {
     char target[4096];
     const ssize_t len = ::readlink(ksu.c_str(), target, sizeof(target) - 1);
     if (len >= 0) {
       target[len] = '\0';
-      if (nksu == target)
-        return; // already pointing at us
+      if (nksu != target) {
+        ::unlink(ksu.c_str());
+        need_link = true;
+      }
+    } else {
+      ::unlink(ksu.c_str());
+      need_link = true;
     }
-    ::unlink(ksu.c_str());
   } else if (utils::exists(ksu)) {
-    return; // real KernelSU install, do not clobber it
+    /* real KernelSU install, do not clobber it */
+  } else {
+    need_link = true;
   }
 
-  if (::symlink(nksu.c_str(), ksu.c_str()) != 0) {
-    std::cerr << "[module] failed to link " << ksu << " -> " << nksu << ": "
-              << std::strerror(errno) << std::endl;
-    return;
+  if (need_link) {
+    if (::symlink(nksu.c_str(), ksu.c_str()) != 0) {
+      std::cerr << "[module] failed to link " << ksu << " -> " << nksu << ": "
+                << std::strerror(errno) << std::endl;
+    } else {
+      std::cout << "[module] linked " << ksu << " -> " << nksu << std::endl;
+    }
   }
-  std::cout << "[module] linked " << ksu << " -> " << nksu << std::endl;
+
+  if (utils::ensure_dir_exists(defs::binary_dir()))
+    ensure_bin_tool("resetprop", defs::boot_path());
 }
 
 // The kernel's volume-up watcher only reports state over the control ioctl (it

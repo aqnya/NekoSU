@@ -129,6 +129,8 @@ userspace/ncore/
 | `-p` / `-P` | 同时操作 / 仅读取 `/data/property/persistent_properties` |
 | `-v` | 详细输出 |
 
+`ensure_ksu_dir_alias()` 还会创建 `bin/resetprop`（指回 ncore 二进制的软链接），因此该工具可通过 `/data/adb/nksu/bin/resetprop` 与 `/data/adb/ksu/bin/resetprop` 使用；`su` 会把这些 bin 目录（以及 `/data/adb/nksu`）前置到 `PATH`，root shell 可直接运行 `resetprop`。
+
 ## 模块运行时 {#module-runtime}
 
 ### 布局与兼容性 {#module-layout}

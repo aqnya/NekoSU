@@ -136,6 +136,8 @@ also lets `ro.*` properties be changed.
 | `-p` / `-P` | Also touch / read only `/data/property/persistent_properties` |
 | `-v` | Verbose |
 
+`ensure_ksu_dir_alias()` also creates `bin/resetprop` as a symlink back to the ncore binary, so the tool is reachable as `/data/adb/nksu/bin/resetprop` and `/data/adb/ksu/bin/resetprop`; `su` prepends those bin dirs (and `/data/adb/nksu`) to `PATH`, so a root shell can run `resetprop` directly.
+
 ## Module runtime {#module-runtime}
 
 ### Layout and compatibility {#module-layout}
