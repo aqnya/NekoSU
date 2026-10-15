@@ -9,18 +9,22 @@ on:
   push:
     branches: [ "main" ]
     paths:
+      - ".github/workflows/android.yml"
       - "manager/app/src/**/*.kt"
       - "manager/app/src/**/*.c"
-      - "manager/build.gradle.kts"
+      - "manager/*.gradle.kts"
+      - "manager/app/*.gradle.kts"
       - "manager/gradle/libs.versions.toml"
       - "userspace/ncore/**"
       - "version"
   pull_request:
     branches: [ "main" ]
     paths:
+      - ".github/workflows/android.yml"
       - "manager/app/src/**/*.kt"
       - "manager/app/src/**/*.c"
-      - "manager/build.gradle.kts"
+      - "manager/*.gradle.kts"
+      - "manager/app/*.gradle.kts"
       - "manager/gradle/libs.versions.toml"
       - "userspace/ncore/**"
       - "version"
