@@ -73,4 +73,5 @@ void nksu_daemon_fd_exit(void)
 		syscall_slot_unhook(__NR_prctl);
 		nksu_daemon_hooked = false;
 	}
+	pr_info("[daemon] daemon fd exit!\n");
 }
