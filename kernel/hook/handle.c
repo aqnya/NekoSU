@@ -47,18 +47,27 @@ long handle_prctl_hooks(struct pt_regs *regs)
     }
 }
 
+/*
+ * Stage a replacement path argument on the user stack and return its address,
+ * or 0 on failure.
+ *
+ * The wrapped syscall reads the string synchronously -- we never return to
+ * user mode in between -- so it only has to survive for the duration of the
+ * call.  The free part of the stack just below sp is the cheapest place to
+ * put it: it is already mapped, needs no allocation and cannot clash with
+ * live frames.  Keep it as close to sp as possible so it stays well clear of
+ * the guard page at the bottom of the stack; copy_to_user() performs its own
+ * access_ok() check (a separate call is redundant and discouraged), so an
+ * address outside the mapped stack simply fails the copy.
+ */
 static unsigned long push_str(unsigned long sp, const char *str, size_t len)
 {
     unsigned long addr;
 
-    if (unlikely(!len || len > PAGE_SIZE || sp < 128 + len))
+    if (unlikely(!len || len > PAGE_SIZE || sp < len))
         return 0;
 
-    addr = (sp - 128UL - len) & ~15UL;
-
-    if (unlikely(!access_ok((void __user *)addr, len)))
-        return 0;
-
+    addr = sp - len;
     if (unlikely(copy_to_user((void __user *)addr, str, len)))
         return 0;
 
@@ -68,7 +77,7 @@ static unsigned long push_str(unsigned long sp, const char *str, size_t len)
 static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_index, const char *target,
                                        size_t target_len, bool require_target)
 {
-    char buf[128];
+    char buf[SU_PATH_LEN];
     const char __user *upath;
     unsigned long sp;
     ssize_t ulen;
@@ -91,15 +100,16 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
     if (unlikely(!upath))
         return 0;
 
-    ulen = strncpy_from_user(buf, upath, sizeof(buf));
-    if (unlikely(ulen <= 0))
-        return 0;
-
     /*
-     * Only an exact match matters — bail early if the length differs.
-     * strncpy_from_user() returns the length without the trailing NUL,
-     * while SU_PATH_LEN is sizeof(SU_PATH) (NUL included).
+     * Only an exact match matters, so copy at most SU_PATH_LEN bytes: the
+     * overwhelmingly common case is a completely different path (every
+     * stat/access/exec a managed UID performs), and it must not pay for a
+     * full-sized copy.  A longer path is truncated to SU_PATH_LEN and fails
+     * the length check below; -EFAULT also fails it.
+     * strncpy_from_user() returns the length without the trailing NUL, while
+     * SU_PATH_LEN is sizeof(SU_PATH) (NUL included).
      */
+    ulen = strncpy_from_user(buf, upath, sizeof(buf));
     if (unlikely(ulen != SU_PATH_LEN - 1) || !path_is_su(buf))
         return 0;
 
