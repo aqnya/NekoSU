@@ -1,6 +1,8 @@
 #ifndef NKSU_H
 #define NKSU_H
 
+#include "cleanup.h"
+
 /* The source commit the running kernel module was built from (Kbuild sets it). */
 #ifndef NKSU_GIT_COMMIT
 #define NKSU_GIT_COMMIT "unknown"

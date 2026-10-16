@@ -1,4 +1,5 @@
 #include "klog.h"
+#include "cleanup.h"
 #include "manager/manager.h"
 #include "manager/abx.h"
 #include "boot/safe_mode.h"
@@ -134,6 +135,10 @@ static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
            !memcmp(hash, TARGET_HASH, 32);
 }
 
+/* Scoped cleanup for the scan's file handle and XML buffer (see cleanup.h). */
+DEFINE_FREE(nksu_filp, struct file *, if (!IS_ERR_OR_NULL(_T)) filp_close(_T, NULL))
+DEFINE_FREE(nksu_kvfree, void *, kvfree(_T))
+
 /*
  * Find the manager package in /data/system/packages.xml and capture its user
  * id, on-disk locations and signing certificate.  The ABX parsing lives in
@@ -141,40 +146,35 @@ static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
  * take the uid the entry carries.  nativeLibraryPath is the extracted jniLibs
  * directory (<codePath>/lib/<abi>); codePath is the fallback for images that do
  * not write it.
+ *
+ * The file and the XML buffer are released by __free() on every exit path.
  */
 static bool verify_package_signature(struct abx_package *paths)
 {
-    struct file *fp;
     loff_t pos = 0;
     ssize_t rd;
     size_t fsize;
-    u8 *buf;
+    struct file *fp __free(nksu_filp) = filp_open(PACKAGES_XML_PATH, O_RDONLY, 0);
     struct sha256_hasher hasher;
     bool valid = false;
 
-    fp = filp_open(PACKAGES_XML_PATH, O_RDONLY, 0);
     if (IS_ERR(fp))
         return false;
 
     fsize = i_size_read(fp->f_inode);
-    if (fsize < 4 || fsize > MAX_PACKAGES_XML_SIZE) {
-        filp_close(fp, NULL);
+    if (fsize < 4 || fsize > MAX_PACKAGES_XML_SIZE)
         return false;
-    }
 
-    buf = kvmalloc(fsize, GFP_KERNEL);
-    if (!buf) {
-        filp_close(fp, NULL);
+    u8 *buf __free(nksu_kvfree) = kvmalloc(fsize, GFP_KERNEL);
+    if (!buf)
         return false;
-    }
 
     rd = kernel_read(fp, buf, fsize, &pos);
-    filp_close(fp, NULL);
     if (rd != (ssize_t)fsize)
-        goto out_free;
+        return false;
 
     if (sha256_hasher_init(&hasher))
-        goto out_free;
+        return false;
 
     valid = abx_find_package_by_cert(buf, fsize, manager_cert_match, &hasher, paths);
     sha256_hasher_exit(&hasher);
@@ -185,8 +185,6 @@ static bool verify_package_signature(struct abx_package *paths)
     else
         pr_err("[manager] no package signed with the manager certificate\n");
 
-out_free:
-    kvfree(buf);
     return valid;
 }
 
