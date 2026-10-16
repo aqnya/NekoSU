@@ -13,14 +13,6 @@
 #include <fmac.h>
 #include "symbol/symbol_compat.h"
 
-/*
- * The resolved pointers are invoked through here too (the fsnotify wrapper), so
- * opt this file out of CFI as every other user of the layer does.
- */
-#if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
-#endif
-
 /* definitions */
 typeof(alloc_uid) *nksu_alloc_uid;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
@@ -109,39 +101,25 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 /*
  * fsnotify_add_inode_mark() is a header inline forwarding to fsnotify_add_mark(),
  * so the call is written out here to keep the relocation out of the module.
+ * 6.10 replaced the mark-connector argument with the watched object and dropped
+ * the trailing fsid out-argument:
  *
- * Only the trailing out-parameter differs across versions -- 5.10/5.15 pass the
- * optional fsid, the 6.x KMIs dropped it -- so the resolved pointer is used
- * through the widest form: an ignored trailing NULL is harmless when the callee
- * has no fsid argument, and NULL means "cache nothing" when it does.
- *
- * The cast therefore changes the arity, which clang's -Wcast-function-type-strict
- * rejects; handing the address over as void * is what it accepts, and the older
- * compilers (which do not know that warning) match the 5.10/5.15 form exactly.
+ *   <= 6.9  fsnotify_add_mark(mark, &inode->i_fsnotify_marks, type, flags, NULL)
+ *   >= 6.10 fsnotify_add_mark(mark, inode, type, flags)
  */
-typedef int (*nksu_fsnotify_add_mark_fn)(struct fsnotify_mark *mark, void *connp,
-					 unsigned int type, int allow_dups,
-					 void *fsid);
-
 int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
-				 int allow_dups)
+				 int add_flags)
 {
-	nksu_fsnotify_add_mark_fn add;
-
-#if defined(__clang__) && __clang_major__ >= 16
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type-strict"
-#endif
-	add = (nksu_fsnotify_add_mark_fn)(void *)nksu_fsnotify_add_mark;
-#if defined(__clang__) && __clang_major__ >= 16
-#pragma clang diagnostic pop
-#endif
-
-	if (!add)
+	if (!nksu_fsnotify_add_mark)
 		return -ENOSYS;
 
-	return add(mark, (void *)&inode->i_fsnotify_marks,
-		   FSNOTIFY_OBJ_TYPE_INODE, allow_dups, NULL);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
+	return nksu_fsnotify_add_mark(mark, inode, FSNOTIFY_OBJ_TYPE_INODE,
+				      add_flags);
+#else
+	return nksu_fsnotify_add_mark(mark, &inode->i_fsnotify_marks,
+				      FSNOTIFY_OBJ_TYPE_INODE, add_flags, NULL);
+#endif
 }
 
 int nksu_symbol_compat_init(void)
@@ -315,8 +293,4 @@ void nksu_symbol_compat_exit(void)
 	nksu_kernel_wait = NULL;
 	nksu_flush_signal_handlers = NULL;
 }
-
-#if defined(__clang__)
-#pragma clang attribute pop
-#endif
 

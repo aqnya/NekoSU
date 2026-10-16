@@ -153,7 +153,7 @@ extern typeof(fsnotify_add_mark) *nksu_fsnotify_add_mark;
  * marks through this wrapper instead.
  */
 int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
-				 int allow_dups);
+				 int add_flags);
 
 /*
  * spawn primitives (kernel/spawn/spawn.c). None of these is exported on GKI, and they
