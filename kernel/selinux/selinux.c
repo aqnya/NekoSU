@@ -8,6 +8,7 @@
  */
 
 #include "klog.h"
+#include "guards.h"
 #include "security.h"
 #include "ss/symtab.h"
 #include "ss/policydb.h"
@@ -126,16 +127,15 @@ static int resolve_domain_sid(const char *domain, u32 *sid)
 {
 	int i, rc;
 
-	mutex_lock(&domain_cache_lock);
-	for (i = 0; i < NKSU_DOMAIN_CACHE; i++) {
-		if (domain_cache[i].sid &&
-		    strcmp(domain_cache[i].domain, domain) == 0) {
-			*sid = domain_cache[i].sid;
-			mutex_unlock(&domain_cache_lock);
-			return 0;
+	scoped_guard(nksu_mutex, &domain_cache_lock) {
+		for (i = 0; i < NKSU_DOMAIN_CACHE; i++) {
+			if (domain_cache[i].sid &&
+			    strcmp(domain_cache[i].domain, domain) == 0) {
+				*sid = domain_cache[i].sid;
+				return 0;
+			}
 		}
 	}
-	mutex_unlock(&domain_cache_lock);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	rc = security_context_to_sid(domain, strlen(domain), sid, GFP_KERNEL);
@@ -146,12 +146,12 @@ static int resolve_domain_sid(const char *domain, u32 *sid)
 	if (rc)
 		return rc;
 
-	mutex_lock(&domain_cache_lock);
-	i = domain_cache_next;
-	domain_cache_next = (domain_cache_next + 1) % NKSU_DOMAIN_CACHE;
-	strscpy(domain_cache[i].domain, domain, sizeof(domain_cache[i].domain));
-	domain_cache[i].sid = *sid;
-	mutex_unlock(&domain_cache_lock);
+	scoped_guard(nksu_mutex, &domain_cache_lock) {
+		i = domain_cache_next;
+		domain_cache_next = (domain_cache_next + 1) % NKSU_DOMAIN_CACHE;
+		strscpy(domain_cache[i].domain, domain, sizeof(domain_cache[i].domain));
+		domain_cache[i].sid = *sid;
+	}
 	return 0;
 }
 
@@ -264,7 +264,6 @@ static void resolve_file_sid(void)
  */
 void nksu_relabel_path(const char *path)
 {
-	struct file *file;
 	struct inode *inode;
 	struct inode_security_struct *sec;
 	int rc;
@@ -274,7 +273,7 @@ void nksu_relabel_path(const char *path)
 	if (!nksu_file_sid)
 		return;
 
-	file = filp_open(path, O_RDONLY, 0);
+	struct file *file __free(nksu_filp) = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(file))
 		return;
 
@@ -310,8 +309,6 @@ void nksu_relabel_path(const char *path)
 			pr_warn("nksu: cannot persist label on %s: %d\n", path,
 				rc);
 	}
-
-	filp_close(file, NULL);
 }
 
 /*
@@ -396,11 +393,11 @@ int load_hook(void)
 #ifdef CONFIG_NKSU_DEBUG
 	pr_info("[selinux]: debug mode, setting permissive for '%s'\n",
 		DOMAIN);
-	mutex_lock(&selinux_state.policy_mutex);
-	db = &rcu_dereference_protected(selinux_state.policy,
-		lockdep_is_held(&selinux_state.policy_mutex))->policydb;
-	do_allow(db, DOMAIN);
-	mutex_unlock(&selinux_state.policy_mutex);
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+		db = &rcu_dereference_protected(selinux_state.policy,
+			lockdep_is_held(&selinux_state.policy_mutex))->policydb;
+		do_allow(db, DOMAIN);
+	}
 	avc_reset();
 #endif
 

@@ -28,6 +28,7 @@
  */
 
 #include "klog.h"
+#include "guards.h"
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -195,12 +196,10 @@ static void nksu_rc_install(struct file *file)
 static long nksu_sys_read(const struct pt_regs *regs)
 {
     unsigned int fd = (unsigned int)regs->regs[0];
-    struct file *file = fget(fd);
+    struct file *file __free(nksu_fput) = fget(fd);
 
-    if (file) {
+    if (file)
         nksu_rc_install(file);
-        fput(file);
-    }
 
     return nksu_orig_read_sys(regs);
 }
@@ -211,13 +210,11 @@ static long nksu_sys_fstat(const struct pt_regs *regs)
     unsigned int fd = (unsigned int)regs->regs[0];
     void __user *statbuf = (void __user *)regs->regs[1];
     bool is_rc = false;
-    struct file *file = fget(fd);
+    struct file *file __free(nksu_fput) = fget(fd);
     long ret;
 
-    if (file) {
+    if (file)
         is_rc = nksu_rc_is_init_rc(file);
-        fput(file);
-    }
 
     ret = nksu_orig_fstat_sys(regs);
 

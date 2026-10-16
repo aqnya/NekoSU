@@ -18,6 +18,7 @@
  */
 
 #include "klog.h"
+#include "guards.h"
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
 #include <linux/err.h>
@@ -310,46 +311,38 @@ static int blob_update(blob_modify_fn mod, void *ctx)
 	struct nksu_profile_blob *old, *new_blob;
 	int ret;
 
-	mutex_lock(&profile_lock);
+	scoped_guard(nksu_mutex, &profile_lock) {
+		if (profile_shutdown)
+			return -ENODEV;
 
-	if (profile_shutdown) {
-		mutex_unlock(&profile_lock);
-		return -ENODEV;
+		old = rcu_dereference_protected(g_profile_blob,
+						lockdep_is_held(&profile_lock));
+
+		if (old)
+			new_blob = blob_clone(old, old->capacity, old->arena_cap);
+		else
+			new_blob = blob_clone(NULL, NKSU_PROFILE_INIT_CAP,
+					      NKSU_PROFILE_INIT_ARENA);
+
+		if (IS_ERR(new_blob))
+			return PTR_ERR(new_blob);
+
+		ret = mod(&new_blob, ctx);
+		if (ret) {
+			blob_free(new_blob);
+			return ret;
+		}
+
+		rcu_assign_pointer(g_profile_blob, new_blob);
+
+		/*
+		 * Hand the old snapshot to RCU instead of blocking on
+		 * synchronize_rcu(); the callback frees both the header and the
+		 * arena once the grace period elapses.
+		 */
+		if (old)
+			call_rcu(&old->rcu, blob_free_rcu);
 	}
-
-	old = rcu_dereference_protected(g_profile_blob,
-					lockdep_is_held(&profile_lock));
-
-	if (old)
-		new_blob = blob_clone(old, old->capacity, old->arena_cap);
-	else
-		new_blob = blob_clone(NULL, NKSU_PROFILE_INIT_CAP,
-				      NKSU_PROFILE_INIT_ARENA);
-
-	if (IS_ERR(new_blob)) {
-		ret = PTR_ERR(new_blob);
-		mutex_unlock(&profile_lock);
-		return ret;
-	}
-
-	ret = mod(&new_blob, ctx);
-	if (ret) {
-		blob_free(new_blob);
-		mutex_unlock(&profile_lock);
-		return ret;
-	}
-
-	rcu_assign_pointer(g_profile_blob, new_blob);
-
-	/*
-	 * Hand the old snapshot to RCU instead of blocking on
-	 * synchronize_rcu(); the callback frees both the header and the arena
-	 * once the grace period elapses.
-	 */
-	if (old)
-		call_rcu(&old->rcu, blob_free_rcu);
-		
-	mutex_unlock(&profile_lock);
 	return 0;
 }
 
@@ -698,12 +691,12 @@ void nksu_profile_exit(void)
 {
 	struct nksu_profile_blob *b;
 
-	mutex_lock(&profile_lock);
-	profile_shutdown = true;
-	b = rcu_dereference_protected(g_profile_blob,
-				      lockdep_is_held(&profile_lock));
-	rcu_assign_pointer(g_profile_blob, NULL);
-	mutex_unlock(&profile_lock);
+	scoped_guard(nksu_mutex, &profile_lock) {
+		profile_shutdown = true;
+		b = rcu_dereference_protected(g_profile_blob,
+					      lockdep_is_held(&profile_lock));
+		rcu_assign_pointer(g_profile_blob, NULL);
+	}
 
 	if (b) {
 		/*
@@ -731,15 +724,14 @@ int nksu_profile_init(void)
 		return PTR_ERR(b);
 
 	/* Idempotent: never publish (or leak) a second table. */
-	mutex_lock(&profile_lock);
-	if (rcu_access_pointer(g_profile_blob)) {
-		mutex_unlock(&profile_lock);
-		blob_free(b);
-		return 0;
+	scoped_guard(nksu_mutex, &profile_lock) {
+		if (rcu_access_pointer(g_profile_blob)) {
+			blob_free(b);
+			return 0;
+		}
+		profile_shutdown = false;
+		rcu_assign_pointer(g_profile_blob, b);
 	}
-	profile_shutdown = false;
-	rcu_assign_pointer(g_profile_blob, b);
-	mutex_unlock(&profile_lock);
 	return 0;
 }
 

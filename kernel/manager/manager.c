@@ -1,5 +1,5 @@
 #include "klog.h"
-#include "cleanup.h"
+#include "guards.h"
 #include "manager/manager.h"
 #include "manager/abx.h"
 #include "boot/safe_mode.h"
@@ -135,10 +135,6 @@ static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
            !memcmp(hash, TARGET_HASH, 32);
 }
 
-/* Scoped cleanup for the scan's file handle and XML buffer (see cleanup.h). */
-DEFINE_FREE(nksu_filp, struct file *, if (!IS_ERR_OR_NULL(_T)) filp_close(_T, NULL))
-DEFINE_FREE(nksu_kvfree, void *, kvfree(_T))
-
 /*
  * Find the manager package in /data/system/packages.xml and capture its user
  * id, on-disk locations and signing certificate.  The ABX parsing lives in
@@ -190,36 +186,28 @@ static bool verify_package_signature(struct abx_package *paths)
 
 static uid_t get_uid_from_packages_list(const char *package_name)
 {
-    struct file *file;
-    char *buf, *line, *p, *token;
+    char *line, *p, *token;
     loff_t pos = 0;
     uid_t target_uid = (uid_t)-1;
     size_t fsize;
     ssize_t read_size;
+    struct file *file __free(nksu_filp) = filp_open("/data/system/packages.list", O_RDONLY, 0);
 
-    file = filp_open("/data/system/packages.list", O_RDONLY, 0);
     if (IS_ERR(file))
         return (uid_t)-1;
 
     fsize = i_size_read(file->f_inode);
-    if (fsize == 0 || fsize > MAX_PACKAGES_XML_SIZE) {
-        filp_close(file, NULL);
+    if (fsize == 0 || fsize > MAX_PACKAGES_XML_SIZE)
         return (uid_t)-1;
-    }
 
     /* The list can exceed one read buffer; read it whole. */
-    buf = kvmalloc(fsize + 1, GFP_KERNEL);
-    if (!buf) {
-        filp_close(file, NULL);
+    char *buf __free(nksu_kvfree) = kvmalloc(fsize + 1, GFP_KERNEL);
+    if (!buf)
         return (uid_t)-1;
-    }
 
     read_size = kernel_read(file, buf, fsize, &pos);
-    filp_close(file, NULL);
-    if (read_size <= 0) {
-        kvfree(buf);
+    if (read_size <= 0)
         return (uid_t)-1;
-    }
     buf[read_size] = '\0';
 
     p = buf;
@@ -232,17 +220,15 @@ static uid_t get_uid_from_packages_list(const char *package_name)
         }
     }
 
-    kvfree(buf);
     return target_uid;
 }
 
 static int get_task_cmdline(struct task_struct *task, char *buffer, int buflen)
 {
-    struct mm_struct *mm;
     unsigned long arg_start, arg_end, len;
     int res = 0;
+    struct mm_struct *mm __free(nksu_mmput) = get_task_mm(task);
 
-    mm = get_task_mm(task);
     if (!mm)
         return 0;
 
@@ -263,7 +249,6 @@ static int get_task_cmdline(struct task_struct *task, char *buffer, int buflen)
             buffer[0] = '\0';
     }
 
-    mmput(mm);
     return res;
 }
 
@@ -272,20 +257,17 @@ static int get_task_cmdline(struct task_struct *task, char *buffer, int buflen)
 
 static int mark_zygote(void)
 {
-    struct task_struct *p, **tasks;
-    char *cmdline_buf;
+    struct task_struct *p;
     int n = 0, i;
+    char *cmdline_buf __free(nksu_kfree) = kmalloc(256, GFP_KERNEL);
 
-    cmdline_buf = kmalloc(256, GFP_KERNEL);
     if (!cmdline_buf)
         return -ENOMEM;
 
-    tasks = kmalloc_array(NKSU_ZYGOTE_SNAPSHOT_MAX, sizeof(*tasks),
-                          GFP_KERNEL);
-    if (!tasks) {
-        kfree(cmdline_buf);
+    struct task_struct **tasks __free(nksu_kfree) =
+        kmalloc_array(NKSU_ZYGOTE_SNAPSHOT_MAX, sizeof(*tasks), GFP_KERNEL);
+    if (!tasks)
         return -ENOMEM;
-    }
 
     /*
      * get_task_cmdline() sleeps (it takes mmap_lock and calls
@@ -336,8 +318,6 @@ next:
         put_task_struct(p);
     }
 
-    kfree(tasks);
-    kfree(cmdline_buf);
     return 0;
 }
 
@@ -366,12 +346,9 @@ next:
 
 static bool kfile_exists(const char *path)
 {
-    struct file *f = filp_open(path, O_RDONLY, 0);
+    struct file *f __free(nksu_filp) = filp_open(path, O_RDONLY, 0);
 
-    if (IS_ERR(f))
-        return false;
-    filp_close(f, NULL);
-    return true;
+    return !IS_ERR(f);
 }
 
 /* mkdir one leaf whose parent already exists. */
@@ -457,55 +434,46 @@ int nksu_kpath_mkdir_p(const char *dir)
 
 static int kfile_copy(const char *src, const char *dst)
 {
-    struct file *in, *out;
-    char *buf;
     loff_t ipos = 0, opos = 0;
     ssize_t off;
     int err = 0;
+    struct file *in __free(nksu_filp) = filp_open(src, O_RDONLY, 0);
 
-    in = filp_open(src, O_RDONLY, 0);
     if (IS_ERR(in))
         return PTR_ERR(in);
 
-    out = filp_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-    if (IS_ERR(out)) {
-        err = PTR_ERR(out);
-        filp_close(in, NULL);
-        return err;
-    }
+    struct file *out __free(nksu_filp) = filp_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+    if (IS_ERR(out))
+        return PTR_ERR(out);
 
-    buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-    if (!buf) {
-        err = -ENOMEM;
-    } else {
-        for (;;) {
-            ssize_t r = kernel_read(in, buf, PAGE_SIZE, &ipos);
+    char *buf __free(nksu_kfree) = kmalloc(PAGE_SIZE, GFP_KERNEL);
+    if (!buf)
+        return -ENOMEM;
 
-            if (r < 0) {
-                err = (int)r;
-                break;
-            }
-            if (r == 0)
-                break;
+    for (;;) {
+        ssize_t r = kernel_read(in, buf, PAGE_SIZE, &ipos);
 
-            off = 0;
-            while (off < r) {
-                ssize_t w = kernel_write(out, buf + off, (size_t)(r - off), &opos);
-
-                if (w < 0) {
-                    err = (int)w;
-                    break;
-                }
-                off += w;
-            }
-            if (err)
-                break;
+        if (r < 0) {
+            err = (int)r;
+            break;
         }
-        kfree(buf);
+        if (r == 0)
+            break;
+
+        off = 0;
+        while (off < r) {
+            ssize_t w = kernel_write(out, buf + off, (size_t)(r - off), &opos);
+
+            if (w < 0) {
+                err = (int)w;
+                break;
+            }
+            off += w;
+        }
+        if (err)
+            break;
     }
 
-    filp_close(out, NULL);
-    filp_close(in, NULL);
     return err;
 }
 
@@ -629,7 +597,6 @@ static DEFINE_MUTEX(appscan_mutex);
 static int scan_and_apply(void)
 {
     const struct cred *old;
-    struct abx_package *paths;
     uid_t uid;
     int ret = -1;
 
@@ -638,17 +605,14 @@ static int scan_and_apply(void)
      * would otherwise push this (heavily inlined) frame past the kernel's
      * limit.
      */
-    paths = kzalloc(sizeof(*paths), GFP_KERNEL);
+    struct abx_package *paths __free(nksu_kfree) = kzalloc(sizeof(*paths), GFP_KERNEL);
     if (!paths)
         return -ENOMEM;
 
-    mutex_lock(&appscan_mutex);
+    guard(nksu_mutex)(&appscan_mutex);
     old = nksu_borrow_creds_begin();
-    if (!old) {
-        mutex_unlock(&appscan_mutex);
-        kfree(paths);
+    if (!old)
         return -ENOMEM;
-    }
 
     /*
      * Find the manager by signing certificate -- never by package name -- and
@@ -686,8 +650,6 @@ static int scan_and_apply(void)
 
 out:
     nksu_borrow_creds_end(old);
-    mutex_unlock(&appscan_mutex);
-    kfree(paths);
 
     /*
      * No ncore means no module can run this boot, so volume-key safe mode has

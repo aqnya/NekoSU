@@ -71,6 +71,7 @@
 #include <linux/uaccess.h>
 
 #include "klog.h"
+#include "guards.h"
 #include "symbol/symbol.h"
 
 /*
@@ -868,26 +869,22 @@ static int scan_region(unsigned long start, unsigned long end)
  */
 static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
 {
-    struct file *f;
-    char *buf;
     loff_t pos = 0;
     ssize_t rd;
     size_t total = 0;
     unsigned long addr = 0;
     char key[64];
     char *p;
+    struct file *f __free(nksu_filp) = filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
 
     snprintf(key, sizeof(key), "%s(%s)=", kind, name);
 
-    f = filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
     if (IS_ERR(f))
         return 0;
 
-    buf = kvmalloc(SZ_64K, GFP_KERNEL);
-    if (!buf) {
-        filp_close(f, NULL);
+    char *buf __free(nksu_kvfree) = kvmalloc(SZ_64K, GFP_KERNEL);
+    if (!buf)
         return 0;
-    }
 
     /* the file can be much larger than a page; read it all */
     while (total < SZ_64K - 1) {
@@ -896,7 +893,6 @@ static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
             break;
         total += (size_t)rd;
     }
-    filp_close(f, NULL);
     buf[total] = '\0';
 
     p = strstr(buf, key);
@@ -905,7 +901,6 @@ static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
         addr = simple_strtoul(p, NULL, 16);
     }
 
-    kvfree(buf);
     return addr;
 }
 
@@ -1067,13 +1062,13 @@ static bool kallsyms_addrs_hidden(const char *buf, size_t len)
  */
 static unsigned long lookup_proc_kallsyms(const char *name)
 {
-    struct file *f;
-    char *buf;
     loff_t pos = 0;
     ssize_t rd;
     unsigned long addr = 0;
     size_t namelen = strlen(name);
     size_t used = 0;
+    struct file *f __free(nksu_filp) = NULL;
+    char *buf __free(nksu_kvfree) = NULL;
 
     if (ksym_proc_hidden)
         return 0;
@@ -1089,16 +1084,12 @@ static unsigned long lookup_proc_kallsyms(const char *name)
      * supported for file /kallsyms". Detect that up-front and let the
      * in-memory kallsyms scan handle the lookup instead.
      */
-    if (!f->f_op->read_iter) {
-        filp_close(f, NULL);
+    if (!f->f_op->read_iter)
         return 0;
-    }
 
     buf = kvmalloc(SZ_64K, GFP_KERNEL);
-    if (!buf) {
-        filp_close(f, NULL);
+    if (!buf)
         return 0;
-    }
 
     for (;;) {
         char *p, *line;
@@ -1138,7 +1129,7 @@ static unsigned long lookup_proc_kallsyms(const char *name)
             ksym_proc_checked = true;
             if (kallsyms_addrs_hidden(buf, used)) {
                 ksym_proc_hidden = true;
-                goto out;
+                break;
             }
         }
 
@@ -1166,13 +1157,10 @@ static unsigned long lookup_proc_kallsyms(const char *name)
 
             addr = match_kallsyms_line(line, name, namelen);
             if (addr)
-                goto out;
+                return addr;
         }
     }
 
-out:
-    kvfree(buf);
-    filp_close(f, NULL);
     return addr;
 }
 
@@ -1188,20 +1176,16 @@ unsigned long nksu_ksym_lookup(const char *name)
     if (!name || !name[0])
         return 0;
 
-    mutex_lock(&ksym_lock);
+    guard(nksu_mutex)(&ksym_lock);
 
     e = ksym_find_locked(name);
-    if (e) {
-        addr = e->addr;
-        mutex_unlock(&ksym_lock);
-        return addr;
-    }
+    if (e)
+        return e->addr;
 
     /* 1) /proc/kallsyms */
     addr = lookup_proc_kallsyms(name);
     if (addr) {
         ksym_cache_add(name, addr);
-        mutex_unlock(&ksym_lock);
         return addr;
     }
 
@@ -1219,7 +1203,6 @@ unsigned long nksu_ksym_lookup(const char *name)
         addr = 0;
     }
 
-    mutex_unlock(&ksym_lock);
     return addr;
 }
 
@@ -1234,7 +1217,7 @@ void nksu_ksym_cache_clear(void)
     struct hlist_node *tmp;
     int bkt;
 
-    mutex_lock(&ksym_lock);
+    guard(nksu_mutex)(&ksym_lock);
     hash_for_each_safe(ksym_htable, bkt, tmp, e, node) {
         hash_del(&e->node);
         kfree(e);
@@ -1243,7 +1226,6 @@ void nksu_ksym_cache_clear(void)
     ksym_scanned = false;
     ksym_proc_hidden = false;
     ksym_proc_checked = false;
-    mutex_unlock(&ksym_lock);
 }
 
 #ifdef CONFIG_NKSU_DEBUG
@@ -1252,10 +1234,9 @@ void nksu_ksym_dump(void)
     struct ksym_entry *e;
     int bkt;
 
-    mutex_lock(&ksym_lock);
+    guard(nksu_mutex)(&ksym_lock);
     hash_for_each(ksym_htable, bkt, e, node)
         pr_info("[ksym] %s = 0x%lx\n", e->name, e->addr);
-    mutex_unlock(&ksym_lock);
 }
 #else
 void nksu_ksym_dump(void)

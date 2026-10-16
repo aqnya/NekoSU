@@ -15,6 +15,7 @@
  */
 
 #include "klog.h"
+#include "guards.h"
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
@@ -144,29 +145,25 @@ int sepolicy_dup_and_apply(void)
 		return -EBUSY;
 	}
 
-	mutex_lock(&selinux_state.policy_mutex);
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+		orig = rcu_dereference_protected(selinux_state.policy,
+						 lockdep_is_held(&selinux_state.policy_mutex));
+		if (!orig) {
+			pr_err("[selinux]: sepolicy_dup_and_apply: no live policy\n");
+			return -ENOENT;
+		}
 
-	orig = rcu_dereference_protected(selinux_state.policy,
-					 lockdep_is_held(&selinux_state.policy_mutex));
-	if (!orig) {
-		mutex_unlock(&selinux_state.policy_mutex);
-		pr_err("[selinux]: sepolicy_dup_and_apply: no live policy\n");
-		return -ENOENT;
+		work = nksu_policy_dup(orig);
+		if (IS_ERR(work)) {
+			pr_err("[selinux]: sepolicy_dup_and_apply: dup failed\n");
+			return PTR_ERR(work);
+		}
+
+		nksu_orig_policy = orig;
+		nksu_work_policy = work;
+
+		rcu_assign_pointer(selinux_state.policy, work);
 	}
-
-	work = nksu_policy_dup(orig);
-	if (IS_ERR(work)) {
-		mutex_unlock(&selinux_state.policy_mutex);
-		pr_err("[selinux]: sepolicy_dup_and_apply: dup failed\n");
-		return PTR_ERR(work);
-	}
-
-	nksu_orig_policy = orig;
-	nksu_work_policy = work;
-
-	rcu_assign_pointer(selinux_state.policy, work);
-
-	mutex_unlock(&selinux_state.policy_mutex);
 	synchronize_rcu();
 
 	pr_info("[selinux]: policy duplicated, working copy installed\n");
@@ -182,16 +179,14 @@ void sepolicy_restore(void)
 		return;
 	}
 
-	mutex_lock(&selinux_state.policy_mutex);
-
-	live = rcu_dereference_protected(selinux_state.policy,
-					 lockdep_is_held(&selinux_state.policy_mutex));
-	if (live == nksu_work_policy)
-		rcu_assign_pointer(selinux_state.policy, nksu_orig_policy);
-	else
-		pr_warn("[selinux]: live policy already replaced, leaving it\n");
-
-	mutex_unlock(&selinux_state.policy_mutex);
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+		live = rcu_dereference_protected(selinux_state.policy,
+						 lockdep_is_held(&selinux_state.policy_mutex));
+		if (live == nksu_work_policy)
+			rcu_assign_pointer(selinux_state.policy, nksu_orig_policy);
+		else
+			pr_warn("[selinux]: live policy already replaced, leaving it\n");
+	}
 	synchronize_rcu();
 
 	/*
@@ -235,11 +230,10 @@ static bool xperm_supported(void)
 	struct selinux_policy *pol;
 	bool ok;
 
-	mutex_lock(&selinux_state.policy_mutex);
+	guard(nksu_mutex)(&selinux_state.policy_mutex);
 	pol = rcu_dereference_protected(selinux_state.policy,
 					lockdep_is_held(&selinux_state.policy_mutex));
 	ok = pol && pol->policydb.policyvers >= POLICYDB_VERSION_XPERMS_IOCTL;
-	mutex_unlock(&selinux_state.policy_mutex);
 	return ok;
 }
 

@@ -21,6 +21,7 @@
  */
 
 #include "klog.h"
+#include "guards.h"
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -131,56 +132,46 @@ int nksu_profile_to_text(char *buf, size_t cap)
 void nksu_profile_store_save(void)
 {
 	const struct cred *old;
-	struct file *fp;
+	struct file *fp __free(nksu_filp) = NULL;
 	loff_t pos = 0;
 	size_t cap;
-	char *buf;
+	char *buf __free(nksu_kvfree) = NULL;
 	int len;
 
 	if (READ_ONCE(store_suppress))
 		return;
 
-	mutex_lock(&store_lock);
+	guard(nksu_mutex)(&store_lock);
 
 	cap = 64 + ((size_t)nksu_profile_count() + 1) * 160;
 	if (cap > NKSU_PROFILE_FILE_MAX)
 		cap = NKSU_PROFILE_FILE_MAX;
 
 	buf = kvmalloc(cap, GFP_KERNEL);
-	if (!buf) {
-		mutex_unlock(&store_lock);
+	if (!buf)
 		return;
-	}
 
 	len = nksu_profile_to_text(buf, cap);
 	if (len < 0) {
 		/* Should not happen: cap is sized from the entry count. */
 		pr_warn("[profile] serialize for %s failed: %d\n",
 			NKSU_PROFILE_FILE, len);
-		kvfree(buf);
-		mutex_unlock(&store_lock);
 		return;
 	}
 
 	old = nksu_borrow_creds_begin();
-	if (!old) {
-		kvfree(buf);
-		mutex_unlock(&store_lock);
+	if (!old)
 		return;
-	}
 
 	fp = filp_open(NKSU_PROFILE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	if (!IS_ERR(fp)) {
 		kernel_write(fp, buf, (size_t)len, &pos);
-		filp_close(fp, NULL);
 	} else if (PTR_ERR(fp) != -ENOENT) {
 		pr_warn("[profile] save %s failed: %ld\n", NKSU_PROFILE_FILE,
 			PTR_ERR(fp));
 	}
 
 	nksu_borrow_creds_end(old);
-	kvfree(buf);
-	mutex_unlock(&store_lock);
 }
 
 /* ── parsing ── */
@@ -282,13 +273,13 @@ static int apply_line(char *line)
 int nksu_profile_store_load(void)
 {
 	const struct cred *old;
-	struct file *fp;
 	loff_t pos = 0;
 	loff_t size;
 	ssize_t rd;
-	char *buf;
+	char *buf __free(nksu_kvfree) = NULL;
 	char *cursor;
 	int ret = 0;
+	struct file *fp __free(nksu_filp) = NULL;
 
 	old = nksu_borrow_creds_begin();
 	if (!old)
@@ -302,26 +293,21 @@ int nksu_profile_store_load(void)
 
 	size = i_size_read(fp->f_inode);
 	if (size <= 0 || size > NKSU_PROFILE_FILE_MAX) {
-		filp_close(fp, NULL);
 		nksu_borrow_creds_end(old);
 		return size > NKSU_PROFILE_FILE_MAX ? -EFBIG : 0;
 	}
 
 	buf = kvmalloc((size_t)size + 1, GFP_KERNEL);
 	if (!buf) {
-		filp_close(fp, NULL);
 		nksu_borrow_creds_end(old);
 		return -ENOMEM;
 	}
 
 	rd = kernel_read(fp, buf, (size_t)size, &pos);
-	filp_close(fp, NULL);
 	nksu_borrow_creds_end(old);
 
-	if (rd <= 0) {
-		kvfree(buf);
+	if (rd <= 0)
 		return rd < 0 ? (int)rd : 0;
-	}
 	buf[rd] = '\0';
 
 	/*
@@ -343,7 +329,6 @@ int nksu_profile_store_load(void)
 	}
 
 	WRITE_ONCE(store_suppress, false);
-	kvfree(buf);
 
 	if (ret)
 		pr_warn("[profile] %s had an entry that failed to load: %d\n",

@@ -7,6 +7,7 @@
  * fd, so there is no userspace daemon in the loop.
  */
 #include "klog.h"
+#include "guards.h"
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -40,26 +41,21 @@ static const struct nksu_feature *nksu_feature_find(u32 id)
 
 int nksu_feature_register(const struct nksu_feature *feature)
 {
-    int i, ret = 0;
+    int i;
 
     if (!feature || !feature->name)
         return -EINVAL;
 
-    mutex_lock(&nksu_feature_mutex);
-    for (i = 0; i < nksu_feature_count; i++) {
-        if (nksu_features[i]->id == feature->id) {
-            ret = -EEXIST;
-            goto out;
+    scoped_guard(nksu_mutex, &nksu_feature_mutex) {
+        for (i = 0; i < nksu_feature_count; i++) {
+            if (nksu_features[i]->id == feature->id)
+                return -EEXIST;
         }
+        if (nksu_feature_count >= NKSU_MAX_FEATURES)
+            return -ENOSPC;
+        nksu_features[nksu_feature_count++] = feature;
     }
-    if (nksu_feature_count >= NKSU_MAX_FEATURES) {
-        ret = -ENOSPC;
-        goto out;
-    }
-    nksu_features[nksu_feature_count++] = feature;
-out:
-    mutex_unlock(&nksu_feature_mutex);
-    return ret;
+    return 0;
 }
 
 int nksu_feature_get(u32 id, u64 *value)
@@ -70,11 +66,10 @@ int nksu_feature_get(u32 id, u64 *value)
     if (!value)
         return -EINVAL;
 
-    mutex_lock(&nksu_feature_mutex);
+    guard(nksu_mutex)(&nksu_feature_mutex);
     feature = nksu_feature_find(id);
     if (feature && feature->get)
         ret = feature->get(value);
-    mutex_unlock(&nksu_feature_mutex);
     return ret;
 }
 
@@ -83,11 +78,10 @@ int nksu_feature_set(u32 id, u64 value)
     const struct nksu_feature *feature;
     int ret = -ENOENT;
 
-    mutex_lock(&nksu_feature_mutex);
+    guard(nksu_mutex)(&nksu_feature_mutex);
     feature = nksu_feature_find(id);
     if (feature && feature->set)
         ret = feature->set(value);
-    mutex_unlock(&nksu_feature_mutex);
     return ret;
 }
 
@@ -98,7 +92,7 @@ int nksu_feature_render(char *buf, size_t size)
     if (!buf || size == 0)
         return -EINVAL;
 
-    mutex_lock(&nksu_feature_mutex);
+    guard(nksu_mutex)(&nksu_feature_mutex);
     for (i = 0; i < nksu_feature_count; i++) {
         const struct nksu_feature *feature = nksu_features[i];
         u64 value = 0;
@@ -111,7 +105,6 @@ int nksu_feature_render(char *buf, size_t size)
         if ((size_t)len >= size)
             break;
     }
-    mutex_unlock(&nksu_feature_mutex);
 
     return len;
 }
@@ -146,10 +139,10 @@ static bool nksu_feature_name_in_line(const char *line, const char *name)
 bool nksu_feature_persist_has(const char *name)
 {
     const struct cred *old;
-    struct file *fp;
-    char *buf;
     loff_t pos = 0, size;
     bool found = false;
+    struct file *fp __free(nksu_filp) = NULL;
+    char *buf __free(nksu_kvfree) = NULL;
 
     if (!name || !name[0])
         return false;
@@ -163,21 +156,16 @@ bool nksu_feature_persist_has(const char *name)
         goto out;
 
     size = i_size_read(fp->f_inode);
-    if (size <= 0 || size > NKSU_FEATURE_FILE_MAX) {
-        filp_close(fp, NULL);
+    if (size <= 0 || size > NKSU_FEATURE_FILE_MAX)
         goto out;
-    }
 
     buf = kvmalloc((size_t)size + 1, GFP_KERNEL);
-    if (!buf) {
-        filp_close(fp, NULL);
+    if (!buf)
         goto out;
-    }
 
     {
         ssize_t rd = kernel_read(fp, buf, (size_t)size, &pos);
 
-        filp_close(fp, NULL);
         if (rd > 0) {
             char *cursor = buf;
 
@@ -192,7 +180,6 @@ bool nksu_feature_persist_has(const char *name)
             }
         }
     }
-    kvfree(buf);
 
 out:
     nksu_borrow_creds_end(old);
@@ -202,12 +189,14 @@ out:
 int nksu_feature_persist_set(const char *name, bool enabled)
 {
     const struct cred *old;
-    struct file *fp;
-    char *in = NULL, *out;
     loff_t pos = 0, size;
     size_t out_cap, out_len = 0;
     bool present = false;
     int ret = 0;
+    struct file *rf __free(nksu_filp) = NULL;
+    struct file *wf __free(nksu_filp) = NULL;
+    char *in __free(nksu_kvfree) = NULL;
+    char *out __free(nksu_kvfree) = NULL;
 
     if (!name || !name[0])
         return -EINVAL;
@@ -216,13 +205,13 @@ int nksu_feature_persist_set(const char *name, bool enabled)
     if (!old)
         return -ENOMEM;
 
-    fp = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
-    if (!IS_ERR(fp)) {
-        size = i_size_read(fp->f_inode);
+    rf = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
+    if (!IS_ERR(rf)) {
+        size = i_size_read(rf->f_inode);
         if (size > 0 && size <= NKSU_FEATURE_FILE_MAX) {
             in = kvmalloc((size_t)size + 1, GFP_KERNEL);
             if (in) {
-                ssize_t rd = kernel_read(fp, in, (size_t)size, &pos);
+                ssize_t rd = kernel_read(rf, in, (size_t)size, &pos);
 
                 if (rd > 0)
                     in[rd] = '\0';
@@ -232,16 +221,14 @@ int nksu_feature_persist_set(const char *name, bool enabled)
                 }
             }
         }
-        filp_close(fp, NULL);
-    } else if (PTR_ERR(fp) != -ENOENT) {
-        ret = PTR_ERR(fp);
+    } else if (PTR_ERR(rf) != -ENOENT) {
+        ret = PTR_ERR(rf);
         goto out;
     }
 
     out_cap = NKSU_FEATURE_FILE_MAX + strlen(name) + 2;
     out = kvmalloc(out_cap, GFP_KERNEL);
     if (!out) {
-        kvfree(in);
         ret = -ENOMEM;
         goto out;
     }
@@ -267,17 +254,13 @@ int nksu_feature_persist_set(const char *name, bool enabled)
     if (enabled && !present)
         out_len += scnprintf(out + out_len, out_cap - out_len, "%s\n", name);
 
-    fp = filp_open(NKSU_FEATURE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (IS_ERR(fp)) {
-        ret = PTR_ERR(fp);
+    wf = filp_open(NKSU_FEATURE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (IS_ERR(wf)) {
+        ret = PTR_ERR(wf);
     } else {
         pos = 0;
-        kernel_write(fp, out, out_len, &pos);
-        filp_close(fp, NULL);
+        kernel_write(wf, out, out_len, &pos);
     }
-
-    kvfree(out);
-    kvfree(in);
 
 out:
     nksu_borrow_creds_end(old);
