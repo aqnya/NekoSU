@@ -66,6 +66,13 @@ object Ncore {
 
     external fun readFile(path: String): ByteArray?
 
+    /**
+     * 经常驻 root 子进程读取文件：只 fork 一次，之后按请求走管道，避免 WebUI
+     * 每读一个资源都要 fork。返回空数组表示文件不存在或为空；返回 null 表示读取器
+     * 本身失败，调用方应回退到 [readFile]。
+     */
+    external fun readFilePersistent(path: String): ByteArray?
+
     /** 把 [srcPath] 流式写入 [dstPath]（root 权限，子进程执行）；成功返回 true。 */
     external fun writeBlock(
         srcPath: String,

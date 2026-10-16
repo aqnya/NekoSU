@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <jni.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -693,6 +695,262 @@ static jbyteArray readFile(JNIEnv *env, jobject thiz, jstring pathStr) {
 }
 
 /*
+ * Persistent root reader.
+ *
+ * readFile() forks a root child per call: fine for a one-off, wasteful for the
+ * module WebUI whose assets are read one file at a time on WebView worker
+ * threads.  Instead fork a single long-lived child that borrows root once and
+ * then serves read requests over a pair of pipes:
+ *
+ *   parent --> child   [u32 plen][path bytes]
+ *   parent <-- child   [u32 status]              (0 = ok, 1 = not found)
+ *   parent <-- child   [u32 len][bytes] ... [u32 0]   (only when status == 0)
+ *
+ * Only async-signal-safe calls run in the child (setresuid/getuid/open/fstat/
+ * read/write/close/_exit), exactly like readFile()'s child, so forking the
+ * multithreaded manager is safe.  Requests are serialized by a mutex (the
+ * child handles one at a time); a broken or dead child is dropped and
+ * restarted on the next call.  It handles regular files only -- anything else
+ * reports "not found" -- so callers keep readFile() as the general fallback.
+ */
+
+struct RootReader {
+  pid_t pid;
+  int req_fd;   // parent -> child
+  int resp_fd;  // child -> parent
+};
+
+RootReader g_reader = {-1, -1, -1};
+pthread_mutex_t g_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+constexpr size_t kReaderMaxPath = 4096;
+constexpr size_t kReaderChunk = 65536;
+
+static bool ioWrite(int fd, const void *buf, size_t len) {
+  const uint8_t *p = static_cast<const uint8_t *>(buf);
+  size_t off = 0;
+  while (off < len) {
+    const ssize_t n = write(fd, p + off, len - off);
+    if (n > 0) {
+      off += static_cast<size_t>(n);
+    } else if (n < 0 && errno == EINTR) {
+      continue;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool ioRead(int fd, void *buf, size_t len) {
+  uint8_t *p = static_cast<uint8_t *>(buf);
+  size_t off = 0;
+  while (off < len) {
+    const ssize_t n = read(fd, p + off, len - off);
+    if (n > 0) {
+      off += static_cast<size_t>(n);
+    } else if (n == 0) {
+      return false;  // EOF
+    } else if (errno == EINTR) {
+      continue;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void readerDropLocked() {
+  if (g_reader.req_fd >= 0)
+    close(g_reader.req_fd);
+  if (g_reader.resp_fd >= 0)
+    close(g_reader.resp_fd);
+  if (g_reader.pid > 0) {
+    int status = 0;
+    while (waitpid(g_reader.pid, &status, 0) < 0 && errno == EINTR) {
+    }
+  }
+  g_reader.pid = -1;
+  g_reader.req_fd = -1;
+  g_reader.resp_fd = -1;
+}
+
+static bool readerStartLocked() {
+  int req[2];
+  int resp[2];
+  if (pipe(req) != 0)
+    return false;
+  if (pipe(resp) != 0) {
+    close(req[0]);
+    close(req[1]);
+    return false;
+  }
+
+  const pid_t pid = fork();
+  if (pid < 0) {
+    close(req[0]);
+    close(req[1]);
+    close(resp[0]);
+    close(resp[1]);
+    return false;
+  }
+
+  if (pid == 0) {
+    /* Child: async-signal-safe calls only, no JNI, no allocation. */
+    close(req[1]);
+    close(resp[0]);
+
+    /*
+     * setuid()/setreuid() are not in the app seccomp allowlist (they SIGSYS);
+     * setresuid() is, and the kernel hook escalates only this child.
+     */
+    if (setresuid(0, 0, 0) != 0 || getuid() != 0)
+      _exit(1);
+
+    uint8_t path[kReaderMaxPath];
+    for (;;) {
+      uint32_t plen = 0;
+      if (!ioRead(req[0], &plen, sizeof(plen)) || plen == 0 ||
+          plen >= kReaderMaxPath)
+        _exit(0);
+      if (!ioRead(req[0], path, plen))
+        _exit(0);
+      path[plen] = '\0';
+
+      const int file =
+          open(reinterpret_cast<const char *>(path), O_RDONLY | O_CLOEXEC);
+      struct stat st;
+      if (file < 0 || fstat(file, &st) != 0 || !S_ISREG(st.st_mode)) {
+        if (file >= 0)
+          close(file);
+        const uint32_t not_found = 1;
+        if (!ioWrite(resp[1], &not_found, sizeof(not_found)))
+          _exit(2);
+        continue;
+      }
+
+      const uint32_t ok = 0;
+      if (!ioWrite(resp[1], &ok, sizeof(ok))) {
+        close(file);
+        _exit(2);
+      }
+
+      uint8_t buffer[kReaderChunk];
+      for (;;) {
+        const ssize_t n = read(file, buffer, sizeof(buffer));
+        if (n > 0) {
+          const uint32_t chunk = static_cast<uint32_t>(n);
+          if (!ioWrite(resp[1], &chunk, sizeof(chunk)) ||
+              !ioWrite(resp[1], buffer, static_cast<size_t>(n))) {
+            close(file);
+            _exit(2);
+          }
+        } else if (n == 0) {
+          break;
+        } else if (errno == EINTR) {
+          continue;
+        } else {
+          break;  // unreadable mid-file: end the frame here
+        }
+      }
+      close(file);
+      const uint32_t end = 0;
+      if (!ioWrite(resp[1], &end, sizeof(end)))
+        _exit(2);
+    }
+  }
+
+  /* Parent: keep our ends, remember the child. */
+  close(req[0]);
+  close(resp[0]);
+  g_reader.pid = pid;
+  g_reader.req_fd = req[1];
+  g_reader.resp_fd = resp[1];
+  return true;
+}
+
+/* 1 = found (out filled), 0 = not found, -1 = reader error. */
+static int readerReadLocked(const char *path, size_t plen,
+                            std::vector<uint8_t> &out) {
+  if (g_reader.pid <= 0 && !readerStartLocked())
+    return -1;
+
+  const uint32_t len = static_cast<uint32_t>(plen);
+  if (!ioWrite(g_reader.req_fd, &len, sizeof(len)) ||
+      !ioWrite(g_reader.req_fd, path, plen)) {
+    readerDropLocked();
+    return -1;
+  }
+
+  uint32_t status = 0;
+  if (!ioRead(g_reader.resp_fd, &status, sizeof(status))) {
+    readerDropLocked();
+    return -1;
+  }
+  if (status != 0)
+    return 0;
+
+  out.clear();
+  for (;;) {
+    uint32_t chunk = 0;
+    if (!ioRead(g_reader.resp_fd, &chunk, sizeof(chunk))) {
+      readerDropLocked();
+      return -1;
+    }
+    if (chunk == 0)
+      break;
+    const size_t base = out.size();
+    out.resize(base + chunk);
+    if (!ioRead(g_reader.resp_fd, out.data() + base, chunk)) {
+      readerDropLocked();
+      return -1;
+    }
+  }
+  return 1;
+}
+
+/*
+ * Read a file through the persistent reader.  Returns the bytes (an empty
+ * array for a missing/empty file) on success, or null when the reader itself
+ * failed -- the caller can then fall back to readFile().
+ */
+jbyteArray readFilePersistent(JNIEnv *env, jobject thiz, jstring pathStr) {
+  (void)thiz;
+  if (pathStr == nullptr)
+    return nullptr;
+
+  JniUtfString utf(env, pathStr);
+  const char *path = utf.c_str();
+  if (path == nullptr)
+    return nullptr;
+
+  const size_t plen = strlen(path);
+  if (plen == 0 || plen >= kReaderMaxPath)
+    return nullptr;
+
+  /* The helper may have died between requests; don't let SIGPIPE kill us. */
+  signal(SIGPIPE, SIG_IGN);
+
+  std::vector<uint8_t> data;
+  int rc;
+  pthread_mutex_lock(&g_reader_mutex);
+  rc = readerReadLocked(path, plen, data);
+  if (rc < 0)
+    rc = readerReadLocked(path, plen, data);  // restart the child once
+  pthread_mutex_unlock(&g_reader_mutex);
+
+  if (rc < 0)
+    return nullptr;
+
+  jbyteArray result = env->NewByteArray(static_cast<jsize>(data.size()));
+  if (result != nullptr && !data.empty()) {
+    env->SetByteArrayRegion(result, 0, static_cast<jsize>(data.size()),
+                            reinterpret_cast<const jbyte *>(data.data()));
+  }
+  return result;
+}
+
+/*
  * Stream [srcPath] into [dstPath] with root privileges, from a throwaway child
  * process.  Used to flash an image file to a block device (and the reverse,
  * dumping a partition), without ever holding the whole image in memory.
@@ -1089,6 +1347,8 @@ const JNINativeMethod gMethods[] = {
     {"delRule", "(Ljava/lang/String;)I", (void *)ncore::delRule},
     {"listProfiles", "()Ljava/lang/String;", (void *)ncore::listProfiles},
     {"readFile", "(Ljava/lang/String;)[B", (void *)ncore::readFile},
+    {"readFilePersistent", "(Ljava/lang/String;)[B",
+     (void *)ncore::readFilePersistent},
     {"writeBlock", "(Ljava/lang/String;Ljava/lang/String;)Z",
      (void *)ncore::writeBlock},
     {"helloLog", "()V", (void *)ncore::helloLog},

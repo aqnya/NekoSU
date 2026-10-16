@@ -36,8 +36,15 @@ object RootShell {
      */
     fun reboot(): Boolean = exec("svc power reboot").ok
 
-    fun readFileBytes(path: String): ByteArray? =
-        runCatching { Ncore.readFile(path) }.getOrNull()?.takeIf { it.isNotEmpty() }
+    /**
+     * 以 root 读取文件。优先走常驻读取器（只 fork 一次，之后管道通信），读取器
+     * 失败时回退到每次 fork 的 [Ncore.readFile]。
+     */
+    fun readFileBytes(path: String): ByteArray? {
+        val viaReader = runCatching { Ncore.readFilePersistent(path) }.getOrNull()
+        if (viaReader != null) return viaReader.takeIf { it.isNotEmpty() }
+        return runCatching { Ncore.readFile(path) }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
 
     fun execStreaming(
         cmd: String,
