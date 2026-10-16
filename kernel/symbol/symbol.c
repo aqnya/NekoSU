@@ -286,7 +286,7 @@ struct kallsyms_view {
  * positives in unrelated rodata essentially impossible, and does not assume
  * anything about individual token length.
  *
- * A cheap prefilter (a NUL within the first 64 bytes) keeps the scan fast in
+ * A cheap prefilter (enough NULs in the first 64 bytes) keeps the scan fast in
  * code/rodata regions with long NUL-free runs.
  */
 static u32 token_table_len(const u8 *p, const u8 *end)
@@ -301,21 +301,29 @@ static u32 token_table_len(const u8 *p, const u8 *end)
         return 0;
 
     /*
-     * Quick reject: kallsyms_token_table is a dense run of very short
-     * NUL-terminated tokens, so the leading bytes contain many NULs.
-     * Ordinary code/rodata rarely has 4 NULs within 16 bytes.
+     * Quick reject: kallsyms_token_table is a dense run of NUL-terminated
+     * tokens, so its leading bytes contain many NULs (~15 in the first 64 for
+     * the 5.15 vermeer table).  The window must tolerate a long first token:
+     * though the tokens are frequency-sorted, the most frequent one can still
+     * be several bytes -- the vermeer kernel starts with "_global", which
+     * leaves only 3 NULs in the first 16 bytes, so the previous "4 NULs in 16
+     * bytes" test rejected the real table outright and every symbol lookup
+     * then failed (cache=0).  Count over 64 bytes instead; ordinary
+     * code/rodata rarely holds 8 NULs there.
      */
     {
         const u8 *s = p;
-        const u8 *s_end = p + 16;
+        const u8 *s_end = p + 64;
         int nuls = 0;
 
+        if (s_end > end)
+            s_end = end;
         while (s < s_end) {
-            if (!*s && ++nuls >= 4)
+            if (!*s && ++nuls >= 8)
                 break;
             s++;
         }
-        if (nuls < 4)
+        if (nuls < 8)
             return 0;
     }
 
