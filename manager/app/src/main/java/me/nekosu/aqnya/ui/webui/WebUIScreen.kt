@@ -54,6 +54,7 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.ui.component.AppDialog
 import me.nekosu.aqnya.ui.component.AppTextField
@@ -63,6 +64,13 @@ private const val WEBUI_DOMAIN = "mui.kernelsu.org"
 
 /** `ksu://icon/<pkg>` 返回的图标边长（像素）。 */
 private const val ICON_PX = 192
+
+/**
+ * `ksu://icon/<pkg>` 的结果缓存。图标解码 + PNG 编码不便宜，而列表类 WebUI 会对
+ * 同一批包重复请求图标，这里按包名缓存编码后的 PNG。
+ */
+private val iconPngCache = ConcurrentHashMap<String, ByteArray>()
+private const val ICON_CACHE_MAX = 512
 
 private const val HOME_URL = "https://$WEBUI_DOMAIN/index.html"
 
@@ -427,14 +435,16 @@ private fun iconResponse(
         if (packageName.isBlank()) {
             null
         } else {
-            runCatching {
+            iconPngCache[packageName] ?: runCatching {
                 val drawable = context.packageManager.getApplicationIcon(packageName)
                 val bitmap: Bitmap = drawable.toBitmap(ICON_PX, ICON_PX)
                 ByteArrayOutputStream().use { out ->
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                     out.toByteArray()
                 }
-            }.getOrNull()
+            }.getOrNull()?.also { png ->
+                if (iconPngCache.size < ICON_CACHE_MAX) iconPngCache[packageName] = png
+            }
         }
 
     return if (bytes != null) {

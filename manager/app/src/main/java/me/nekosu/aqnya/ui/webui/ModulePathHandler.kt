@@ -5,6 +5,7 @@ import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import me.nekosu.aqnya.data.shell.RootShell
 
 /**
@@ -16,6 +17,10 @@ import me.nekosu.aqnya.data.shell.RootShell
  * 送回父进程。提权只发生在子进程，WebView 的工作线程保持原有凭据不被污染。
  * 路径做了词法归一化，禁止 `..` 逃逸出 webroot。
  *
+ * 每次 `readFile` 都要 fork 一个 root 子进程，代价不低；而 WebView 重载 / SPA 路由
+ * / 重复请求会再次要同样的文件。这里按路径缓存读到的字节（含 404），把同一份
+ * WebUI 会话内的重复读取变成内存命中。
+ *
  * 另外实现 KernelSU 的两个内建资源：
  *  - `internal/insets.css`：安全区 CSS 变量，并通知宿主启用边距；
  *  - `internal/colors.css`：当前 Material 3 配色的 CSS 变量。
@@ -26,6 +31,14 @@ class ModulePathHandler(
     private val onInsetsRequested: () -> Unit,
     private val colorsProvider: () -> String,
 ) : WebViewAssetLoader.PathHandler {
+    /** 命中即直接返回；`bytes == null` 表示“确认不存在”，避免反复 fork 去读 404。 */
+    private class Cached(
+        val mime: String,
+        val bytes: ByteArray?,
+    )
+
+    private val cache = ConcurrentHashMap<String, Cached>()
+
     override fun handle(path: String): WebResourceResponse {
         when (path) {
             "internal/insets.css" -> {
@@ -43,18 +56,21 @@ class ModulePathHandler(
         }
         if (!target.startsWith(root)) return notFound(path)
 
-        val bytes = RootShell.readFileBytes(target.toFile().absolutePath)
-        if (bytes == null) {
-            Log.w("NksuWebUI", "404 webui:$path (root=$webRoot)")
-            return notFound(path)
-        }
+        val file = target.toFile()
+        val key = file.absolutePath
+        // getOrPut 的默认块在锁外执行（ConcurrentHashMap），并发请求不会互相阻塞，
+        // 首屏的多个子资源仍能并行读取。
+        val cached =
+            cache.getOrPut(key) {
+                val bytes = RootShell.readFileBytes(key)
+                if (bytes == null) {
+                    Log.w("NksuWebUI", "404 webui:$path (root=$webRoot)")
+                }
+                Cached(MimeUtil.guess(file.name.orEmpty()), bytes)
+            }
 
-        Log.d("NksuWebUI", "serve webui:$path (${bytes.size} bytes)")
-        return WebResourceResponse(
-            MimeUtil.guess(target.fileName?.toString().orEmpty()),
-            null,
-            ByteArrayInputStream(bytes),
-        )
+        val bytes = cached.bytes ?: return notFound(path)
+        return WebResourceResponse(cached.mime, null, ByteArrayInputStream(bytes))
     }
 
     private fun css(text: String): WebResourceResponse =
