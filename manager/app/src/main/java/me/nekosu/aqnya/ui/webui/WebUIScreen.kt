@@ -157,7 +157,11 @@ internal fun WebUIScreen(
                                 return iconResponse(context, url.path?.trimStart('/').orEmpty())
                             }
                             val response = assetLoader.shouldInterceptRequest(url)
-                            if (response == null) Log.w("NksuWebUI", "asset loader miss: $url")
+                            // 只对本应命中的 WebUI 域告警：模块的本地守护进程请求
+                            // （如 127.0.0.1:port）不属于资源，每次都刷屏还会拖慢日志。
+                            if (response == null && url.host.equals(WEBUI_DOMAIN, ignoreCase = true)) {
+                                Log.w("NksuWebUI", "asset miss: $url")
+                            }
                             return response
                         }
 
