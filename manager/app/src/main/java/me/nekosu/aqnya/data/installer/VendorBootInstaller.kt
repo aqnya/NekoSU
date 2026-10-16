@@ -222,11 +222,31 @@ object VendorBootInstaller {
      * @slotSuffix null/空按无后缀处理；@allowSlotless 允许回退到无后缀的
      * `vendor_boot` 链接（只对当前 slot 安全，非活动 slot 不能回退，否则会
      * 误写当前分区）。
+     *
+     * 先走 nksu 内核模块（Ncore.findVendorBoot，fork + setresuid 提权）；模块
+     * 未加载时（仅 Magisk/KernelSU 等外部 su 的设备）再走 `/system/bin/su`
+     * 查找，否则直接安装选项会因找不到分区而被隐藏。
      */
     private fun findVendorBoot(
         slotSuffix: String?,
         allowSlotless: Boolean,
-    ): String? = Ncore.findVendorBoot(slotSuffix.orEmpty(), allowSlotless)
+    ): String? {
+        val slot = slotSuffix.orEmpty()
+        return Ncore.findVendorBoot(slot, allowSlotless)
+            ?: if (RootShell.available()) RootShell.findVendorBoot(slot, allowSlotless) else null
+    }
+
+    /**
+     * 以 root 复制文件 / 分区：优先走 nksu 内核模块的 writeBlock（已加载模块时
+     * 无需外部 su），失败再回退到 `/system/bin/su` 的 dd，让只有外部 su 的设备
+     * 也能直接安装。
+     */
+    private fun copyBlock(
+        src: String,
+        dst: String,
+    ): Boolean =
+        Ncore.writeBlock(src, dst) ||
+            (RootShell.available() && RootShell.copyFile(src, dst))
 
     /**
      * 直接安装：以 root 读取指定 vendor_boot 分区，打入 nksu.ko 后写回。
@@ -235,11 +255,12 @@ object VendorBootInstaller {
      * 时把原镜像写回回滚。KernelSU 的「直接安装 / 刷入非活动分区」都走这里，
      * 区别只是 @partition 指向当前或非活动 slot。
      *
-     * patch 全程只操作本地临时文件，不需要 root；只有 dump / 写回分区用到 su。
-     * 原镜像只现 dump 一份、供 patch 与失败回滚使用，结束即删除；不导出补丁
-     * 镜像，也不做整分区读回校验（写入结果即依据）。
+     * patch 全程只操作本地临时文件，不需要 root；只有 dump / 写回分区用到 root，
+     * 且优先 nksu 内核模块、必要时回退到 `/system/bin/su`。原镜像只现 dump 一份、
+     * 供 patch 与失败回滚使用，结束即删除；不导出补丁镜像，也不做整分区读回校验
+     * （写入结果即依据）。
      *
-     * 需要设备已具备 root（Magisk/KernelSU 等 su，或已装 nksu）。
+     * 需要设备已具备 root：`/system/bin/su`（Magisk/KernelSU 等）或已装 nksu。
      */
     suspend fun directInstall(
         context: Context,
@@ -265,7 +286,9 @@ object VendorBootInstaller {
                 onOutput(context.getString(R.string.install_log_err_no_part))
                 return@withContext -1
             }
-            if (!RootShell.available()) {
+            // root 可以来自 nksu 内核模块（已装），也可以来自 /system/bin/su
+            // （仅 Magisk/KernelSU 等）。两者都没有时才报告无 root。
+            if (Ncore.ctl(1) != 0 && !RootShell.available()) {
                 onOutput(context.getString(R.string.install_log_err_no_root))
                 return@withContext -1
             }
@@ -277,7 +300,7 @@ object VendorBootInstaller {
             val source = File(dir, SOURCE_IMAGE_NAME)
             source.delete()
             source.createNewFile()
-            if (!Ncore.writeBlock(part, source.absolutePath) || !source.exists()) {
+            if (!copyBlock(part, source.absolutePath) || !source.exists()) {
                 onOutput(context.getString(R.string.install_log_err_dump))
                 source.delete()
                 return@withContext -1
@@ -292,9 +315,9 @@ object VendorBootInstaller {
             }
 
             // 3) 写回分区；失败则把原镜像写回，避免留下半写状态。
-            if (!Ncore.writeBlock(patched.absolutePath, part)) {
+            if (!copyBlock(patched.absolutePath, part)) {
                 onOutput(context.getString(R.string.install_log_rollback))
-                Ncore.writeBlock(source.absolutePath, part)
+                copyBlock(source.absolutePath, part)
                 source.delete()
                 patched.delete()
                 onOutput(context.getString(R.string.install_log_err_flash))

@@ -31,6 +31,41 @@ object RootShell {
     }
 
     /**
+     * 以 root 把 [src] 复制到 [dst]（分区 dump / 写回通用），成功返回 true。
+     *
+     * 供只有外部 su（Magisk/KernelSU 等）而没有 nksu 内核模块提权的设备使用：
+     * 直接安装原本通过 Ncore.writeBlock 在 fork 的子进程里 setresuid(0,0,0)
+     * 提权，那只在内核模块已加载时成立；这里改用 `su -c dd`，因此
+     * `/system/bin/su` 存在即可。
+     */
+    fun copyFile(
+        src: String,
+        dst: String,
+    ): Boolean = exec("dd if=${quote(src)} of=${quote(dst)} bs=1048576").ok
+
+    /**
+     * 以 root 查找 vendor_boot 分区路径，候选顺序与 Ncore.findVendorBoot 一致：
+     * 两个 `by-name` 基目录各自先试带 slot 后缀的、再试无后缀的。找不到返回 null。
+     */
+    fun findVendorBoot(
+        slotSuffix: String,
+        allowSlotless: Boolean,
+    ): String? {
+        val candidates =
+            buildList {
+                for (base in listOf("/dev/block/by-name", "/dev/block/bootdevice/by-name")) {
+                    add("$base/vendor_boot$slotSuffix")
+                    if (allowSlotless) add("$base/vendor_boot")
+                }
+            }
+        val script =
+            "for f in ${candidates.joinToString(" ")}; do " +
+                "[ -e \"\$f\" ] && { echo \"\$f\"; exit 0; }; done; exit 1"
+        val r = exec(script)
+        return r.output.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
+    }
+
+    /**
      * 以 root 重启设备。命令一般不会返回（设备随即重启），
      * 因此调用方应在 IO 线程执行，避免阻塞 UI。
      */
@@ -133,6 +168,8 @@ object RootShell {
 
     private fun withPath(cmd: String): String =
         "PATH=/sbin:/system/sbin:/system/bin:/system/xbin; export PATH; $cmd"
+
+    private fun quote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     private fun runCapture(
         command: List<String>,
