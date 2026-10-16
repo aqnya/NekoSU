@@ -9,8 +9,17 @@
 /* Use the real types to declare the pointers so macros cannot rewrite them */
 #define NKSU_SYMBOL_COMPAT_NO_MACROS
 #include "klog.h"
+#include <linux/errno.h>
 #include <fmac.h>
 #include "symbol/symbol_compat.h"
+
+/*
+ * The resolved pointers are invoked through here too (the fsnotify wrapper), so
+ * opt this file out of CFI as every other user of the layer does.
+ */
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#endif
 
 /* definitions */
 typeof(alloc_uid) *nksu_alloc_uid;
@@ -55,6 +64,26 @@ typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
 typeof(ksys_sync) *nksu_ksys_sync;
 typeof(task_work_add) *nksu_task_work_add;
 
+typeof(filp_open) *nksu_filp_open;
+typeof(kernel_read) *nksu_kernel_read;
+typeof(kernel_write) *nksu_kernel_write;
+
+typeof(commit_creds) *nksu_commit_creds;
+typeof(abort_creds) *nksu_abort_creds;
+typeof(groups_alloc) *nksu_groups_alloc;
+typeof(set_groups) *nksu_set_groups;
+typeof(unshare_fs_struct) *nksu_unshare_fs_struct;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+typeof(wait_for_initramfs) *nksu_wait_for_initramfs;
+#endif
+
+typeof(fsnotify_alloc_group) *nksu_fsnotify_alloc_group;
+typeof(fsnotify_init_mark) *nksu_fsnotify_init_mark;
+typeof(fsnotify_put_mark) *nksu_fsnotify_put_mark;
+typeof(fsnotify_put_group) *nksu_fsnotify_put_group;
+typeof(fsnotify_destroy_mark) *nksu_fsnotify_destroy_mark;
+typeof(fsnotify_add_mark) *nksu_fsnotify_add_mark;
+
 typeof(kernel_thread) *nksu_kernel_thread;
 typeof(kernel_execve) *nksu_kernel_execve;
 typeof(kernel_wait) *nksu_kernel_wait;
@@ -77,9 +106,45 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 		}                                                  \
 	} while (0)
 
+/*
+ * fsnotify_add_inode_mark() is a header inline forwarding to fsnotify_add_mark(),
+ * so the call is written out here to keep the relocation out of the module.
+ *
+ * Only the trailing out-parameter differs across versions -- 5.10/5.15 pass the
+ * optional fsid, newer kernels dropped it -- so the widest form is used and the
+ * argument is typed loosely: an ignored trailing NULL is harmless when the
+ * callee has no fsid argument.
+ */
+typedef int (*nksu_fsnotify_add_mark_fn)(struct fsnotify_mark *mark, void *connp,
+					 unsigned int type, int allow_dups,
+					 void *fsid);
+
+int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
+				 int allow_dups)
+{
+	nksu_fsnotify_add_mark_fn add =
+		(nksu_fsnotify_add_mark_fn)nksu_fsnotify_add_mark;
+
+	if (!add)
+		return -ENOSYS;
+
+	return add(mark, (void *)&inode->i_fsnotify_marks,
+		   FSNOTIFY_OBJ_TYPE_INODE, allow_dups, NULL);
+}
+
 int nksu_symbol_compat_init(void)
 {
 	int missing = 0;
+
+	/*
+	 * The file primitives come first: the first lookup runs the kallsyms
+	 * scan (the /proc/kallsyms and vmcoreinfo paths need these very
+	 * pointers), and once they are filled that path is available again for
+	 * every later lookup.
+	 */
+	NKSU_RESOLVE(nksu_filp_open, "filp_open");
+	NKSU_RESOLVE(nksu_kernel_read, "kernel_read");
+	NKSU_RESOLVE(nksu_kernel_write, "kernel_write");
 
 	NKSU_RESOLVE(nksu_alloc_uid, "alloc_uid");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
@@ -106,6 +171,20 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu___vfs_setxattr_noperm, "__vfs_setxattr_noperm");
 	NKSU_RESOLVE(nksu_ksys_sync, "ksys_sync");
 	NKSU_RESOLVE(nksu_task_work_add, "task_work_add");
+	NKSU_RESOLVE(nksu_commit_creds, "commit_creds");
+	NKSU_RESOLVE(nksu_abort_creds, "abort_creds");
+	NKSU_RESOLVE(nksu_groups_alloc, "groups_alloc");
+	NKSU_RESOLVE(nksu_set_groups, "set_groups");
+	NKSU_RESOLVE(nksu_unshare_fs_struct, "unshare_fs_struct");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+	NKSU_RESOLVE(nksu_wait_for_initramfs, "wait_for_initramfs");
+#endif
+	NKSU_RESOLVE(nksu_fsnotify_alloc_group, "fsnotify_alloc_group");
+	NKSU_RESOLVE(nksu_fsnotify_init_mark, "fsnotify_init_mark");
+	NKSU_RESOLVE(nksu_fsnotify_put_mark, "fsnotify_put_mark");
+	NKSU_RESOLVE(nksu_fsnotify_put_group, "fsnotify_put_group");
+	NKSU_RESOLVE(nksu_fsnotify_destroy_mark, "fsnotify_destroy_mark");
+	NKSU_RESOLVE(nksu_fsnotify_add_mark, "fsnotify_add_mark");
 	NKSU_RESOLVE(nksu_selinux_state, "selinux_state");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	NKSU_RESOLVE(nksu_selinux_blob_sizes, "selinux_blob_sizes");
@@ -175,6 +254,23 @@ void nksu_symbol_compat_exit(void)
 	nksu___vfs_setxattr_noperm = NULL;
 	nksu_ksys_sync = NULL;
 	nksu_task_work_add = NULL;
+	nksu_filp_open = NULL;
+	nksu_kernel_read = NULL;
+	nksu_kernel_write = NULL;
+	nksu_commit_creds = NULL;
+	nksu_abort_creds = NULL;
+	nksu_groups_alloc = NULL;
+	nksu_set_groups = NULL;
+	nksu_unshare_fs_struct = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+	nksu_wait_for_initramfs = NULL;
+#endif
+	nksu_fsnotify_alloc_group = NULL;
+	nksu_fsnotify_init_mark = NULL;
+	nksu_fsnotify_put_mark = NULL;
+	nksu_fsnotify_put_group = NULL;
+	nksu_fsnotify_destroy_mark = NULL;
+	nksu_fsnotify_add_mark = NULL;
 	nksu_selinux_state = NULL;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	nksu_selinux_blob_sizes = NULL;
@@ -207,4 +303,8 @@ void nksu_symbol_compat_exit(void)
 	nksu_kernel_wait = NULL;
 	nksu_flush_signal_handlers = NULL;
 }
+
+#if defined(__clang__)
+#pragma clang attribute pop
+#endif
 

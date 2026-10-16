@@ -36,6 +36,9 @@
 #include <linux/binfmts.h>
 #include <linux/cred.h>
 #include <linux/nsproxy.h>
+#include <linux/fs_struct.h>
+#include <linux/initrd.h>
+#include <linux/fsnotify_backend.h>
 #include <linux/uidgid.h>
 #include <linux/user_namespace.h>
 #include <linux/syscalls.h>
@@ -117,6 +120,42 @@ extern typeof(ksys_sync) *nksu_ksys_sync;
 extern typeof(task_work_add) *nksu_task_work_add;
 
 /*
+ * File primitives for the module's own state files (feature registry, profile
+ * store, packages.xml, /sys/kernel/vmcoreinfo) and for symbol.c's bootstrap.
+ * The target kernel exports these only into its GKI VFS namespace, so a direct
+ * reference is invisible to us and the module fails to load.
+ */
+extern typeof(filp_open) *nksu_filp_open;
+extern typeof(kernel_read) *nksu_kernel_read;
+extern typeof(kernel_write) *nksu_kernel_write;
+
+/* Credential and namespace primitives: escalation, spawn and SELinux relabel. */
+extern typeof(commit_creds) *nksu_commit_creds;
+extern typeof(abort_creds) *nksu_abort_creds;
+extern typeof(groups_alloc) *nksu_groups_alloc;
+extern typeof(set_groups) *nksu_set_groups;
+extern typeof(unshare_fs_struct) *nksu_unshare_fs_struct;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+extern typeof(wait_for_initramfs) *nksu_wait_for_initramfs;
+#endif
+
+/* fsnotify: the package observer that watches packages.xml (manager.c). */
+extern typeof(fsnotify_alloc_group) *nksu_fsnotify_alloc_group;
+extern typeof(fsnotify_init_mark) *nksu_fsnotify_init_mark;
+extern typeof(fsnotify_put_mark) *nksu_fsnotify_put_mark;
+extern typeof(fsnotify_put_group) *nksu_fsnotify_put_group;
+extern typeof(fsnotify_destroy_mark) *nksu_fsnotify_destroy_mark;
+extern typeof(fsnotify_add_mark) *nksu_fsnotify_add_mark;
+
+/*
+ * fsnotify_add_inode_mark() is a header inline that forwards to the unexported
+ * fsnotify_add_mark(), so the relocation lands on the call site: attach inode
+ * marks through this wrapper instead.
+ */
+int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
+				 int allow_dups);
+
+/*
  * spawn primitives (kernel/spawn/spawn.c). None of these is exported on GKI, and they
  * are exactly what a self-contained call_usermodehelper replacement needs:
  * spawn a task, exec a program in it, wait for it, reset its handlers.
@@ -181,6 +220,22 @@ extern typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 #define __vfs_setxattr_noperm            nksu___vfs_setxattr_noperm
 #define ksys_sync                        nksu_ksys_sync
 #define task_work_add                    nksu_task_work_add
+#define filp_open                        nksu_filp_open
+#define kernel_read                      nksu_kernel_read
+#define kernel_write                     nksu_kernel_write
+#define commit_creds                     nksu_commit_creds
+#define abort_creds                      nksu_abort_creds
+#define groups_alloc                     nksu_groups_alloc
+#define set_groups                       nksu_set_groups
+#define unshare_fs_struct                nksu_unshare_fs_struct
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+#define wait_for_initramfs               nksu_wait_for_initramfs
+#endif
+#define fsnotify_alloc_group             nksu_fsnotify_alloc_group
+#define fsnotify_init_mark               nksu_fsnotify_init_mark
+#define fsnotify_put_mark                nksu_fsnotify_put_mark
+#define fsnotify_put_group               nksu_fsnotify_put_group
+#define fsnotify_destroy_mark            nksu_fsnotify_destroy_mark
 #define kernel_thread                    nksu_kernel_thread
 #define kernel_execve                    nksu_kernel_execve
 #define kernel_wait                      nksu_kernel_wait

@@ -781,7 +781,7 @@ static int appscan_observer_init(void)
 
     fsnotify_init_mark(mark, appscan_group);
     mark->mask = APPSCAN_WATCH_MASK;
-    ret = fsnotify_add_inode_mark(mark, d_inode(kpath.dentry), 0);
+    ret = nksu_fsnotify_add_inode_mark(mark, d_inode(kpath.dentry), 0);
     path_put(&kpath);
     if (ret) {
         fsnotify_put_mark(mark);

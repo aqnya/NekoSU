@@ -75,6 +75,25 @@
 #include "symbol/symbol.h"
 
 /*
+ * symbol.c is the bootstrap for the compat pointers, so it must not use their
+ * redirection macros: it calls the resolved pointers by name.  Its own file
+ * reads (vmcoreinfo, /proc/kallsyms) therefore only work once the first
+ * kallsyms scan has run, which is what the scan's pointer-free fallbacks in
+ * scan_kernel_memory_locked() are for.
+ */
+#define NKSU_SYMBOL_COMPAT_NO_MACROS
+#include "symbol/symbol_compat.h"
+
+/*
+ * filp_open()/kernel_read() are reached through resolved pointers here; the
+ * type-hash the module emits for those indirect calls may differ from the
+ * running kernel's, so opt this file out of CFI like the other users do.
+ */
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#endif
+
+/*
  * Upper bound for a decoded (decompressed) symbol name. The on-media length
  * is a single u8 (<= 255 compressed tokens), and the kernel caps the
  * decompressed name at KSYM_NAME_LEN (128 on 5.15, larger on newer kernels);
@@ -875,10 +894,15 @@ static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
     unsigned long addr = 0;
     char key[64];
     char *p;
-    struct file *f __free(nksu_filp) = filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
+    struct file *f __free(nksu_filp) = NULL;
 
     snprintf(key, sizeof(key), "%s(%s)=", kind, name);
 
+    /* Unavailable until the first scan has resolved the file primitives. */
+    if (!nksu_filp_open || !nksu_kernel_read)
+        return 0;
+
+    f = nksu_filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
     if (IS_ERR(f))
         return 0;
 
@@ -888,7 +912,7 @@ static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
 
     /* the file can be much larger than a page; read it all */
     while (total < SZ_64K - 1) {
-        rd = kernel_read(f, buf + total, SZ_64K - 1 - total, &pos);
+        rd = nksu_kernel_read(f, buf + total, SZ_64K - 1 - total, &pos);
         if (rd <= 0)
             break;
         total += (size_t)rd;
@@ -1073,7 +1097,11 @@ static unsigned long lookup_proc_kallsyms(const char *name)
     if (ksym_proc_hidden)
         return 0;
 
-    f = filp_open("/proc/kallsyms", O_RDONLY, 0);
+    /* Same as above: no file primitives before the first scan. */
+    if (!nksu_filp_open || !nksu_kernel_read)
+        return 0;
+
+    f = nksu_filp_open("/proc/kallsyms", O_RDONLY, 0);
     if (IS_ERR(f))
         return 0;
 
@@ -1105,7 +1133,7 @@ static unsigned long lookup_proc_kallsyms(const char *name)
             break;
         }
 
-        rd = kernel_read(f, buf + used, SZ_64K - 1 - used, &pos);
+        rd = nksu_kernel_read(f, buf + used, SZ_64K - 1 - used, &pos);
         if (rd < 0)
             break;
         if (rd == 0) {
@@ -1242,4 +1270,8 @@ void nksu_ksym_dump(void)
 void nksu_ksym_dump(void)
 {
 }
+#endif
+
+#if defined(__clang__)
+#pragma clang attribute pop
 #endif
