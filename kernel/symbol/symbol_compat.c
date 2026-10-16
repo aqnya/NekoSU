@@ -111,9 +111,13 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
  * so the call is written out here to keep the relocation out of the module.
  *
  * Only the trailing out-parameter differs across versions -- 5.10/5.15 pass the
- * optional fsid, newer kernels dropped it -- so the widest form is used and the
- * argument is typed loosely: an ignored trailing NULL is harmless when the
- * callee has no fsid argument.
+ * optional fsid, the 6.x KMIs dropped it -- so the resolved pointer is used
+ * through the widest form: an ignored trailing NULL is harmless when the callee
+ * has no fsid argument, and NULL means "cache nothing" when it does.
+ *
+ * The cast therefore changes the arity, which clang's -Wcast-function-type-strict
+ * rejects; handing the address over as void * is what it accepts, and the older
+ * compilers (which do not know that warning) match the 5.10/5.15 form exactly.
  */
 typedef int (*nksu_fsnotify_add_mark_fn)(struct fsnotify_mark *mark, void *connp,
 					 unsigned int type, int allow_dups,
@@ -122,8 +126,16 @@ typedef int (*nksu_fsnotify_add_mark_fn)(struct fsnotify_mark *mark, void *connp
 int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
 				 int allow_dups)
 {
-	nksu_fsnotify_add_mark_fn add =
-		(nksu_fsnotify_add_mark_fn)nksu_fsnotify_add_mark;
+	nksu_fsnotify_add_mark_fn add;
+
+#if defined(__clang__) && __clang_major__ >= 16
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
+#endif
+	add = (nksu_fsnotify_add_mark_fn)(void *)nksu_fsnotify_add_mark;
+#if defined(__clang__) && __clang_major__ >= 16
+#pragma clang diagnostic pop
+#endif
 
 	if (!add)
 		return -ENOSYS;
