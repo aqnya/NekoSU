@@ -1,5 +1,4 @@
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
-use crate::utils::is_safe_mode;
 use crate::{
     assets, defs, ksucalls, metamodule, restorecon,
     utils::{self},
@@ -83,19 +82,6 @@ pub fn on_post_fs_data() -> Result<()> {
     // load sepolicy.rule
     if crate::module::load_sepolicy_rule().is_err() {
         warn!("load sepolicy.rule failed");
-    }
-
-    if let Err(e) = crate::profile::apply_sepolies() {
-        warn!("apply root profile sepolicy failed: {e}");
-    }
-
-    crate::feature::init_forced_features();
-
-    // load feature config
-    if is_safe_mode() {
-        warn!("safe mode, skip load feature config");
-    } else if let Err(e) = crate::feature::init_features() {
-        warn!("init features failed: {e}");
     }
 
     // execute metamodule post-fs-data script first (priority)

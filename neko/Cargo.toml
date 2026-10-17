@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "ksud",
-    "ksuinit",
     "neko-boot",
     "third_party/android-bootimg",
     "third_party/ksu_props/crates/prop-rs",

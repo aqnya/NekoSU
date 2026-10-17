@@ -10,18 +10,15 @@ use std::{
         Write,
     },
     path::Path,
-    process::Command,
 };
 
 use crate::defs::KSU_TEMP_BACKUP_DIR_NAME;
-use crate::{assets, boot_patch, defs, ksucalls, module, restorecon};
+use crate::{assets, defs, ksucalls, restorecon};
 #[allow(unused_imports)]
 use std::fs::{Permissions, set_permissions};
 use std::os::unix::prelude::PermissionsExt;
 
 use std::path::PathBuf;
-
-use crate::boot_patch::BootRestoreArgs;
 
 use rustix::{
     process,
@@ -246,36 +243,6 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
         }
     }
 
-    Ok(())
-}
-
-pub fn uninstall(package_name: &str) -> Result<()> {
-    if Path::new(defs::MODULE_DIR).exists() {
-        println!("- Uninstall modules..");
-        module::uninstall_all_modules()?;
-        module::prune_modules()?;
-    }
-    println!("- Removing directories..");
-    std::fs::remove_dir_all(defs::WORKING_DIR).ok();
-    std::fs::remove_file(defs::DAEMON_PATH).ok();
-    std::fs::remove_dir_all(defs::MODULE_DIR).ok();
-    std::fs::remove_dir_all(defs::PREINIT_DIR_VOLD).ok();
-    std::fs::remove_dir_all(defs::PREINIT_DIR_WATCHDOG).ok();
-    std::fs::remove_dir_all(defs::PREINIT_DIR_DEFAULT).ok();
-    println!("- Restore boot image..");
-    boot_patch::restore(BootRestoreArgs {
-        boot: None,
-        flash: true,
-        out: None,
-        out_name: None,
-    })?;
-    println!("- Uninstall KernelSU manager..");
-    Command::new("pm")
-        .args(["uninstall", package_name])
-        .spawn()?;
-    println!("- Rebooting in 5 seconds..");
-    std::thread::sleep(std::time::Duration::from_secs(5));
-    Command::new("reboot").spawn()?;
     Ok(())
 }
 

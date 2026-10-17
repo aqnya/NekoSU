@@ -11,31 +11,18 @@
     clippy::redundant_field_names
 )]
 
-mod apk_sign;
 mod assets;
-mod boot_patch;
 #[cfg(target_os = "android")]
 mod cli;
 #[cfg(not(target_os = "android"))]
 mod cli_non_android;
-#[cfg(target_os = "android")]
-mod debug;
 mod defs;
-#[cfg(target_os = "android")]
-mod feature;
-mod feature_id;
 #[cfg(target_os = "android")]
 mod hot_install;
 #[cfg(target_os = "android")]
 mod init_event;
 #[cfg(target_os = "android")]
 mod ksucalls;
-#[cfg(target_os = "android")]
-mod late_load;
-mod lkm_image;
-mod lkm_image_btf;
-#[cfg(target_os = "android")]
-mod magica;
 #[cfg(target_os = "android")]
 mod metamodule;
 #[cfg(target_os = "android")]
@@ -45,21 +32,13 @@ mod module_config;
 #[cfg(target_os = "android")]
 mod preinit;
 #[cfg(target_os = "android")]
-mod profile;
-#[cfg(target_os = "android")]
 mod resetprop;
 #[cfg(target_os = "android")]
 mod restorecon;
 #[cfg(target_os = "android")]
 mod sepolicy;
 #[cfg(target_os = "android")]
-mod soft_reboot;
-#[cfg(target_os = "android")]
 mod su;
-#[cfg(target_os = "android")]
-mod sulog;
-#[cfg(target_os = "android")]
-mod unload;
 #[cfg(target_os = "android")]
 mod utils;
 
