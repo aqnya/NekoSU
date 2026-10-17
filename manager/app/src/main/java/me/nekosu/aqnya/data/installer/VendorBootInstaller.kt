@@ -244,6 +244,8 @@ object VendorBootInstaller {
     }
 
 
+    private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
     /** Best-effort partition capacity, used to avoid writing past the block device. */
     private fun partitionSize(partition: String): Long? {
         if (!RootShell.available()) return null
