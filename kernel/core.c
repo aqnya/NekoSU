@@ -56,13 +56,12 @@ static const module_component_t early_components[] = {
     },
     {
         /*
-         * Grant the control fd to root from second_stage on.  The temporary
-         * boot watcher no longer hooks prctl and nothing group-restores slots,
-         * so this hook simply persists across zygote: ksud can query safe
-         * mode / sepolicy at post-fs-data and every later stage.  Its exit
-         * (IOC_DISARM_SAFEMODE, or module unload) removes it.
+         * Mark ksud at exec with the syscall tracepoint flag and attach the
+         * control fd through task_work.  Installed at second_stage, before
+         * init execs ksud at post-fs-data; the fork probe propagates the mark
+         * to every ksud descendant.
          */
-        .name = "daemon fd",
+        .name = "ksud tracepoint",
         .init = nksu_daemon_fd_init,
         .exit = nksu_daemon_fd_exit,
     },

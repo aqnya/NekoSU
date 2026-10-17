@@ -285,12 +285,9 @@ static long ioc_disarm_safemode(void)
 {
     nksu_safe_mode_disable();
     /*
-     * The steady-state prctl hook exists only so ksud can reach this ioctl at
-     * every stage; once the boot daemon has disarmed safe mode (its last
-     * stage) that hook is no longer needed, so take it down instead of leaving
-     * it patched until module unload.
+     * Keep ksud's tracepoint marking alive: ksud still needs the control fd
+     * for module installs and runtime sepolicy changes after boot.
      */
-    nksu_daemon_fd_exit();
     return 0;
 }
 

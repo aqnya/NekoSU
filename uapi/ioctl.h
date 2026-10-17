@@ -102,13 +102,12 @@ struct fmac_ioc {
 #define FMAC_DATA_FEATURE   12
 
 /*
- * prctl opcodes.  201 and 203 are gated to the manager (is_manager-gated);
- * 204 lets the boot-time daemon (ksud) obtain the control fd (root-gated) so
- * it can send IOC_SET_SEPOLICY.
+ * prctl opcodes.  201 and 203 are gated to the manager (is_manager-gated).
+ * ksud does not use a prctl: the sched_process_exec tracepoint marks it and
+ * attaches the control fd through task_work (see kernel/manager/daemon.c).
  */
 #define NKSU_PRCTL_GET_SHM_FD     201
 #define NKSU_PRCTL_GET_CTL_FD     203
-#define NKSU_PRCTL_GET_DRIVER_FD  204
 
 #define FMAC_OFF_UID     0
 #define FMAC_OFF_CAPS    4

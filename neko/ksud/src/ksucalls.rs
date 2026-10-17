@@ -17,7 +17,6 @@ use std::sync::OnceLock;
 
 use crate::ksu_uapi;
 
-const PR_GET_DRIVER_FD: libc::c_int = 204;
 const FMAC_CTL_NAME: &str = "fmac_ctl";
 
 // _IOWR('F', 0, struct fmac_ioc) with a two-u32 header.
@@ -40,8 +39,8 @@ std::thread_local! {
 }
 
 pub fn setup_sigsys_handler() {
-    // NekoSU reaches the driver through prctl(204), which Android's app seccomp
-    // policy allows.  Keep the symbol for upstream callers.
+    // NekoSU attaches the control fd from the kernel exec tracepoint; there is
+    // no prctl path left to guard.  Keep the symbol for upstream callers.
     let _ = (&SVC_IN_FLIGHT, &SIGSYS_OCCURRED);
 }
 
@@ -68,9 +67,8 @@ fn init_driver_fd() -> Option<RawFd> {
         return Some(fd);
     }
 
-    unsafe {
-        libc::prctl(PR_GET_DRIVER_FD, 0, 0, 0, 0);
-    }
+    // The kernel attaches the control fd via task_work when this ksud binary
+    // (or libksud.so) is exec'd, so it is already in /proc/self/fd here.
     scan_driver_fd().ok().flatten()
 }
 
