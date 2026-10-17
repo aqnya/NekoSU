@@ -29,4 +29,4 @@ KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
 ## License
 
-NekoSU is licensed under the **GNU General Public License v3 (GPL-3)** (http://www.gnu.org/copyleft/gpl.html).
+NekoSU is licensed under the **[GNU General Public License v3 (GPL-3)](http://www.gnu.org/copyleft/gpl.html)**.
