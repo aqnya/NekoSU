@@ -26,13 +26,21 @@ fun gitCommitHash(): String =
         .trim()
 
 // The LKM's manually maintained version, shared with the kernel module through
-// the repository-root version file.  Exposed as BuildConfig.NKSU_VERSION so
-// the manager can compare it with the running module's version.
+// uapi/version.h.  Exposed as BuildConfig.NKSU_VERSION so the manager can
+// compare it with the running module's version.
 fun nksuVersion(): String =
     rootDir
-        .resolve("version")
+        .resolve("uapi/version.h")
         .takeIf { it.isFile }
         ?.readText()
+        ?.let {
+            Regex(
+                "^#define\\s+NKSU_VERSION\\s+\"([^\"]+)\"",
+                RegexOption.MULTILINE,
+            ).find(it)
+        }
+        ?.groupValues
+        ?.getOrNull(1)
         ?.trim()
         ?.ifEmpty { null }
         ?: "unknown"

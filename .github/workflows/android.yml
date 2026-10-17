@@ -24,7 +24,7 @@ on:
       - "gradlew"
       - "gradle/wrapper/**"
       - "userspace/ncore/**"
-      - "version"
+      - "uapi/version.h"
   pull_request:
     branches: [ "main" ]
     paths:
@@ -43,7 +43,7 @@ on:
       - "gradlew"
       - "gradle/wrapper/**"
       - "userspace/ncore/**"
-      - "version"
+      - "uapi/version.h"
 
 permissions:
   contents: read
@@ -53,7 +53,7 @@ jobs:
   # The APK bundles the newest successful LKM artifacts, so the KO build and the
   # Android build stay independent.  A new LKM retriggers this workflow via
   # workflow_run above.  The manager and the running module agree on
-  # version (see HomeViewModel), which is bumped by hand when the KO
+  # uapi/version.h (see HomeViewModel), which is bumped by hand when the KO
   # changes.
   build:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}

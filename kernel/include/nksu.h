@@ -9,14 +9,11 @@
 #endif
 
 /*
- * The LKM's manually maintained version, read from the repository-root
- * version file by Kbuild.  The manager carries the same value and compares
- * it with the running module's, so a developer bumps that file when the KO
- * changes.
+ * The LKM's manually maintained version, defined by the shared UAPI header.
+ * The manager carries the same value and compares it with the running
+ * module's, so a developer bumps uapi/version.h when the KO changes.
  */
-#ifndef NKSU_VERSION
-#define NKSU_VERSION "unknown"
-#endif
+#include <uapi/version.h>
 
 /*
  * Component groups.  Late load runs all of them at once; a first-stage

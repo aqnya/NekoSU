@@ -74,16 +74,9 @@ NKSU_GIT_COMMIT := unknown
 endif
 ccflags-y += -DNKSU_GIT_COMMIT=\"$(NKSU_GIT_COMMIT)\"
 
-# The LKM's manually maintained version, shared with the manager through the
-# repository-root version file.  The manager compares it with the running
-# module's version, so a developer bumps this file when the KO changes.
-ifneq ($(NKSU_SRCDIR),)
-NKSU_VERSION := $(shell cat $(NKSU_SRCDIR)/../version 2>/dev/null)
-endif
-ifeq ($(strip $(NKSU_VERSION)),)
-NKSU_VERSION := unknown
-endif
-ccflags-y += -DNKSU_VERSION=\"$(NKSU_VERSION)\"
+# The LKM's manually maintained version lives in uapi/version.h, which is
+# shared with the manager and userspace.  A developer bumps that header when
+# the KO changes.
 
 # GNU C11.  The kernel headers use GNU extensions (typeof, statement
 # expressions, ...), so the GNU dialect is required; a strict -std=c11
