@@ -11,6 +11,7 @@ release.keystore
 ktlint
 app/src/main/jniLibs/
 .kotlin/
+.ccache/
 manager/app/src/main/assets/ko/
 # Local kernel debug artifacts
 last_kmsg
