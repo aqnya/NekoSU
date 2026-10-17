@@ -90,6 +90,13 @@ fn run() -> Result<()> {
         .or_else(|| (!candidates.is_empty()).then_some(0))
         .context("no cpio vendor ramdisk found in the image")?;
     let (vendor_index, mut cpio, _) = candidates.swap_remove(chosen);
+    let format = match vendor_index {
+        Some(index) => ramdisk
+            .get_vendor_ramdisk(index)
+            .map(|entry| entry.get_compress_format()),
+        None => Some(ramdisk.get_compress_format()),
+    };
+    eprintln!("neko-boot: selected ramdisk index={vendor_index:?}, compression={format:?}");
 
     eprintln!("neko-boot: injecting lib/modules/nksu.ko");
     if !cpio.entries().contains_key("lib/modules") {

@@ -297,23 +297,23 @@ pub fn get_encoder<'a, W: Write + ?Sized>(
 ) -> std::io::Result<Box<dyn WriteFinish<&'a mut W> + 'a>> {
     Ok(match format {
         CompressFormat::XZ => {
-            let mut opt = XzOptions::with_preset(9);
+            let mut opt = XzOptions::with_preset(6);
             opt.set_check_sum_type(CheckType::Crc32);
             Box::new(XzWriter::new(w, opt)?)
         }
         CompressFormat::LZMA => Box::new(LzmaWriter::new_use_header(
             w,
-            &LzmaOptions::with_preset(9),
+            &LzmaOptions::with_preset(6),
             None,
         )?),
-        CompressFormat::BZIP2 => Box::new(BzEncoder::new(w, BzCompression::best())),
+        CompressFormat::BZIP2 => Box::new(BzEncoder::new(w, BzCompression::default())),
         CompressFormat::LZ4 => {
             let encoder = LZ4FrameEncoderBuilder::new()
                 .block_size(BlockSize::Max4MB)
                 .block_mode(BlockMode::Independent)
                 .checksum(ContentChecksum::ChecksumEnabled)
                 .block_checksum(BlockChecksum::BlockChecksumEnabled)
-                .level(9)
+                .level(4)
                 .auto_flush(true)
                 .build(w)?;
             Box::new(encoder)
@@ -329,7 +329,7 @@ pub fn get_encoder<'a, W: Write + ?Sized>(
             };
             Box::new(ZopFliEncoder::new_buffered(opt, BlockType::Dynamic, w)?)
         }
-        CompressFormat::GZIP => Box::new(GzEncoder::new(w, GzCompression::best())),
+        CompressFormat::GZIP => Box::new(GzEncoder::new(w, GzCompression::default())),
         _ => unreachable!(),
     })
 }
