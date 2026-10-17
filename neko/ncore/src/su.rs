@@ -29,13 +29,13 @@ pub fn grant_root(global_mnt: bool) -> Result<()> {
             Result::Ok(())
         })
     };
-    // add /data/adb/ksu/bin to PATH
+    // add the NekoSU bin directory to PATH
     add_path_to_env(defs::BINARY_DIR)?;
     Err(command.exec().into())
 }
 
 fn print_usage(program: &str, opts: &Options) {
-    let brief = format!("KernelSU\n\nUsage: {program} [options] [-] [user [argument...]]");
+    let brief = format!("NekoSU\n\nUsage: {program} [options] [-] [user [argument...]]");
     print!("{}", opts.usage(&brief));
 }
 
@@ -197,7 +197,7 @@ pub fn root_shell() -> Result<()> {
     }
 
     if matches.opt_present("v") {
-        println!("{}:KernelSU", defs::VERSION_NAME);
+        println!("{}:NekoSU", defs::VERSION_NAME);
         return Ok(());
     }
 
@@ -284,7 +284,7 @@ pub fn root_shell() -> Result<()> {
         }
     }
 
-    // add /data/adb/ksu/bin to PATH
+    // add the NekoSU bin directory to PATH
     add_path_to_env(defs::BINARY_DIR)?;
 
     // when KSURC_PATH exists and ENV is not set, set ENV to KSURC_PATH

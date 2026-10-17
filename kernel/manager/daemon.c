@@ -65,8 +65,7 @@ static bool nksu_daemon_path(const char *filename)
 	base = strrchr(filename, '/');
 	base = base ? base + 1 : filename;
 
-	return !strcmp(base, "ncore") || !strcmp(base, "libncore.so") ||
-	       !strcmp(base, "ksud") || !strcmp(base, "libksud.so");
+	return !strcmp(base, "ncore") || !strcmp(base, "libncore.so");
 }
 
 static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
