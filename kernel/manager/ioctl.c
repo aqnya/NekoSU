@@ -18,6 +18,12 @@
 #include "nksu.h"
 #include "boot/safe_mode.h"
 #include "privilege/profile_store.h"
+#include "symbol/symbol_compat.h"
+
+/* change_pid is reached through the kallsyms pointer; call it without CFI. */
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#endif
 
 static long ioc_get_shm(void)
 {
@@ -299,8 +305,12 @@ static long ioc_set_init_pgrp(void)
 
     if (task_session(p) != task_session(&init_task))
         err = -EPERM;
-    else if (task_pgrp(p) != init_group)
-        change_pid(p, PIDTYPE_PGID, init_group);
+    else if (task_pgrp(p) != init_group) {
+        if (!nksu_change_pid)
+            err = -ENOSYS;
+        else
+            change_pid(p, PIDTYPE_PGID, init_group);
+    }
 
     write_unlock_irq(&tasklist_lock);
     return err;
@@ -387,3 +397,7 @@ int fmac_ctlfd_get(void)
 {
     return anon_inode_getfd("[fmac_ctl]", &fmac_ctl_fops, NULL, O_RDWR | O_CLOEXEC);
 }
+
+#if defined(__clang__)
+#pragma clang attribute pop
+#endif

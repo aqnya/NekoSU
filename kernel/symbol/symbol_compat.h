@@ -43,6 +43,7 @@
 #include <linux/user_namespace.h>
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
+#include <linux/pid.h>
 #include <asm/fixmap.h>
 
 #include "security.h"
@@ -118,6 +119,7 @@ extern typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
  */
 extern typeof(ksys_sync) *nksu_ksys_sync;
 extern typeof(task_work_add) *nksu_task_work_add;
+extern typeof(change_pid) *nksu_change_pid;
 
 /*
  * File primitives for the module's own state files (feature registry, profile
@@ -220,6 +222,7 @@ extern typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 #define __vfs_setxattr_noperm            nksu___vfs_setxattr_noperm
 #define ksys_sync                        nksu_ksys_sync
 #define task_work_add                    nksu_task_work_add
+#define change_pid                      nksu_change_pid
 #define filp_open                        nksu_filp_open
 #define kernel_read                      nksu_kernel_read
 #define kernel_write                     nksu_kernel_write

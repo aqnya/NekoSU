@@ -69,6 +69,7 @@ typeof(lookup_one_len) *nksu_lookup_one_len;
 typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
 typeof(ksys_sync) *nksu_ksys_sync;
 typeof(task_work_add) *nksu_task_work_add;
+typeof(change_pid) *nksu_change_pid;
 
 typeof(filp_open) *nksu_filp_open;
 typeof(kernel_read) *nksu_kernel_read;
@@ -175,6 +176,7 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu___vfs_setxattr_noperm, "__vfs_setxattr_noperm");
 	NKSU_RESOLVE(nksu_ksys_sync, "ksys_sync");
 	NKSU_RESOLVE(nksu_task_work_add, "task_work_add");
+	NKSU_RESOLVE(nksu_change_pid, "change_pid");
 	NKSU_RESOLVE(nksu_commit_creds, "commit_creds");
 	NKSU_RESOLVE(nksu_abort_creds, "abort_creds");
 	NKSU_RESOLVE(nksu_groups_alloc, "groups_alloc");
