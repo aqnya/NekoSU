@@ -20,3 +20,4 @@ logcat.log
 
 # Rust host check artifacts
 neko/target/
+Cargo.lock
