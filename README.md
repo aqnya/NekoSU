@@ -9,8 +9,6 @@
 Kernel-level root solution for Android: a kernel module plus a Material 3 manager app.
 KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
----
-
 ## Features
 
 1.Kernel-based su and root access management.
@@ -22,14 +20,6 @@ KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 - Android 12+ (minSdk 31), **arm64-v8a** only
 - Unlocked bootloader
 
-## Installation
-
-See [Installation methods](docs/usage.md#installation-methods).
-
-## Building
-
-See [How to build](docs/building.md).
-
 ## Credits
 
 - [KernelSU](https://github.com/tiann/KernelSU) — the SELinux policy/rule engine, LSM hook layout,
@@ -39,4 +29,4 @@ See [How to build](docs/building.md).
 
 ## License
 
-[GPL-3.0](LICENSE)
+NekoSU is licensed under the **GNU General Public License v3 (GPL-3)** (http://www.gnu.org/copyleft/gpl.html).
