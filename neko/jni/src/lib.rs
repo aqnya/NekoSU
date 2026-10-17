@@ -94,6 +94,7 @@ fn ensure_ctl_fd() -> Option<RawFd> {
         CTL_FD.store(fd, Ordering::Relaxed);
         Some(fd)
     } else {
+        log::error!("control fd not found after prctl({PR_GET_CTL_FD})");
         None
     }
 }
@@ -108,13 +109,19 @@ fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
     buffer[8..].copy_from_slice(data);
 
     let ret = unsafe { libc::ioctl(fd, IOC_CMD, buffer.as_mut_ptr()) };
-    if ret >= 0 && !data.is_empty() {
+    if ret < 0 {
+        log::error!(
+            "ioctl flag {flag} failed: {}",
+            std::io::Error::last_os_error()
+        );
+    } else if !data.is_empty() {
         data.copy_from_slice(&buffer[8..]);
     }
     ret
 }
 
 extern "system" fn ctl(_env: EnvUnowned, _class: JClass, value: jint) -> jint {
+    log::info!("ctl({value})");
     match value {
         1 => {
             unsafe {
@@ -426,7 +433,10 @@ extern "system" fn read_file(mut env: EnvUnowned, _class: JClass, path: JString)
     };
     match read_file_impl(&path) {
         Some(data) if !data.is_empty() => put_bytes(&mut env, &data),
-        _ => ptr::null_mut(),
+        _ => {
+            log::warn!("readFile({path}) failed or empty");
+            ptr::null_mut()
+        }
     }
 }
 
@@ -440,7 +450,10 @@ extern "system" fn read_file_persistent(
     };
     match read_file_impl(&path) {
         Some(data) => put_bytes(&mut env, &data),
-        None => ptr::null_mut(),
+        None => {
+            log::warn!("readFilePersistent({path}) failed");
+            ptr::null_mut()
+        }
     }
 }
 
@@ -542,6 +555,7 @@ extern "system" fn write_block(
     if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
         JNI_TRUE
     } else {
+        log::error!("writeBlock failed: status={status}");
         JNI_FALSE
     }
 }
@@ -625,6 +639,7 @@ extern "system" fn find_vendor_boot(
         && unsafe { *libc::__errno() } == libc::EINTR
     {}
     if data.is_empty() || !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
+        log::warn!("findVendorBoot(slot={slot}) not found");
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
@@ -775,8 +790,9 @@ pub unsafe extern "system" fn JNI_OnLoad(
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Info)
-            .with_tag("ncore_jni"),
+            .with_tag("ncore"),
     );
+    log::info!("JNI loaded");
     let vm = unsafe { JavaVM::from_raw(vm) };
     let methods = [
         native_method!("ctl", "(I)I", ctl),
@@ -828,8 +844,9 @@ pub unsafe extern "system" fn JNI_OnLoad(
         }
         Ok(())
     });
-    if let Err(err) = result {
-        log::error!("register_native_methods failed: {err}");
+    match result {
+        Ok(()) => log::info!("registered {} native methods", methods.len()),
+        Err(err) => log::error!("register_native_methods failed: {err}"),
     }
     JNI_VERSION_1_6
 }
