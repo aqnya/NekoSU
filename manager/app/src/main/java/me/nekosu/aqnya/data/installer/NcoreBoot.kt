@@ -7,8 +7,6 @@ import me.nekosu.aqnya.util.getAppVersionCode
 object NcoreBoot {
     const val NCORE_DIR = "/data/adb/nksu"
     const val BOOT_PATH = "/data/adb/ncore"
-    const val BIN_DIR = "$NCORE_DIR/bin"
-    const val BUSYBOX_PATH = "$BIN_DIR/busybox"
 
     private const val PREFS_NAME = "ncore_boot"
     private const val KEY_INSTALLED_VERSION = "installed_version"

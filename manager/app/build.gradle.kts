@@ -132,9 +132,6 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            // busybox is a static executable shipped as a jniLib for the kernel
-            // to copy; never let AGP strip it.
-            keepDebugSymbols += "**/libbusybox.so"
         }
         resources {
             excludes += "DebugProbesKt.bin"

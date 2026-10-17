@@ -328,21 +328,17 @@ next:
  */
 
 /*
- * Bootstrap /data/adb/nksu/{ncore,bin/busybox} straight from the verified
- * manager package, so root works on the very first boot without the manager
+ * Bootstrap /data/adb/nksu/ncore straight from the verified manager package, so root works on the very first boot without the manager
  * having to run `ncore install` from a root shell it does not have yet.
  *
- * The manager ships both binaries as jniLibs (libncore.so and libbusybox.so);
- * the kernel only sees the extracted nativeLibraryPath directory from
- * packages.xml.  This mirrors KernelSU's daemon-exists gate and the
+ * The manager ships libncore.so as a jniLib; the kernel only sees the
+ * extracted nativeLibraryPath directory from packages.xml.  This mirrors KernelSU's daemon-exists gate and the
  * manager-provided libncore.so, but installs from the kernel so no userspace
  * round-trip is needed.
  */
 #define NKSU_DAEMON_BOOT_PATH    "/data/adb/ncore"
 #define NKSU_DAEMON_BIN_DIR      "/data/adb/nksu/bin"
-#define NKSU_DAEMON_BUSYBOX_PATH NKSU_DAEMON_BIN_DIR "/busybox"
 #define NKSU_DAEMON_LIB_NAME     "libncore.so"
-#define NKSU_DAEMON_BUSYBOX_LIB  "libbusybox.so"
 
 static bool kfile_exists(const char *path)
 {
@@ -540,7 +536,6 @@ static int install_daemon_from_manager(const struct abx_package *paths)
          * this also repairs a file whose xattr was lost.
          */
         nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
-        nksu_relabel_path(NKSU_DAEMON_BUSYBOX_PATH);
         WRITE_ONCE(daemon_ready, true);
         return 0;
     }
@@ -569,18 +564,6 @@ static int install_daemon_from_manager(const struct abx_package *paths)
     }
     /* Label it nksu_file so init's injected init.rc can exec it. */
     nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
-
-    snprintf(src, sizeof(src), "%s/%s", lib_dir, NKSU_DAEMON_BUSYBOX_LIB);
-    if (kfile_exists(src)) {
-        int berr = kfile_copy(src, NKSU_DAEMON_BUSYBOX_PATH);
-
-        if (berr)
-            pr_warn("[manager] copy busybox failed: %d\n", berr);
-        else
-            nksu_relabel_path(NKSU_DAEMON_BUSYBOX_PATH);
-    } else {
-        pr_warn("[manager] %s not found, busybox not installed\n", src);
-    }
 
     pr_info("[manager] installed ncore from %s\n", lib_dir);
     WRITE_ONCE(daemon_ready, true);
