@@ -280,6 +280,8 @@
     <string name="install_log_err_dump">[nksu] ERROR: 读取 vendor_boot 失败</string>
     <string name="install_log_err_patch">[nksu] ERROR: 补丁失败</string>
     <string name="install_log_err_too_large">[nksu] ERROR: 补丁镜像 (%1$d 字节) 超过 vendor_boot 分区容量 (%2$d 字节)</string>
+    <string name="install_log_patching">[nksu] 正在修补 vendor_boot...</string>
+    <string name="install_log_flashing">[nksu] 正在写入 vendor_boot...</string>
     <string name="install_log_err_flash">[nksu] ERROR: 刷入 vendor_boot 失败</string>
     <string name="install_err_copy_asset">复制 assets/%1$s 失败: %2$s</string>
     <string name="install_err_read_file">无法读取所选文件</string>

@@ -41,8 +41,11 @@ fn run() -> Result<()> {
     };
 
     let image_path = Path::new(&image);
+    eprintln!("neko-boot: reading module {module}");
     let module_data = fs::read(&module).with_context(|| format!("read {module}"))?;
+    eprintln!("neko-boot: reading image {image}");
     let image_data = fs::read(image_path).with_context(|| format!("read {image}"))?;
+    eprintln!("neko-boot: parsing boot image ({} bytes)", image_data.len());
     let boot = BootImage::parse(&image_data).with_context(|| format!("parse {image}"))?;
 
     match boot.get_header().get_version() {
@@ -58,6 +61,7 @@ fn run() -> Result<()> {
     // v4 splits the vendor ramdisk into table entries; v3 has one blob.  Find
     // the entry that already carries lib/modules, falling back to the first
     // entry that parses as a cpio archive.
+    eprintln!("neko-boot: locating vendor ramdisk");
     let mut candidates: Vec<(Option<usize>, Cpio, bool)> = Vec::new();
     if ramdisk.is_vendor_ramdisk() {
         for (index, entry) in ramdisk.iter_vendor_ramdisk().enumerate() {
@@ -87,6 +91,7 @@ fn run() -> Result<()> {
         .context("no cpio vendor ramdisk found in the image")?;
     let (vendor_index, mut cpio, _) = candidates.swap_remove(chosen);
 
+    eprintln!("neko-boot: injecting lib/modules/nksu.ko");
     if !cpio.entries().contains_key("lib/modules") {
         if !cpio.entries().contains_key("lib") {
             cpio.add("lib", CpioEntry::dir(0o755))?;
@@ -110,6 +115,7 @@ fn run() -> Result<()> {
         "/lib/modules/nksu.ko:\n",
     )?;
 
+    eprintln!("neko-boot: repacking ramdisk");
     let mut new_cpio = Vec::new();
     cpio.dump(&mut new_cpio)?;
 
@@ -120,11 +126,14 @@ fn run() -> Result<()> {
         patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
     }
 
+    eprintln!("neko-boot: repacking boot image");
     let mut output = Cursor::new(Vec::with_capacity(boot.get_size()));
     patcher.patch(&mut output)?;
 
     let output_path = format!("{}.new", image_path.display());
+    eprintln!("neko-boot: writing {output_path}");
     fs::write(&output_path, output.into_inner()).with_context(|| format!("write {output_path}"))?;
+    eprintln!("neko-boot: done");
     Ok(())
 }
 

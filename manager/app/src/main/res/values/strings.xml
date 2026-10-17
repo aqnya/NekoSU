@@ -286,6 +286,8 @@
     <string name="install_log_err_dump">[nksu] ERROR: failed to read vendor_boot</string>
     <string name="install_log_err_patch">[nksu] ERROR: patching failed</string>
     <string name="install_log_err_too_large">[nksu] ERROR: patched image (%1$d bytes) exceeds vendor_boot partition capacity (%2$d bytes)</string>
+    <string name="install_log_patching">[nksu] patching vendor_boot...</string>
+    <string name="install_log_flashing">[nksu] writing patched vendor_boot...</string>
     <string name="install_log_err_flash">[nksu] ERROR: failed to flash vendor_boot</string>
     <string name="install_err_copy_asset">Failed to copy assets/%1$s: %2$s</string>
     <string name="install_err_read_file">Unable to read the selected file</string>

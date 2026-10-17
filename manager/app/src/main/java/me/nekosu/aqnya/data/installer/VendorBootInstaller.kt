@@ -132,6 +132,7 @@ object VendorBootInstaller {
                     ?: throw IllegalStateException(context.getString(R.string.install_err_ko_missing))
 
             try {
+                onOutput(context.getString(R.string.install_log_patching))
                 val patched = patchImage(nekoBoot, vendorBoot, koFile, onOutput)
                 if (patched == null) {
                     onOutput(context.getString(R.string.install_log_err_patch))
@@ -242,6 +243,14 @@ object VendorBootInstaller {
             ?: if (RootShell.available()) RootShell.findVendorBoot(slot, allowSlotless) else null
     }
 
+
+    /** Best-effort partition capacity, used to avoid writing past the block device. */
+    private fun partitionSize(partition: String): Long? {
+        if (!RootShell.available()) return null
+        val result = RootShell.exec("blockdev --getsize64 ${quote(partition)} 2>/dev/null")
+        return if (result.code == 0) result.output.trim().toLongOrNull() else null
+    }
+
     /**
      * 以 root 复制文件 / 分区：优先走 nksu 内核模块的 writeBlock（已加载模块时
      * 无需外部 su），失败再回退到 `/system/bin/su` 的 dd，让只有外部 su 的设备
@@ -313,6 +322,7 @@ object VendorBootInstaller {
             }
 
             // 2) 交给 neko-boot 直接把模块打进镜像（无需 root），得到补丁镜像。
+            onOutput(context.getString(R.string.install_log_patching))
             val patched = patchImage(nekoBoot, source, koFile, onOutput)
             if (patched == null) {
                 onOutput(context.getString(R.string.install_log_err_patch))
@@ -321,6 +331,14 @@ object VendorBootInstaller {
             }
 
             // 3) 写回分区；失败则把原镜像写回，避免留下半写状态。
+            val capacity = partitionSize(part)
+            if (capacity != null && patched.length() > capacity) {
+                onOutput(context.getString(R.string.install_log_err_too_large, patched.length(), capacity))
+                source.delete()
+                patched.delete()
+                return@withContext -1
+            }
+            onOutput(context.getString(R.string.install_log_flashing))
             if (!copyBlock(patched.absolutePath, part)) {
                 onOutput(context.getString(R.string.install_log_rollback))
                 copyBlock(source.absolutePath, part)
