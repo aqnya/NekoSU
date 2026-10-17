@@ -12,6 +12,7 @@ on:
     branches: [ "main" ]
     paths:
       - ".github/workflows/build.yml"
+      - ".github/workflows/ko.yml"
       - "kernel/**"
       - "uapi/**"
       - "manager/app/**"
@@ -26,6 +27,7 @@ on:
     branches: [ "main" ]
     paths:
       - ".github/workflows/build.yml"
+      - ".github/workflows/ko.yml"
       - "kernel/**"
       - "uapi/**"
       - "manager/app/**"
@@ -37,32 +39,31 @@ on:
       - "gradlew"
       - "gradlew.bat"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  # One job builds the LKM for every supported KMI inside the DDK Docker image,
-  # writes the modules straight into the manager's assets/ko directory, and
-  # then builds the APK from that same checkout.  There is no KO artifact
-  # hand-off between workflows anymore: Gradle packages the files produced by
-  # the preceding Docker step.
+  # The KO matrix runs in parallel, one Docker image per KMI.  Its modules are
+  # downloaded into the manager's assets below, so Gradle still packages the
+  # files produced by this run.
+  ko:
+    uses: ./.github/workflows/ko.yml
+    with:
+      debug: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.debug != 'false' }}
+
   build:
+    needs: ko
     runs-on: ubuntu-latest
     env:
       NDK_VERSION: r29
       ANDROID_NDK_API_LEVEL: "28"
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      DDK_RELEASE: "20260828"
       KO_OUTPUT_DIR: manager/app/src/main/assets/ko
-      NKSU_DEBUG: ${{ github.event_name != 'workflow_dispatch' || inputs.debug }}
-      KMI_LIST: |
-        android12-5.10
-        android13-5.10
-        android13-5.15
-        android14-5.15
-        android14-6.1
-        android15-6.6
-        android16-6.12
 
     steps:
     - uses: actions/checkout@v7
@@ -70,107 +71,26 @@ jobs:
         fetch-depth: 0
         submodules: recursive
 
-    # The KO build is skipped when the kernel/UAPI sources and build settings
-    # are byte-for-byte identical to a previous run.  hashFiles() is the source
-    # hash used by both this cache and the ccache cache below.
-    - name: Restore cached kernel modules
-      id: ko-cache
-      uses: actions/cache@v6
+    - name: Download kernel modules
+      uses: actions/download-artifact@v7
       with:
-        path: ${{ env.KO_OUTPUT_DIR }}
-        key: ko-${{ runner.os }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-${{ hashFiles('kernel/**', 'uapi/**', '.github/workflows/build.yml') }}
+        pattern: ko-*
+        path: lkm-artifacts
+        merge-multiple: true
 
-    - name: Restore ccache
-      if: steps.ko-cache.outputs.cache-hit != 'true'
-      uses: actions/cache@v6
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-${{ hashFiles('kernel/**', 'uapi/**', '.github/workflows/build.yml') }}
-        restore-keys: |
-          ccache-${{ runner.os }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-
-
-    - name: Build nksu.ko for every KMI in Docker
-      if: steps.ko-cache.outputs.cache-hit != 'true'
+    - name: Stage kernel modules into assets
       run: |
         set -euo pipefail
-
-        mkdir -p "$KO_OUTPUT_DIR" .ccache
+        mkdir -p "$KO_OUTPUT_DIR"
         rm -f "$KO_OUTPUT_DIR"/*_nksu.ko
-
-        debug_flag="n"
-        if [ "$NKSU_DEBUG" = "true" ]; then
-          debug_flag="y"
-        fi
-
-        while IFS= read -r kmi; do
-          [ -n "$kmi" ] || continue
-
-          image="ghcr.io/ylarod/ddk:${kmi}-${DDK_RELEASE}"
-          echo "::group::Build nksu.ko for $kmi"
-          echo "image: $image"
-
-          docker run --rm \
-            --platform linux/amd64 \
-            --volume "${GITHUB_WORKSPACE}:/work" \
-            --volume "${GITHUB_WORKSPACE}/.ccache:/ccache" \
-            --workdir /work \
-            --env "NKSU_DEBUG_FLAG=${debug_flag}" \
-            --env "KO_OUTPUT_DIR=${KO_OUTPUT_DIR}" \
-            --env "KO_NAME=${kmi}_nksu.ko" \
-            --env "CCACHE_DIR=/ccache" \
-            --env "CCACHE_MAXSIZE=2G" \
-            --env "CCACHE_BASEDIR=/work" \
-            --env "CCACHE_NOHASHDIR=true" \
-            --env "CCACHE_UMASK=022" \
-            "$image" \
-            bash -c '
-              set -euo pipefail
-              git config --global --add safe.directory "*"
-
-              # Each KMI gets its own KDIR, but the source tree is shared
-              # between loop iterations, so drop the previous build first.
-              make -C kernel clean
-              make -C kernel \
-                CONFIG_NKSU=m \
-                CONFIG_NKSU_DEBUG="${NKSU_DEBUG_FLAG}" \
-                CC="ccache clang" \
-                HOSTCC="ccache clang" \
-                HOSTCXX="ccache clang++"
-
-              llvm-strip -d kernel/nksu.ko
-              mkdir -p "/work/${KO_OUTPUT_DIR}"
-              cp kernel/nksu.ko "/work/${KO_OUTPUT_DIR}/${KO_NAME}"
-
-              ccache -s || true
-              # The cache is uploaded by a later, non-root step.
-              chmod -R a+rX /ccache
-            '
-
-          ls -lh "${KO_OUTPUT_DIR}/${kmi}_nksu.ko"
-          # Keep only one DDK image on disk at a time; the runner's root
-          # filesystem cannot hold the whole KMI matrix at once.
-          docker image rm "$image" >/dev/null 2>&1 || true
-          echo "::endgroup::"
-        done <<< "$KMI_LIST"
-
-        echo "Built kernel modules into $KO_OUTPUT_DIR"
-
-    - name: Reuse cached kernel modules
-      if: steps.ko-cache.outputs.cache-hit == 'true'
-      run: |
-        echo "Kernel/UAPI sources are unchanged; reusing the cached nksu.ko files."
+        cp lkm-artifacts/*_nksu.ko "$KO_OUTPUT_DIR"/
         ls -lh "$KO_OUTPUT_DIR"
-
-    - name: Verify kernel modules
-      run: |
-        set -euo pipefail
-        expected="$(grep -cve '^[[:space:]]*$' <<< "$KMI_LIST")"
-        actual="$(find "$KO_OUTPUT_DIR" -maxdepth 1 -name '*_nksu.ko' | wc -l)"
-        if [ "$actual" -ne "$expected" ]; then
-          echo "::error::expected $expected kernel modules in $KO_OUTPUT_DIR, found $actual"
+        count="$(find "$KO_OUTPUT_DIR" -maxdepth 1 -name '*_nksu.ko' | wc -l)"
+        if [ "$count" -eq 0 ]; then
+          echo "::error::no kernel modules were downloaded"
           exit 1
         fi
-        echo "Using $actual kernel modules from $KO_OUTPUT_DIR"
+        echo "Using $count kernel modules from $KO_OUTPUT_DIR"
 
     - name: Set up JDK 25
       uses: actions/setup-java@v6

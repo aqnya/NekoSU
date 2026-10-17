@@ -1,0 +1,124 @@
+name: Build LKM
+
+on:
+  workflow_call:
+    inputs:
+      debug:
+        description: 'Enable nksu debug mode'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable nksu debug mode'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build-ko:
+    name: ${{ matrix.kmi }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    env:
+      DDK_RELEASE: "20260828"
+      NKSU_DEBUG: ${{ inputs.debug }}
+      KMI: ${{ matrix.kmi }}
+
+    steps:
+    - uses: actions/checkout@v7
+
+    # The whole matrix rebuilds only when kernel/UAPI sources or this workflow
+    # change.  Each KMI caches its own module so app-only commits still skip
+    # every Docker build.
+    - name: Restore cached ${{ matrix.kmi }} module
+      id: ko-cache
+      uses: actions/cache@v6
+      with:
+        path: out/${{ matrix.kmi }}_nksu.ko
+        key: ko-${{ matrix.kmi }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-${{ hashFiles('kernel/**', 'uapi/**', '.github/workflows/ko.yml') }}
+
+    - name: Restore ccache
+      if: steps.ko-cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v6
+      with:
+        path: .ccache
+        key: ccache-${{ matrix.kmi }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-${{ hashFiles('kernel/**', 'uapi/**', '.github/workflows/ko.yml') }}
+        restore-keys: |
+          ccache-${{ matrix.kmi }}-${{ env.DDK_RELEASE }}-${{ env.NKSU_DEBUG }}-
+
+    - name: Build nksu.ko in Docker
+      if: steps.ko-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+
+        mkdir -p out .ccache
+
+        debug_flag="n"
+        if [ "$NKSU_DEBUG" = "true" ]; then
+          debug_flag="y"
+        fi
+
+        image="ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}"
+        echo "image: $image"
+
+        docker run --rm \
+          --platform linux/amd64 \
+          --volume "${GITHUB_WORKSPACE}:/work" \
+          --volume "${GITHUB_WORKSPACE}/.ccache:/ccache" \
+          --workdir /work \
+          --env "KMI=${KMI}" \
+          --env "NKSU_DEBUG_FLAG=${debug_flag}" \
+          --env "CCACHE_DIR=/ccache" \
+          --env "CCACHE_MAXSIZE=512M" \
+          --env "CCACHE_BASEDIR=/work" \
+          --env "CCACHE_NOHASHDIR=true" \
+          --env "CCACHE_UMASK=022" \
+          "$image" \
+          bash -c '
+            set -euo pipefail
+            git config --global --add safe.directory "*"
+
+            make -C kernel \
+              CONFIG_NKSU=m \
+              CONFIG_NKSU_DEBUG="${NKSU_DEBUG_FLAG}" \
+              CC="ccache clang" \
+              HOSTCC="ccache clang" \
+              HOSTCXX="ccache clang++"
+
+            llvm-strip -d kernel/nksu.ko
+            cp kernel/nksu.ko "/work/out/${KMI}_nksu.ko"
+
+            ccache -s || true
+            # The cache is uploaded by a later, non-root step.
+            chmod -R a+rX /ccache
+          '
+
+        ls -lh "out/${KMI}_nksu.ko"
+
+    - name: Reuse cached ${{ matrix.kmi }} module
+      if: steps.ko-cache.outputs.cache-hit == 'true'
+      run: |
+        echo "Kernel/UAPI sources are unchanged; reusing the cached $KMI module."
+        ls -lh "out/${KMI}_nksu.ko"
+
+    - name: Upload ${{ matrix.kmi }} module
+      uses: actions/upload-artifact@v7
+      with:
+        name: ko-${{ matrix.kmi }}
+        path: out/${{ matrix.kmi }}_nksu.ko
+        archive: false
