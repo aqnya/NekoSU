@@ -45,7 +45,10 @@ fn run() -> Result<()> {
     let module_data = fs::read(&module).with_context(|| format!("read {module}"))?;
     eprintln!("bootpatcher: reading image {image}");
     let image_data = fs::read(image_path).with_context(|| format!("read {image}"))?;
-    eprintln!("bootpatcher: parsing boot image ({} bytes)", image_data.len());
+    eprintln!(
+        "bootpatcher: parsing boot image ({} bytes)",
+        image_data.len()
+    );
     let boot = BootImage::parse(&image_data).with_context(|| format!("parse {image}"))?;
 
     match boot.get_header().get_version() {

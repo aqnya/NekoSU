@@ -84,12 +84,6 @@ android {
         )
      }
     }
-    
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-     }
 
     signingConfigs {
         create("debugKey") {
