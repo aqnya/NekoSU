@@ -83,7 +83,7 @@ jobs:
         set -euo pipefail
         mkdir -p "$KO_OUTPUT_DIR"
         rm -f "$KO_OUTPUT_DIR"/*_nksu.ko
-        cp lkm-artifacts/*_nksu.ko "$KO_OUTPUT_DIR"/
+        find lkm-artifacts -type f -name '*_nksu.ko' -exec cp {} "$KO_OUTPUT_DIR"/ \;
         ls -lh "$KO_OUTPUT_DIR"
         count="$(find "$KO_OUTPUT_DIR" -maxdepth 1 -name '*_nksu.ko' | wc -l)"
         if [ "$count" -eq 0 ]; then

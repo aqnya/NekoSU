@@ -121,4 +121,3 @@ jobs:
       with:
         name: ko-${{ matrix.kmi }}
         path: out/${{ matrix.kmi }}_nksu.ko
-        archive: false
