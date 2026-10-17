@@ -158,8 +158,8 @@ pub fn root_shell() -> Result<()> {
     );
     opts.optflag(
         "",
-        "ksu-no-new-privs",
-        "Prevent this process (and its children) from privilege re-escalation via KernelSU",
+        "no-new-privs",
+        "Prevent this process (and its children) from privilege re-escalation.",
     );
     opts.optopt("Z", "context", "Specify the SELinux context", "CONTEXT");
 
@@ -207,7 +207,7 @@ pub fn root_shell() -> Result<()> {
     let mut is_login = matches.opt_present("l");
     let preserve_env = matches.opt_present("p");
     let mount_master = matches.opt_present("M");
-    let ksu_no_new_privs = matches.opt_present("ksu-no-new-privs");
+    let no_new_privs = matches.opt_present("no-new-privs");
     let selinux_context = matches.opt_str("Z");
 
     let groups = matches
@@ -287,8 +287,8 @@ pub fn root_shell() -> Result<()> {
         command.env("ENV", defs::KSURC_PATH);
     }
 
-    if ksu_no_new_privs {
-        ksucalls::set_ksu_no_new_privs().context("set KSU_NO_NEW_PRIVS")?;
+    if no_new_privs {
+        ksucalls::set_no_new_privs().context("set NO_NEW_PRIVS")?;
     }
 
     // escape from the current cgroup and become session leader

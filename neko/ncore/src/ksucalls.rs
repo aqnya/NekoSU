@@ -291,6 +291,10 @@ pub fn lookup_symbols(names: &[&str]) -> Result<Vec<Option<u64>>> {
     Ok(vec![None; names.len()])
 }
 
-pub fn set_ksu_no_new_privs() -> anyhow::Result<()> {
+pub fn set_no_new_privs() -> anyhow::Result<()> {
+    let ret = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
+    if ret != 0 {
+        return Err(io::Error::last_os_error().into());
+    }
     Ok(())
 }
