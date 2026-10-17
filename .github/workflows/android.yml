@@ -17,9 +17,12 @@ on:
       - "manager/app/src/**/*.h"
       - "manager/app/src/**/*.hpp"
       - "manager/app/src/**/CMakeLists.txt"
-      - "manager/*.gradle.kts"
+      - "*.gradle.kts"
       - "manager/app/*.gradle.kts"
-      - "manager/gradle/libs.versions.toml"
+      - "gradle/libs.versions.toml"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradle/wrapper/**"
       - "userspace/ncore/**"
       - "version"
   pull_request:
@@ -33,9 +36,12 @@ on:
       - "manager/app/src/**/*.h"
       - "manager/app/src/**/*.hpp"
       - "manager/app/src/**/CMakeLists.txt"
-      - "manager/*.gradle.kts"
+      - "*.gradle.kts"
       - "manager/app/*.gradle.kts"
-      - "manager/gradle/libs.versions.toml"
+      - "gradle/libs.versions.toml"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradle/wrapper/**"
       - "userspace/ncore/**"
       - "version"
 
@@ -154,10 +160,9 @@ jobs:
 
     - name: Decode Release Keystore
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > manager/release.keystore
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
 
     - name: Build with Gradle
-      working-directory: manager
       env:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}

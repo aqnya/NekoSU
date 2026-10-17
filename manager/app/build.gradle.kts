@@ -30,7 +30,7 @@ fun gitCommitHash(): String =
 // the manager can compare it with the running module's version.
 fun nksuVersion(): String =
     rootDir
-        .resolve("../version")
+        .resolve("version")
         .takeIf { it.isFile }
         ?.readText()
         ?.trim()
