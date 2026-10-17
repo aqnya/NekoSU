@@ -210,6 +210,7 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
         defs::DAEMON_PATH,
     )?;
     restorecon::lsetfilecon(defs::DAEMON_PATH, restorecon::KSU_CON)?;
+    crate::init_event::ensure_ksu_compat_link();
     // install binary assets
     assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
 

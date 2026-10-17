@@ -67,7 +67,7 @@ bool is_manager_uid(uid_t uid)
 }
 
 /*
- * Whether /data/adb/nksu/ksud is known to be present.  Set by the (sleepable)
+ * Whether /data/adb/ksud is known to be present.  Set by the (sleepable)
  * manager scan; read by the su tracepoint hook, which must not sleep.
  */
 static bool daemon_ready;
@@ -338,7 +338,7 @@ next:
  * manager-provided libksud.so, but installs from the kernel so no userspace
  * round-trip is needed.
  */
-#define NKSU_DAEMON_BOOT_PATH    "/data/adb/nksu/ksud"
+#define NKSU_DAEMON_BOOT_PATH    "/data/adb/ksud"
 #define NKSU_DAEMON_BIN_DIR      "/data/adb/nksu/bin"
 #define NKSU_DAEMON_BUSYBOX_PATH NKSU_DAEMON_BIN_DIR "/busybox"
 #define NKSU_DAEMON_LIB_NAME     "libksud.so"

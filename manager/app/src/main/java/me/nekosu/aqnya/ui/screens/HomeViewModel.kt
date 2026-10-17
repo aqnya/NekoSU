@@ -57,7 +57,7 @@ class HomeViewModel(
                     _installStatus.value =
                         if (matched) InstallStatus.INSTALLED else InstallStatus.NEED_UPDATE
 
-                    // 只有版本一致时才把随包的 ksud 放到 /data/adb/nksu/ksud，
+                    // 只有版本一致时才把随包的 ksud 放到 /data/adb/ksud，
                     // 避免用一个不匹配的 ksud 覆盖能工作的旧版本。
                     if (matched) {
                         KsudBoot.install(appContext)

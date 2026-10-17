@@ -214,7 +214,7 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 
 /// KernelSU modules and scripts hardcode /data/adb/ksu; keep it pointing at
 /// NekoSU's runtime directory like ncore did.
-fn ensure_ksu_compat_link() {
+pub(crate) fn ensure_ksu_compat_link() {
     use std::os::unix::fs::symlink;
 
     let link = Path::new("/data/adb/ksu");

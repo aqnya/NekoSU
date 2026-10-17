@@ -12,14 +12,14 @@
  * nksu's userspace module runtime, at the well-defined boot stages:
  *
  *   on post-fs-data
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud post-fs-data
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud post-fs-data
  *   on nonencrypted
  *   on property:vold.decrypt=trigger_restart_framework
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud services
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud services
  *   on property:sys.boot_completed=1
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud boot-completed
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud boot-completed
  *
- * /data/adb/nksu/ksud is installed by the manager (it is the same binary the
+ * /data/adb/ksud is installed by the manager (it is the same binary the
  * app ships as libksud.so).  ksud is a KernelSU-compatible userspace module
  * runtime: it enumerates /data/adb/modules, runs the boot hooks, drives the
  * metamodule mount, and pushes each module's sepolicy.rule through the control
@@ -32,7 +32,7 @@
  * The module is loaded from init's first stage (modules.load), so this is a
  * boot-time feature: a late load injects nothing here and brings no modules up.
  */
-#define NKSU_DAEMON_PATH "/data/adb/nksu/ksud"
+#define NKSU_DAEMON_PATH "/data/adb/ksud"
 
 int nksu_init_rc_init(void);
 void nksu_init_rc_exit(void);

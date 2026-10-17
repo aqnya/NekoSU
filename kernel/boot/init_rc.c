@@ -8,15 +8,15 @@
  * same, exec'ing ksud instead:
  *
  *   on post-fs-data
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud post-fs-data
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud post-fs-data
  *   on nonencrypted
  *   on property:vold.decrypt=trigger_restart_framework
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud services
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud services
  *   on property:sys.boot_completed=1
- *       exec u:r:nksu:s0 root -- /data/adb/nksu/ksud boot-completed
+ *       exec u:r:nksu:s0 root -- /data/adb/ksud boot-completed
  *
  * ksud (neko/ksud, shipped by the manager as
- * /data/adb/nksu/ksud) is the KernelSU-compatible module runtime.  The kernel
+ * /data/adb/ksud) is the KernelSU-compatible module runtime.  The kernel
  * only edits init's view of init.rc.  Because init's `exec` is synchronous, the
  * post-fs-data hooks (metamodule mount included) finish before init continues,
  * so modules are mounted before zygote/system_server start.

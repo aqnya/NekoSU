@@ -6,7 +6,7 @@ import me.nekosu.aqnya.util.getAppVersionCode
 
 object KsudBoot {
     const val KSUD_DIR = "/data/adb/nksu"
-    const val BOOT_PATH = "$KSUD_DIR/ksud"
+    const val BOOT_PATH = "/data/adb/ksud"
     const val BIN_DIR = "$KSUD_DIR/bin"
     const val BUSYBOX_PATH = "$BIN_DIR/busybox"
 
