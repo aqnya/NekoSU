@@ -2,19 +2,16 @@ use crate::{
     defs, ksucalls,
     utils::{self, umask},
 };
-use anyhow::{Context, Ok, Result, anyhow, bail};
+use anyhow::{Context, Ok, Result, anyhow};
 use getopts::Options;
-use libc::c_int;
-use log::error;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::{cmp::Ordering, env, io};
+use std::{cmp::Ordering, env};
 use std::{
     ffi::{CStr, CString},
     process::Command,
 };
 
-use crate::ksucalls::get_wrapped_fd;
 use rustix::{
     process::getuid,
     thread::{Gid, Uid, set_thread_res_gid, set_thread_res_uid},
@@ -73,37 +70,6 @@ fn resolve_uid(user: &str) -> Result<u32> {
 fn set_selinux_context(context: &str) -> Result<()> {
     std::fs::write("/proc/thread-self/attr/current", context)?;
     Ok(())
-}
-
-fn wrap_tty(fd: c_int) {
-    let inner_fn = move || -> Result<()> {
-        if unsafe { libc::isatty(fd) != 1 }
-            && io::Error::last_os_error().raw_os_error() != Some(libc::EACCES)
-        {
-            return Ok(());
-        }
-
-        // The root profile is already active here, so its SELinux domain may
-        // return EACCES while querying the original terminal. In that case,
-        // check the wrapped fd instead, since that descriptor is intended to
-        // bypass this restriction.
-        let new_fd = get_wrapped_fd(fd).context("get_wrapped_fd")?;
-        if unsafe { libc::isatty(new_fd) != 1 } {
-            unsafe { libc::close(new_fd) };
-            return Ok(());
-        }
-        let dup_result = unsafe { libc::dup2(new_fd, fd) };
-        let dup_errno = unsafe { *libc::__errno() };
-        unsafe { libc::close(new_fd) };
-        if dup_result == -1 {
-            bail!("dup {new_fd} -> {fd} errno: {dup_errno}");
-        }
-        Ok(())
-    };
-
-    if let Err(e) = inner_fn() {
-        error!("wrap tty {fd}: {e:?}");
-    }
 }
 
 #[allow(clippy::similar_names)]
@@ -190,7 +156,11 @@ pub fn root_shell() -> Result<()> {
         "Specify a supplementary group. The first specified supplementary group is also used as a primary group if the option -g is not specified.",
         "GROUP",
     );
-    opts.optflag("W", "no-wrapper", "don't use ksu fd wrapper");
+    opts.optflag(
+        "W",
+        "no-wrapper",
+        "accepted for compatibility; NekoSU does not use an fd wrapper",
+    );
     opts.optflag(
         "",
         "ksu-no-new-privs",
@@ -242,7 +212,6 @@ pub fn root_shell() -> Result<()> {
     let mut is_login = matches.opt_present("l");
     let preserve_env = matches.opt_present("p");
     let mount_master = matches.opt_present("M");
-    let use_fd_wrapper = !matches.opt_present("W");
     let ksu_no_new_privs = matches.opt_present("ksu-no-new-privs");
     let selinux_context = matches.opt_str("Z");
 
@@ -338,12 +307,6 @@ pub fn root_shell() -> Result<()> {
     // switch to global mount namespace
     if mount_master {
         let _ = utils::switch_mnt_ns(1);
-    }
-
-    if use_fd_wrapper {
-        wrap_tty(0);
-        wrap_tty(1);
-        wrap_tty(2);
     }
 
     if identity_requested {

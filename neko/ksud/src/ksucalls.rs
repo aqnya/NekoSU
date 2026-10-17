@@ -246,10 +246,6 @@ pub fn set_feature(feature_id: u32, value: u64) -> Result<()> {
     Ok(())
 }
 
-pub fn get_wrapped_fd(fd: RawFd) -> Result<RawFd> {
-    Ok(fd)
-}
-
 pub fn get_sulog_fd() -> Result<RawFd> {
     bail!("SU logging is not supported by NekoSU")
 }
