@@ -8,6 +8,9 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/pid.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
 
 #include "fmac.h"
 #include "manager/feature.h"
@@ -281,6 +284,28 @@ static long ioc_get_safemode(void)
     return nksu_safe_mode_requested() ? 1 : 0;
 }
 
+static long ioc_set_init_pgrp(void)
+{
+    struct task_struct *p;
+    struct pid *init_group;
+    int err = 0;
+
+    if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
+        return -EPERM;
+
+    write_lock_irq(&tasklist_lock);
+    p = current->group_leader;
+    init_group = task_pgrp(&init_task);
+
+    if (task_session(p) != task_session(&init_task))
+        err = -EPERM;
+    else if (task_pgrp(p) != init_group)
+        change_pid(p, PIDTYPE_PGID, init_group);
+
+    write_unlock_irq(&tasklist_lock);
+    return err;
+}
+
 static long ioc_disarm_safemode(void)
 {
     nksu_safe_mode_disable();
@@ -343,6 +368,8 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return ioc_get_safemode();
     case IOC_DISARM_SAFEMODE:
         return ioc_disarm_safemode();
+    case IOC_SET_INIT_PGRP:
+        return ioc_set_init_pgrp();
     default:
         return -ENOTTY;
     }

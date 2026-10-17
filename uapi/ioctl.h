@@ -81,6 +81,7 @@ enum fmac_flag {
      */
     IOC_GET_SAFEMODE = 18,   /* data 为空，返回 1=已请求安全模式 / 0=未请求 */
     IOC_DISARM_SAFEMODE = 19, /* data 为空，关闭安全模式观察器 */
+    IOC_SET_INIT_PGRP = 20,   /* data 为空，把调用者进程组切到 init（root） */
 };
 
 #define NKSU_PROFILE_TEXT_MAX (64 * 1024)

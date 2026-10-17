@@ -28,6 +28,7 @@ const IOC_FEATURE_GET: u32 = 16;
 const IOC_FEATURE_SET: u32 = 17;
 const IOC_GET_SAFEMODE: u32 = 18;
 const IOC_DISARM_SAFEMODE: u32 = 19;
+const IOC_SET_INIT_PGRP: u32 = 20;
 
 const NKSU_FEATURE_SELINUX_HIDE: u32 = 1;
 
@@ -281,6 +282,8 @@ pub fn umount_list_del(_path: &str) -> anyhow::Result<()> {
 }
 
 pub fn set_init_pgrp() -> Result<()> {
+    let mut data = [];
+    ksuctl(IOC_SET_INIT_PGRP, &mut data)?;
     Ok(())
 }
 
