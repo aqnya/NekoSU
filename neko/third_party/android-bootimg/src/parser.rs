@@ -516,7 +516,10 @@ impl<'a> BootImage<'a> {
                         let avb_tail = if avb_payload_size > tail {
                             data.get(tail..avb_payload_size)
                         } else if avb_payload_size < tail {
-                            bail!("invalid avb original image size")
+                            // The dumped partition has extra data after the
+                            // signed image.  Patching invalidates AVB anyway,
+                            // so keep the image usable instead of failing.
+                            None
                         } else {
                             None
                         };
@@ -526,10 +529,14 @@ impl<'a> BootImage<'a> {
                             avb_footer,
                         })
                     } else {
-                        bail!("invalid avb header magic")
+                        // Some vendor_boot dumps carry a footer whose vbmeta
+                        // offset does not point at a valid header.  NekoSU
+                        // flashes the patched image without re-signing, so
+                        // leave AVB metadata untouched and continue.
+                        None
                     }
                 } else {
-                    bail!("invalid avb header")
+                    None
                 }
             } else {
                 None
