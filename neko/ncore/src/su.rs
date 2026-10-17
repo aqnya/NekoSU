@@ -157,11 +157,6 @@ pub fn root_shell() -> Result<()> {
         "GROUP",
     );
     opts.optflag(
-        "W",
-        "no-wrapper",
-        "accepted for compatibility; NekoSU does not use an fd wrapper",
-    );
-    opts.optflag(
         "",
         "ksu-no-new-privs",
         "Prevent this process (and its children) from privilege re-escalation via KernelSU",
