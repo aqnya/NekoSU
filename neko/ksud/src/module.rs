@@ -33,7 +33,7 @@ use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
 use crate::module::ModuleType::{Active, All};
 use std::os::unix::{prelude::PermissionsExt, process::CommandExt};
 
-const INSTALLER_CONTENT: &str = include_str!("./installer.sh");
+const INSTALLER_CONTENT: &str = include_str!("../assets/installer.sh");
 const INSTALL_MODULE_SCRIPT: &str = concatcp!(
     INSTALLER_CONTENT,
     "\n",
@@ -687,7 +687,7 @@ fn install_module_to_system(zip: &str) -> Result<String> {
     ensure_boot_completed()?;
 
     // print banner
-    println!(include_str!("banner"));
+    println!(include_str!("../assets/banner"));
 
     assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
 
