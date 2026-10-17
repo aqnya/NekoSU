@@ -7,9 +7,23 @@ use std::os::fd::RawFd;
 use std::ptr;
 use std::sync::atomic::{AtomicI32, Ordering};
 
+use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{JClass, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
-use jni::{JNIEnv, JavaVM, NativeMethod};
+use jni::vm::JavaVM;
+use jni::{EnvUnowned, NativeMethod};
+
+macro_rules! native_method {
+    ($name:literal, $sig:literal, $func:ident) => {
+        unsafe {
+            NativeMethod::from_raw_parts(
+                jni::jni_str!($name),
+                jni::jni_str!($sig),
+                $func as *mut libc::c_void,
+            )
+        }
+    };
+}
 
 const FMAC_MAX_DATA: usize = 4096;
 const FMAC_DATA_CAP: usize = 12;
@@ -100,8 +114,7 @@ fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
     ret
 }
 
-fn ctl(env: &mut JNIEnv, _class: JClass, value: jint) -> jint {
-    let _ = env;
+extern "system" fn ctl(_env: EnvUnowned, _class: JClass, value: jint) -> jint {
     match value {
         1 => {
             unsafe {
@@ -124,28 +137,39 @@ fn ctl(env: &mut JNIEnv, _class: JClass, value: jint) -> jint {
     }
 }
 
-fn get_utf(env: &mut JNIEnv, value: &JString) -> Option<String> {
+fn get_utf(env: &mut EnvUnowned, value: &JString) -> Option<String> {
     if value.as_raw().is_null() {
         None
     } else {
-        env.get_string(value).ok().map(Into::into)
+        env.with_env(|env| Ok::<_, jni::errors::Error>(value.try_to_string(env).ok()))
+            .resolve::<ThrowRuntimeExAndDefault>()
     }
 }
 
-fn put_string(env: &mut JNIEnv, value: &str) -> jstring {
-    env.new_string(value)
-        .map(|s| s.into_raw())
-        .unwrap_or(ptr::null_mut())
+fn put_string(env: &mut EnvUnowned, value: &str) -> jstring {
+    env.with_env(|env| {
+        Ok::<_, jni::errors::Error>(
+            env.new_string(value)
+                .map(|s| s.into_raw())
+                .unwrap_or(ptr::null_mut()),
+        )
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-fn put_bytes(env: &mut JNIEnv, data: &[u8]) -> jbyteArray {
-    env.byte_array_from_slice(data)
-        .map(|a| a.into_raw())
-        .unwrap_or(ptr::null_mut())
+fn put_bytes(env: &mut EnvUnowned, data: &[u8]) -> jbyteArray {
+    env.with_env(|env| {
+        Ok::<_, jni::errors::Error>(
+            env.byte_array_from_slice(data)
+                .map(|a| a.into_raw())
+                .unwrap_or(ptr::null_mut()),
+        )
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-fn set_profile(
-    env: &mut JNIEnv,
+extern "system" fn set_profile(
+    mut env: EnvUnowned,
     _class: JClass,
     uid: jint,
     root_uid: jint,
@@ -154,7 +178,7 @@ fn set_profile(
     ns: jint,
 ) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
-    let domain = get_utf(env, &domain).unwrap_or_default();
+    let domain = get_utf(&mut env, &domain).unwrap_or_default();
     let mut data = [0u8; FMAC_DATA_PROFILE];
     data[FMAC_OFF_UID..FMAC_OFF_UID + 4].copy_from_slice(&(uid as u32).to_ne_bytes());
     data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].copy_from_slice(&(caps as u64).to_ne_bytes());
@@ -171,7 +195,7 @@ fn set_profile(
     }
 }
 
-fn add_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
+extern "system" fn add_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -184,7 +208,7 @@ fn add_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
     }
 }
 
-fn del_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
+extern "system" fn del_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -197,7 +221,7 @@ fn del_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
     }
 }
 
-fn has_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
+extern "system" fn has_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -209,7 +233,7 @@ fn has_uid(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
     if u32::from_ne_bytes(data) != 0 { 1 } else { 0 }
 }
 
-fn set_cap(_env: &mut JNIEnv, _class: JClass, uid: jint, caps: jlong) -> jint {
+extern "system" fn set_cap(_env: EnvUnowned, _class: JClass, uid: jint, caps: jlong) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -224,7 +248,7 @@ fn set_cap(_env: &mut JNIEnv, _class: JClass, uid: jint, caps: jlong) -> jint {
     }
 }
 
-fn get_cap(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jlong {
+extern "system" fn get_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jlong {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -237,7 +261,7 @@ fn get_cap(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jlong {
     u64::from_ne_bytes(data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].try_into().unwrap()) as jlong
 }
 
-fn del_cap(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
+extern "system" fn del_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -251,8 +275,8 @@ fn del_cap(_env: &mut JNIEnv, _class: JClass, uid: jint) -> jint {
     }
 }
 
-fn add_selinux_rule(
-    env: &mut JNIEnv,
+extern "system" fn add_selinux_rule(
+    mut env: EnvUnowned,
     _class: JClass,
     src: JString,
     tgt: JString,
@@ -262,10 +286,10 @@ fn add_selinux_rule(
     invert: jboolean,
 ) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
-    let src = get_utf(env, &src).unwrap_or_default();
-    let tgt = get_utf(env, &tgt).unwrap_or_default();
-    let cls = get_utf(env, &cls).unwrap_or_default();
-    let perm = get_utf(env, &perm).unwrap_or_default();
+    let src = get_utf(&mut env, &src).unwrap_or_default();
+    let tgt = get_utf(&mut env, &tgt).unwrap_or_default();
+    let cls = get_utf(&mut env, &cls).unwrap_or_default();
+    let perm = get_utf(&mut env, &perm).unwrap_or_default();
     let mut data = [0u8; FMAC_DATA_SELRULE];
     let mut put = |offset: usize, cap: usize, value: &str| {
         let bytes = value.as_bytes();
@@ -277,7 +301,7 @@ fn add_selinux_rule(
     put(FMAC_OFF_CLS, FMAC_OFF_PERM - FMAC_OFF_CLS, &cls);
     put(FMAC_OFF_PERM, FMAC_OFF_EFFECT - FMAC_OFF_PERM, &perm);
     data[FMAC_OFF_EFFECT..FMAC_OFF_EFFECT + 4].copy_from_slice(&effect.to_ne_bytes());
-    let inv: i32 = if invert != 0 { 1 } else { 0 };
+    let inv: i32 = if invert { 1 } else { 0 };
     data[FMAC_OFF_INVERT..FMAC_OFF_INVERT + 4].copy_from_slice(&inv.to_ne_bytes());
     if ioc_call(fd, IOC_SEL_ADD_RULE, &mut data) < 0 {
         -1
@@ -286,15 +310,20 @@ fn add_selinux_rule(
     }
 }
 
-fn add_rule(_env: &mut JNIEnv, _class: JClass, _path: JString, _bits: jlong) -> jint {
+extern "system" fn add_rule(
+    _env: EnvUnowned,
+    _class: JClass,
+    _path: JString,
+    _bits: jlong,
+) -> jint {
     0
 }
 
-fn del_rule(_env: &mut JNIEnv, _class: JClass, _path: JString) -> jint {
+extern "system" fn del_rule(_env: EnvUnowned, _class: JClass, _path: JString) -> jint {
     0
 }
 
-fn list_profiles(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn list_profiles(mut env: EnvUnowned, _class: JClass) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -303,7 +332,7 @@ fn list_profiles(env: &mut JNIEnv, _class: JClass) -> jstring {
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(env, &String::from_utf8_lossy(&data[..end]))
+    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
 fn read_file_impl(path: &str) -> Option<Vec<u8>> {
@@ -391,28 +420,37 @@ fn read_file_impl(path: &str) -> Option<Vec<u8>> {
     }
 }
 
-fn read_file(env: &mut JNIEnv, _class: JClass, path: JString) -> jbyteArray {
-    let Some(path) = get_utf(env, &path) else {
+extern "system" fn read_file(mut env: EnvUnowned, _class: JClass, path: JString) -> jbyteArray {
+    let Some(path) = get_utf(&mut env, &path) else {
         return ptr::null_mut();
     };
     match read_file_impl(&path) {
-        Some(data) if !data.is_empty() => put_bytes(env, &data),
+        Some(data) if !data.is_empty() => put_bytes(&mut env, &data),
         _ => ptr::null_mut(),
     }
 }
 
-fn read_file_persistent(env: &mut JNIEnv, _class: JClass, path: JString) -> jbyteArray {
-    let Some(path) = get_utf(env, &path) else {
+extern "system" fn read_file_persistent(
+    mut env: EnvUnowned,
+    _class: JClass,
+    path: JString,
+) -> jbyteArray {
+    let Some(path) = get_utf(&mut env, &path) else {
         return ptr::null_mut();
     };
     match read_file_impl(&path) {
-        Some(data) => put_bytes(env, &data),
+        Some(data) => put_bytes(&mut env, &data),
         None => ptr::null_mut(),
     }
 }
 
-fn write_block(env: &mut JNIEnv, _class: JClass, src: JString, dst: JString) -> jboolean {
-    let (Some(src), Some(dst)) = (get_utf(env, &src), get_utf(env, &dst)) else {
+extern "system" fn write_block(
+    mut env: EnvUnowned,
+    _class: JClass,
+    src: JString,
+    dst: JString,
+) -> jboolean {
+    let (Some(src), Some(dst)) = (get_utf(&mut env, &src), get_utf(&mut env, &dst)) else {
         return JNI_FALSE;
     };
     let (Ok(src), Ok(dst)) = (CString::new(src), CString::new(dst)) else {
@@ -508,17 +546,17 @@ fn write_block(env: &mut JNIEnv, _class: JClass, src: JString, dst: JString) -> 
     }
 }
 
-fn find_vendor_boot(
-    env: &mut JNIEnv,
+extern "system" fn find_vendor_boot(
+    mut env: EnvUnowned,
     _class: JClass,
     slot: JString,
     allow_slotless: jboolean,
 ) -> jstring {
-    let slot = get_utf(env, &slot).unwrap_or_default();
+    let slot = get_utf(&mut env, &slot).unwrap_or_default();
     let mut candidates = Vec::new();
     for base in ["/dev/block/by-name", "/dev/block/bootdevice/by-name"] {
         candidates.push(format!("{base}/vendor_boot{slot}"));
-        if allow_slotless != 0 {
+        if allow_slotless {
             candidates.push(format!("{base}/vendor_boot"));
         }
     }
@@ -590,7 +628,7 @@ fn find_vendor_boot(
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(env, &String::from_utf8_lossy(&data[..end]))
+    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
 fn parse_gki(release: &str) -> Option<(bool, String)> {
@@ -627,28 +665,28 @@ fn uname_release() -> Option<String> {
     Some(release.to_string_lossy().into_owned())
 }
 
-fn is_gki(_env: &mut JNIEnv, _class: JClass) -> jboolean {
+extern "system" fn is_gki(_env: EnvUnowned, _class: JClass) -> jboolean {
     uname_release()
         .and_then(|r| parse_gki(&r))
         .map(|(gki, _)| if gki { JNI_TRUE } else { JNI_FALSE })
         .unwrap_or(JNI_FALSE)
 }
 
-fn kernel_version(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn kernel_version(mut env: EnvUnowned, _class: JClass) -> jstring {
     match uname_release().and_then(|r| parse_gki(&r)) {
-        Some((_, version)) => put_string(env, &version),
+        Some((_, version)) => put_string(&mut env, &version),
         None => ptr::null_mut(),
     }
 }
 
-fn kernel_release(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn kernel_release(mut env: EnvUnowned, _class: JClass) -> jstring {
     match uname_release() {
-        Some(release) => put_string(env, &release),
+        Some(release) => put_string(&mut env, &release),
         None => ptr::null_mut(),
     }
 }
 
-fn module_version(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn module_version(mut env: EnvUnowned, _class: JClass) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -657,10 +695,10 @@ fn module_version(env: &mut JNIEnv, _class: JClass) -> jstring {
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(env, &String::from_utf8_lossy(&data[..end]))
+    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
-fn feature_list(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn feature_list(mut env: EnvUnowned, _class: JClass) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -669,10 +707,10 @@ fn feature_list(env: &mut JNIEnv, _class: JClass) -> jstring {
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(env, &String::from_utf8_lossy(&data[..end]))
+    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
-fn feature_get(_env: &mut JNIEnv, _class: JClass, id: jint) -> jlong {
+extern "system" fn feature_get(_env: EnvUnowned, _class: JClass, id: jint) -> jlong {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     let mut data = [0u8; FMAC_DATA_FEATURE];
     data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
@@ -686,7 +724,7 @@ fn feature_get(_env: &mut JNIEnv, _class: JClass, id: jint) -> jlong {
     ) as jlong
 }
 
-fn feature_set(_env: &mut JNIEnv, _class: JClass, id: jint, value: jlong) -> jint {
+extern "system" fn feature_set(_env: EnvUnowned, _class: JClass, id: jint, value: jlong) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     let mut data = [0u8; FMAC_DATA_FEATURE];
     data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
@@ -699,7 +737,7 @@ fn feature_set(_env: &mut JNIEnv, _class: JClass, id: jint, value: jlong) -> jin
     }
 }
 
-fn get_slot_suffix(env: &mut JNIEnv, _class: JClass) -> jstring {
+extern "system" fn get_slot_suffix(mut env: EnvUnowned, _class: JClass) -> jstring {
     unsafe extern "C" {
         fn __system_property_get(
             name: *const libc::c_char,
@@ -711,162 +749,87 @@ fn get_slot_suffix(env: &mut JNIEnv, _class: JClass) -> jstring {
     let len = unsafe { __system_property_get(key.as_ptr(), value.as_mut_ptr()) };
     if len > 0 && value[0] != 0 {
         let text = unsafe { CStr::from_ptr(value.as_ptr()) };
-        return put_string(env, &text.to_string_lossy());
+        return put_string(&mut env, &text.to_string_lossy());
     }
     let key = CString::new("ro.boot.slot").unwrap();
     let len = unsafe { __system_property_get(key.as_ptr(), value.as_mut_ptr()) };
     if len > 0 && value[0] != 0 {
         let text = unsafe { CStr::from_ptr(value.as_ptr()) };
-        return put_string(env, &format!("_{}", text.to_string_lossy()));
+        return put_string(&mut env, &format!("_{}", text.to_string_lossy()));
     }
     ptr::null_mut()
 }
 
-fn hello_log(_env: &mut JNIEnv, _class: JClass) {
+extern "system" fn hello_log(_env: EnvUnowned, _class: JClass) {
     log::info!("ncore jni (Rust) loaded");
 }
 
+/// # Safety
+///
+/// `vm` must be a valid, non-null `JavaVM` pointer supplied by the JVM.
 #[unsafe(no_mangle)]
-pub extern "system" fn JNI_OnLoad(vm: JavaVM, _reserved: *mut libc::c_void) -> jint {
+pub unsafe extern "system" fn JNI_OnLoad(
+    vm: *mut jni::sys::JavaVM,
+    _reserved: *mut libc::c_void,
+) -> jint {
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Info)
             .with_tag("ncore_jni"),
     );
-    let mut env = vm.get_env().expect("JNI env");
-    let Ok(class) = env.find_class("me/nekosu/aqnya/core/Ncore") else {
-        return JNI_VERSION_1_6;
-    };
+    let vm = unsafe { JavaVM::from_raw(vm) };
     let methods = [
-        NativeMethod {
-            name: "ctl".into(),
-            sig: "(I)I".into(),
-            fn_ptr: ctl as *mut _,
-        },
-        NativeMethod {
-            name: "setProfile".into(),
-            sig: "(IIJLjava/lang/String;I)I".into(),
-            fn_ptr: set_profile as *mut _,
-        },
-        NativeMethod {
-            name: "adduid".into(),
-            sig: "(I)I".into(),
-            fn_ptr: add_uid as *mut _,
-        },
-        NativeMethod {
-            name: "deluid".into(),
-            sig: "(I)I".into(),
-            fn_ptr: del_uid as *mut _,
-        },
-        NativeMethod {
-            name: "hasuid".into(),
-            sig: "(I)I".into(),
-            fn_ptr: has_uid as *mut _,
-        },
-        NativeMethod {
-            name: "setCap".into(),
-            sig: "(IJ)I".into(),
-            fn_ptr: set_cap as *mut _,
-        },
-        NativeMethod {
-            name: "getCap".into(),
-            sig: "(I)J".into(),
-            fn_ptr: get_cap as *mut _,
-        },
-        NativeMethod {
-            name: "delCap".into(),
-            sig: "(I)I".into(),
-            fn_ptr: del_cap as *mut _,
-        },
-        NativeMethod {
-            name: "addSelinuxRule".into(),
-            sig: "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)I"
-                .into(),
-            fn_ptr: add_selinux_rule as *mut _,
-        },
-        NativeMethod {
-            name: "addRule".into(),
-            sig: "(Ljava/lang/String;J)I".into(),
-            fn_ptr: add_rule as *mut _,
-        },
-        NativeMethod {
-            name: "delRule".into(),
-            sig: "(Ljava/lang/String;)I".into(),
-            fn_ptr: del_rule as *mut _,
-        },
-        NativeMethod {
-            name: "listProfiles".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: list_profiles as *mut _,
-        },
-        NativeMethod {
-            name: "readFile".into(),
-            sig: "(Ljava/lang/String;)[B".into(),
-            fn_ptr: read_file as *mut _,
-        },
-        NativeMethod {
-            name: "readFilePersistent".into(),
-            sig: "(Ljava/lang/String;)[B".into(),
-            fn_ptr: read_file_persistent as *mut _,
-        },
-        NativeMethod {
-            name: "writeBlock".into(),
-            sig: "(Ljava/lang/String;Ljava/lang/String;)Z".into(),
-            fn_ptr: write_block as *mut _,
-        },
-        NativeMethod {
-            name: "helloLog".into(),
-            sig: "()V".into(),
-            fn_ptr: hello_log as *mut _,
-        },
-        NativeMethod {
-            name: "isGki".into(),
-            sig: "()Z".into(),
-            fn_ptr: is_gki as *mut _,
-        },
-        NativeMethod {
-            name: "kernelVersion".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: kernel_version as *mut _,
-        },
-        NativeMethod {
-            name: "kernelRelease".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: kernel_release as *mut _,
-        },
-        NativeMethod {
-            name: "moduleVersion".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: module_version as *mut _,
-        },
-        NativeMethod {
-            name: "featureList".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: feature_list as *mut _,
-        },
-        NativeMethod {
-            name: "featureGet".into(),
-            sig: "(I)J".into(),
-            fn_ptr: feature_get as *mut _,
-        },
-        NativeMethod {
-            name: "featureSet".into(),
-            sig: "(IJ)I".into(),
-            fn_ptr: feature_set as *mut _,
-        },
-        NativeMethod {
-            name: "getSlotSuffix".into(),
-            sig: "()Ljava/lang/String;".into(),
-            fn_ptr: get_slot_suffix as *mut _,
-        },
-        NativeMethod {
-            name: "findVendorBoot".into(),
-            sig: "(Ljava/lang/String;Z)Ljava/lang/String;".into(),
-            fn_ptr: find_vendor_boot as *mut _,
-        },
+        native_method!("ctl", "(I)I", ctl),
+        native_method!("setProfile", "(IIJLjava/lang/String;I)I", set_profile),
+        native_method!("adduid", "(I)I", add_uid),
+        native_method!("deluid", "(I)I", del_uid),
+        native_method!("hasuid", "(I)I", has_uid),
+        native_method!("setCap", "(IJ)I", set_cap),
+        native_method!("getCap", "(I)J", get_cap),
+        native_method!("delCap", "(I)I", del_cap),
+        native_method!(
+            "addSelinuxRule",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)I",
+            add_selinux_rule
+        ),
+        native_method!("addRule", "(Ljava/lang/String;J)I", add_rule),
+        native_method!("delRule", "(Ljava/lang/String;)I", del_rule),
+        native_method!("listProfiles", "()Ljava/lang/String;", list_profiles),
+        native_method!("readFile", "(Ljava/lang/String;)[B", read_file),
+        native_method!(
+            "readFilePersistent",
+            "(Ljava/lang/String;)[B",
+            read_file_persistent
+        ),
+        native_method!(
+            "writeBlock",
+            "(Ljava/lang/String;Ljava/lang/String;)Z",
+            write_block
+        ),
+        native_method!("helloLog", "()V", hello_log),
+        native_method!("isGki", "()Z", is_gki),
+        native_method!("kernelVersion", "()Ljava/lang/String;", kernel_version),
+        native_method!("kernelRelease", "()Ljava/lang/String;", kernel_release),
+        native_method!("moduleVersion", "()Ljava/lang/String;", module_version),
+        native_method!("featureList", "()Ljava/lang/String;", feature_list),
+        native_method!("featureGet", "(I)J", feature_get),
+        native_method!("featureSet", "(IJ)I", feature_set),
+        native_method!("getSlotSuffix", "()Ljava/lang/String;", get_slot_suffix),
+        native_method!(
+            "findVendorBoot",
+            "(Ljava/lang/String;Z)Ljava/lang/String;",
+            find_vendor_boot
+        ),
     ];
-    if env.register_native_methods(class, &methods).is_err() {
-        log::error!("register_native_methods failed");
+    let result = vm.with_top_local_frame(|env| -> jni::errors::Result<()> {
+        let class = env.find_class(jni::jni_str!("me/nekosu/aqnya/core/Ncore"))?;
+        unsafe {
+            env.register_native_methods(class, &methods)?;
+        }
+        Ok(())
+    });
+    if let Err(err) = result {
+        log::error!("register_native_methods failed: {err}");
     }
     JNI_VERSION_1_6
 }
