@@ -20,7 +20,7 @@ object VendorBootInstaller {
     private const val KO_ASSET_DIR = "ko"
 
     private const val NCORE_LIB_NAME = "libncore.so"
-    private const val NEKO_BOOT_LIB_NAME = "libneko-boot.so"
+    private const val BOOTPATCHER_LIB_NAME = "libbootpatcher.so"
 
     /** 本地 LKM 在安装目录中暂存的文件名。 */
     private const val LOCAL_KO_NAME = "local_nksu.ko"
@@ -43,9 +43,9 @@ object VendorBootInstaller {
     fun ncorePath(context: Context): File =
         File(context.applicationInfo.nativeLibraryDir, NCORE_LIB_NAME)
 
-    /** neko-boot, the vendor_boot patcher. */
-    fun nekoBootPath(context: Context): File =
-        File(context.applicationInfo.nativeLibraryDir, NEKO_BOOT_LIB_NAME)
+    /** bootpatcher, the vendor_boot patcher. */
+    fun bootpatcherPath(context: Context): File =
+        File(context.applicationInfo.nativeLibraryDir, BOOTPATCHER_LIB_NAME)
 
     /**
      * 把内核模块放到安装目录并返回其文件：
@@ -120,10 +120,10 @@ object VendorBootInstaller {
     ): Int =
         withContext(Dispatchers.IO) {
             val dir = installDir(context)
-            val nekoBoot = nekoBootPath(context)
-            if (!nekoBoot.exists() || !nekoBoot.canExecute()) {
+            val bootpatcher = bootpatcherPath(context)
+            if (!bootpatcher.exists() || !bootpatcher.canExecute()) {
                 throw IllegalStateException(
-                    context.getString(R.string.install_err_ncore, nekoBoot.absolutePath),
+                    context.getString(R.string.install_err_ncore, bootpatcher.absolutePath),
                 )
             }
 
@@ -133,7 +133,7 @@ object VendorBootInstaller {
 
             try {
                 onOutput(context.getString(R.string.install_log_patching))
-                val patched = patchImage(nekoBoot, vendorBoot, koFile, onOutput)
+                val patched = patchImage(bootpatcher, vendorBoot, koFile, onOutput)
                 if (patched == null) {
                     onOutput(context.getString(R.string.install_log_err_patch))
                     return@withContext -1
@@ -163,14 +163,14 @@ object VendorBootInstaller {
 
     /**
      * 用 ncore 直接把 [koFile] 打进 [sourceImage]（v3/v4 vendor_boot）：
-     * neko-boot 负责解包、把模块安装到 `lib/modules/nksu.ko`、登记 `modules.load` /
+     * bootpatcher 负责解包、把模块安装到 `lib/modules/nksu.ko`、登记 `modules.load` /
      * `modules.dep`，保持各 ramdisk 的压缩与 v4 ramdisk 表，最后写出
      * `<image>.new`。成功返回该文件，失败返回 null。
      *
      * 只操作本地文件，以当前进程身份运行 ncore，无需 root。
      */
     private fun patchImage(
-        nekoBoot: File,
+        bootpatcher: File,
         sourceImage: File,
         koFile: File,
         onOutput: (String) -> Unit,
@@ -179,7 +179,7 @@ object VendorBootInstaller {
         val output = File(dir, "${sourceImage.name}.new")
         output.delete()
         val args = listOf("-p", sourceImage.absolutePath, koFile.absolutePath)
-        if (!runTool(nekoBoot, args, dir, onOutput) || !output.isFile) {
+        if (!runTool(bootpatcher, args, dir, onOutput) || !output.isFile) {
             output.delete()
             return null
         }
@@ -268,7 +268,7 @@ object VendorBootInstaller {
     /**
      * 直接安装：以 root 读取指定 vendor_boot 分区，打入 nksu.ko 后写回。
      *
-     * 流程：dump 原镜像 -> `neko-boot -p <镜像> <ko>` 打补丁 -> 写回分区；写入失败
+     * 流程：dump 原镜像 -> `bootpatcher -p <镜像> <ko>` 打补丁 -> 写回分区；写入失败
      * 时把原镜像写回回滚。KernelSU 的「直接安装 / 刷入非活动分区」都走这里，
      * 区别只是 @partition 指向当前或非活动 slot。
      *
@@ -288,10 +288,10 @@ object VendorBootInstaller {
     ): Int =
         withContext(Dispatchers.IO) {
             val dir = installDir(context)
-            val nekoBoot = nekoBootPath(context)
+            val bootpatcher = bootpatcherPath(context)
 
-            if (!nekoBoot.exists() || !nekoBoot.canExecute()) {
-                onOutput(context.getString(R.string.install_log_err_ncore, nekoBoot.absolutePath))
+            if (!bootpatcher.exists() || !bootpatcher.canExecute()) {
+                onOutput(context.getString(R.string.install_log_err_ncore, bootpatcher.absolutePath))
                 return@withContext -1
             }
             val koFile = resolveKo(context, koName, koUri)
@@ -323,9 +323,9 @@ object VendorBootInstaller {
                 return@withContext -1
             }
 
-            // 2) 交给 neko-boot 直接把模块打进镜像（无需 root），得到补丁镜像。
+            // 2) 交给 bootpatcher 直接把模块打进镜像（无需 root），得到补丁镜像。
             onOutput(context.getString(R.string.install_log_patching))
-            val patched = patchImage(nekoBoot, source, koFile, onOutput)
+            val patched = patchImage(bootpatcher, source, koFile, onOutput)
             if (patched == null) {
                 onOutput(context.getString(R.string.install_log_err_patch))
                 source.delete()

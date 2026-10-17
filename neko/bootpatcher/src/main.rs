@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * neko-boot -- patch an LKM into a v3/v4 vendor_boot image.
+ * bootpatcher -- patch an LKM into a v3/v4 vendor_boot image.
  *
  * This replaces the boot-patching half of ncore.  The manager calls it as
  *
- *     neko-boot -p <vendor_boot.img> <nksu.ko>
+ *     bootpatcher -p <vendor_boot.img> <nksu.ko>
  *
  * and it writes the patched image to `<vendor_boot.img>.new`, keeping the
  * ramdisk's original compression and updating the v4 vendor ramdisk table.
@@ -27,7 +27,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("neko-boot: {error:#}");
+            eprintln!("bootpatcher: {error:#}");
             ExitCode::FAILURE
         }
     }
@@ -37,15 +37,15 @@ fn run() -> Result<()> {
     let mut args = env::args().skip(1);
     let (image, module) = match (args.next().as_deref(), args.next(), args.next()) {
         (Some("-p" | "--patch"), Some(image), Some(module)) => (image, module),
-        _ => bail!("usage: neko-boot -p <vendor_boot.img> <nksu.ko>"),
+        _ => bail!("usage: bootpatcher -p <vendor_boot.img> <nksu.ko>"),
     };
 
     let image_path = Path::new(&image);
-    eprintln!("neko-boot: reading module {module}");
+    eprintln!("bootpatcher: reading module {module}");
     let module_data = fs::read(&module).with_context(|| format!("read {module}"))?;
-    eprintln!("neko-boot: reading image {image}");
+    eprintln!("bootpatcher: reading image {image}");
     let image_data = fs::read(image_path).with_context(|| format!("read {image}"))?;
-    eprintln!("neko-boot: parsing boot image ({} bytes)", image_data.len());
+    eprintln!("bootpatcher: parsing boot image ({} bytes)", image_data.len());
     let boot = BootImage::parse(&image_data).with_context(|| format!("parse {image}"))?;
 
     match boot.get_header().get_version() {
@@ -61,7 +61,7 @@ fn run() -> Result<()> {
     // v4 splits the vendor ramdisk into table entries; v3 has one blob.  Find
     // the entry that already carries lib/modules, falling back to the first
     // entry that parses as a cpio archive.
-    eprintln!("neko-boot: locating vendor ramdisk");
+    eprintln!("bootpatcher: locating vendor ramdisk");
     let mut candidates: Vec<(Option<usize>, Cpio, bool)> = Vec::new();
     if ramdisk.is_vendor_ramdisk() {
         for (index, entry) in ramdisk.iter_vendor_ramdisk().enumerate() {
@@ -96,9 +96,9 @@ fn run() -> Result<()> {
             .map(|entry| entry.get_compress_format()),
         None => Some(ramdisk.get_compress_format()),
     };
-    eprintln!("neko-boot: selected ramdisk index={vendor_index:?}, compression={format:?}");
+    eprintln!("bootpatcher: selected ramdisk index={vendor_index:?}, compression={format:?}");
 
-    eprintln!("neko-boot: injecting lib/modules/nksu.ko");
+    eprintln!("bootpatcher: injecting lib/modules/nksu.ko");
     if !cpio.entries().contains_key("lib/modules") {
         if !cpio.entries().contains_key("lib") {
             cpio.add("lib", CpioEntry::dir(0o755))?;
@@ -122,7 +122,7 @@ fn run() -> Result<()> {
         "/lib/modules/nksu.ko:\n",
     )?;
 
-    eprintln!("neko-boot: repacking ramdisk");
+    eprintln!("bootpatcher: repacking ramdisk");
     let mut new_cpio = Vec::new();
     cpio.dump(&mut new_cpio)?;
 
@@ -133,14 +133,14 @@ fn run() -> Result<()> {
         patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
     }
 
-    eprintln!("neko-boot: repacking boot image");
+    eprintln!("bootpatcher: repacking boot image");
     let mut output = Cursor::new(Vec::with_capacity(boot.get_size()));
     patcher.patch(&mut output)?;
 
     let output_path = format!("{}.new", image_path.display());
-    eprintln!("neko-boot: writing {output_path}");
+    eprintln!("bootpatcher: writing {output_path}");
     fs::write(&output_path, output.into_inner()).with_context(|| format!("write {output_path}"))?;
-    eprintln!("neko-boot: done");
+    eprintln!("bootpatcher: done");
     Ok(())
 }
 

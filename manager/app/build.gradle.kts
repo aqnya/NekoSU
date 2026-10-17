@@ -139,7 +139,7 @@ android {
     }
 }
 
-// ncore and neko-boot are produced by :neko:buildRust; merge them with the
+// ncore and bootpatcher are produced by :neko:buildRust; merge them with the
 // app's native libraries like any other jniLibs directory.
 android.sourceSets.getByName("main").jniLibs.srcDir(
     project(":neko").layout.buildDirectory.dir("generated/rust/jniLibs").get().asFile,

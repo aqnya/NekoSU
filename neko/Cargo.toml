@@ -1,14 +1,14 @@
 [workspace]
 members = [
     "ncore",
-    "neko-boot",
+    "bootpatcher",
     "third_party/android-bootimg",
     "third_party/ksu_props/crates/prop-rs",
     "third_party/ksu_props/crates/prop-rs-android",
 ]
 default-members = [
     "ncore",
-    "neko-boot",
+    "bootpatcher",
 ]
 resolver = "3"
 

@@ -3,7 +3,7 @@
  * NekoSU ncore command line.
  *
  * Upstream ksud carries boot patching, LKM late-loading, sulog, feature and
- * profile commands.  NekoSU does boot patching in neko-boot, loads its LKM from
+ * profile commands.  NekoSU does boot patching in bootpatcher, loads its LKM from
  * vendor_boot and drives profiles/features through the manager JNI, so only
  * the module runtime, su/resetprop entry points and daemon install remain.
  */

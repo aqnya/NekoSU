@@ -1,5 +1,5 @@
 [package]
-name = "neko-boot"
+name = "bootpatcher"
 version = "1.0.3"
 edition.workspace = true
 
