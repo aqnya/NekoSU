@@ -1,0 +1,8 @@
+[package]
+name = "neko-boot"
+version = "1.0.3"
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+android-bootimg = { path = "../third_party/android-bootimg" }

@@ -1,0 +1,17 @@
+[package]
+name = "android-bootimg"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+paste = "1"
+num-traits = "0.2"
+
+bzip2 = "0.6"
+zopfli = "0.8"
+lz4 = "1.28"
+lzma-rust2 = "0.15"
+flate2 = "1.1"
+bytemuck = "1"
+itertools = "0.14"
