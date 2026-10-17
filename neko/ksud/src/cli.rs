@@ -30,6 +30,12 @@ enum Commands {
         command: Module,
     },
 
+    /// SELinux policy patch tool
+    Sepolicy {
+        #[command(subcommand)]
+        command: Sepolicy,
+    },
+
     /// Trigger `post-fs-data` event
     PostFsData,
 
@@ -48,6 +54,18 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
     },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Sepolicy {
+    /// Patch the live kernel policy with a rule
+    Patch { sepolicy: String },
+
+    /// Apply rules from a file
+    Apply { file: String },
+
+    /// Check whether a rule is valid/supported without applying it
+    Check { sepolicy: String },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -121,6 +139,11 @@ pub fn run() -> Result<()> {
             full_args.extend(args);
             resetprop::resetprop_main(&full_args)
         }
+        Commands::Sepolicy { command } => match command {
+            Sepolicy::Patch { sepolicy } => crate::sepolicy::live_patch(&sepolicy),
+            Sepolicy::Apply { file } => crate::sepolicy::apply_file(file),
+            Sepolicy::Check { sepolicy } => crate::sepolicy::check_rule(&sepolicy),
+        },
         Commands::Module { command } => {
             utils::switch_mnt_ns(1)?;
             match command {
