@@ -8,7 +8,7 @@ void appscan_exit(void);
 bool is_manager(void);
 
 /*
- * True once the manager scan has confirmed (or installed) /data/adb/ksud.
+ * True once the manager scan has confirmed (or installed) /data/adb/ncore.
  * The su hook reads this instead of touching the filesystem: it runs inside a
  * syscall tracepoint, where sleeping (kern_path) is not allowed.
  */

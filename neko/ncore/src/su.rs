@@ -76,7 +76,7 @@ fn set_selinux_context(context: &str) -> Result<()> {
 pub fn root_shell() -> Result<()> {
     // The kernel has already applied the selected root profile.
 
-    // A su-session driver fd deliberately survives the exec into ksud. Claim
+    // A su-session driver fd deliberately survives the exec into ncore. Claim
     // it before handling any arguments and restore FD_CLOEXEC so it cannot
     // leak into the target shell, including when fd wrapping is disabled.
     ksucalls::claim_inherited_driver_fd().context("claim inherited KernelSU driver fd")?;

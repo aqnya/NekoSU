@@ -129,7 +129,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
         return 0;
 
     /*
-     * KernelSU gates the su→ksud redirect on ksud existing; without a target
+     * KernelSU gates the su→daemon redirect on the daemon existing; without a target
      * there is nothing to exec, so run the real su instead of escalating into
      * a failed exec.  This must not sleep (the tracepoint path runs with
      * preemption disabled), so use the flag the manager scan publishes.

@@ -291,7 +291,7 @@
     <string name="install_log_err_flash">[nksu] ERROR: failed to flash vendor_boot</string>
     <string name="install_err_copy_asset">Failed to copy assets/%1$s: %2$s</string>
     <string name="install_err_read_file">Unable to read the selected file</string>
-    <string name="install_err_ncore">the neko tool is not executable: %1$s\nCheck that:\n  1) jniLibs/&lt;abi&gt;/libksud.so is packaged in the APK;\n  2) AndroidManifest enables extractNativeLibs (useLegacyPackaging=true);\n  3) the device ABI matches the packaged lib directory.</string>
+    <string name="install_err_ncore">the neko tool is not executable: %1$s\nCheck that:\n  1) jniLibs/&lt;abi&gt;/libncore.so is packaged in the APK;\n  2) AndroidManifest enables extractNativeLibs (useLegacyPackaging=true);\n  3) the device ABI matches the packaged lib directory.</string>
     <string name="install_err_ko_asset">assets/%1$s not found or failed to copy</string>
     <string name="install_err_mkdir">Unable to create directory %1$s</string>
     <string name="install_err_mediastore_insert">MediaStore insert failed</string>

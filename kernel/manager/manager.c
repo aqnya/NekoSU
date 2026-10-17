@@ -67,7 +67,7 @@ bool is_manager_uid(uid_t uid)
 }
 
 /*
- * Whether /data/adb/ksud is known to be present.  Set by the (sleepable)
+ * Whether /data/adb/ncore is known to be present.  Set by the (sleepable)
  * manager scan; read by the su tracepoint hook, which must not sleep.
  */
 static bool daemon_ready;
@@ -328,20 +328,20 @@ next:
  */
 
 /*
- * Bootstrap /data/adb/nksu/{ksud,bin/busybox} straight from the verified
+ * Bootstrap /data/adb/nksu/{ncore,bin/busybox} straight from the verified
  * manager package, so root works on the very first boot without the manager
- * having to run `ksud install` from a root shell it does not have yet.
+ * having to run `ncore install` from a root shell it does not have yet.
  *
- * The manager ships both binaries as jniLibs (libksud.so and libbusybox.so);
+ * The manager ships both binaries as jniLibs (libncore.so and libbusybox.so);
  * the kernel only sees the extracted nativeLibraryPath directory from
- * packages.xml.  This mirrors KernelSU's `is_ksud_exists()` gate and the
- * manager-provided libksud.so, but installs from the kernel so no userspace
+ * packages.xml.  This mirrors KernelSU's daemon-exists gate and the
+ * manager-provided libncore.so, but installs from the kernel so no userspace
  * round-trip is needed.
  */
-#define NKSU_DAEMON_BOOT_PATH    "/data/adb/ksud"
+#define NKSU_DAEMON_BOOT_PATH    "/data/adb/ncore"
 #define NKSU_DAEMON_BIN_DIR      "/data/adb/nksu/bin"
 #define NKSU_DAEMON_BUSYBOX_PATH NKSU_DAEMON_BIN_DIR "/busybox"
-#define NKSU_DAEMON_LIB_NAME     "libksud.so"
+#define NKSU_DAEMON_LIB_NAME     "libncore.so"
 #define NKSU_DAEMON_BUSYBOX_LIB  "libbusybox.so"
 
 static bool kfile_exists(const char *path)
@@ -582,7 +582,7 @@ static int install_daemon_from_manager(const struct abx_package *paths)
         pr_warn("[manager] %s not found, busybox not installed\n", src);
     }
 
-    pr_info("[manager] installed ksud from %s\n", lib_dir);
+    pr_info("[manager] installed ncore from %s\n", lib_dir);
     WRITE_ONCE(daemon_ready, true);
     return 0;
 }
@@ -639,7 +639,7 @@ static int scan_and_apply(void)
      * every boot from this verified scan, never restored from disk.
      */
     manager_kuid = make_kuid(current_user_ns(), uid);
-    /* Install ksud/busybox before the profile store writes its file so
+    /* Install ncore/busybox before the profile store writes its file so
      * /data/adb/nksu exists for the first save. */
     install_daemon_from_manager(paths);
     nksu_profile_set_default(uid);
@@ -652,7 +652,7 @@ out:
     nksu_borrow_creds_end(old);
 
     /*
-     * No ksud means no module can run this boot, so volume-key safe mode has
+     * No ncore means no module can run this boot, so volume-key safe mode has
      * nothing to protect.  Idempotent; the safe-mode watcher is armed earlier
      * (second_stage), so this simply stops it counting.
      */

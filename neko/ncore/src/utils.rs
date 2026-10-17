@@ -191,7 +191,7 @@ pub fn has_magisk() -> bool {
     which::which("magisk").is_ok()
 }
 
-fn link_ksud_to_bin() -> Result<()> {
+fn link_ncore_to_bin() -> Result<()> {
     let ksu_bin = PathBuf::from(defs::DAEMON_PATH);
     let ksu_bin_link = PathBuf::from(defs::DAEMON_LINK_PATH);
     if ksu_bin.exists() && !ksu_bin_link.exists() {
@@ -205,7 +205,7 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
     let _ = std::fs::remove_file(defs::DAEMON_PATH);
     std::fs::copy(
         // We should use /proc/self/exe, DO NOT resolve the real path
-        // So that if someone execute /data/adb/ksud install, ksud won't be removed unexpectedly
+        // So that if someone execute /data/adb/ncore install, ncore won't be removed unexpectedly
         "/proc/self/exe",
         defs::DAEMON_PATH,
     )?;
@@ -214,7 +214,7 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
     // install binary assets
     assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
 
-    link_ksud_to_bin()?;
+    link_ncore_to_bin()?;
 
     if let Some(libadbroot) = libadbroot {
         ensure_dir_exists(defs::LIBRARY_DIR)?;

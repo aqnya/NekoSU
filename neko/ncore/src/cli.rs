@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * NekoSU ksud command line.
+ * NekoSU ncore command line.
  *
  * Upstream ksud carries boot patching, LKM late-loading, sulog, feature and
  * profile commands.  NekoSU does boot patching in neko-boot, loads its LKM from
@@ -45,7 +45,7 @@ enum Commands {
     /// Trigger `boot-complete` event
     BootCompleted,
 
-    /// Install the ksud userspace component
+    /// Install the ncore userspace component
     Install,
 
     /// Resetprop - Magisk-compatible system property tool

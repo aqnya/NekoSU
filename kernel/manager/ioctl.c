@@ -320,7 +320,7 @@ static long ioc_disarm_safemode(void)
 {
     nksu_safe_mode_disable();
     /*
-     * Keep ksud's tracepoint marking alive: ksud still needs the control fd
+     * Keep ncore's tracepoint marking alive: ncore still needs the control fd
      * for module installs and runtime sepolicy changes after boot.
      */
     return 0;

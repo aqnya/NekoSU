@@ -20,9 +20,9 @@ struct syscall_hook {
 
 /*
  * `su` is redirected to our own userspace binary, which runs the `su` command
- * (ksud's su mode).  The kernel has already escalated the process by the time
- * it is exec'd, so ksud just parses the su arguments and execs the shell; it
- * also no longer depends on KernelSU's ksud.
+ * (ncore's su mode).  The kernel has already escalated the process by the time
+ * it is exec'd, so ncore just parses the su arguments and execs the shell; it
+ * also no longer depends on KernelSU's daemon.
  */
 #define REDIRECT_TARGET     NKSU_DAEMON_PATH
 #define REDIRECT_TARGET_LEN (sizeof(REDIRECT_TARGET))

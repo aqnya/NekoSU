@@ -75,7 +75,7 @@ print_title() {
 }
 
 check_sepolicy() {
-    /data/adb/ksud sepolicy check "$1"
+    /data/adb/ncore sepolicy check "$1"
     return $?
 }
 
@@ -269,8 +269,8 @@ check_managed_features() {
     feature=$(echo "$feature" | xargs)
     [ -z "$feature" ] && continue
 
-    # Check feature status using ksud
-    local status=$(/data/adb/ksud feature check "$feature" 2>/dev/null)
+    # Check feature status using ncore
+    local status=$(/data/adb/ncore feature check "$feature" 2>/dev/null)
 
     case "$status" in
       "unsupported")
@@ -453,7 +453,7 @@ install_module() {
     rm -rf $NVBASE/modules/$MODID/disable 2>/dev/null
     cp -af $MODPATH/module.prop $NVBASE/modules/$MODID/module.prop
 
-    # Tell ksud to apply the module right away
+    # Tell ncore to apply the module right away
     if [ "$MODULE_HOT_INSTALL_REQUEST" = "true" ]; then
       echo "$MODULE_HOT_RUN_SCRIPT" > $MODPATH/.ksu_hot_install
     else

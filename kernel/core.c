@@ -47,7 +47,7 @@ static const module_component_t early_components[] = {
         /*
          * Volume-key safe mode depends only on the input subsystem, which
          * needs neither the SELinux policy, /data nor the zygote, so it is
-         * armed at second_stage -- before post-fs-data, where ksud first
+         * armed at second_stage -- before post-fs-data, where ncore first
          * queries the flag over the control ioctl.
          */
         .name = "safe mode",
@@ -56,12 +56,12 @@ static const module_component_t early_components[] = {
     },
     {
         /*
-         * Mark ksud at exec with the syscall tracepoint flag and attach the
+         * Mark ncore at exec with the syscall tracepoint flag and attach the
          * control fd through task_work.  Installed at second_stage, before
-         * init execs ksud at post-fs-data; the fork probe propagates the mark
-         * to every ksud descendant.
+         * init execs ncore at post-fs-data; the fork probe propagates the mark
+         * to every ncore descendant.
          */
-        .name = "ksud tracepoint",
+        .name = "ncore tracepoint",
         .init = nksu_daemon_fd_init,
         .exit = nksu_daemon_fd_exit,
     },

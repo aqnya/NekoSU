@@ -354,7 +354,7 @@ fn sync_candidates(
 ) -> Result<()> {
     let preinit_dir = ksu_dir.join(defs::PREINIT_SUBDIR);
 
-    // ksud runs with umask 0, tighten what was created by earlier versions
+    // ncore runs with umask 0, tighten what was created by earlier versions
     secure(ksu_dir, 0o755, con)?;
     ensure_dir_exists(&preinit_dir)?;
     secure(&preinit_dir, 0o755, con)?;
@@ -487,7 +487,7 @@ pub fn on_boot_completed() {
     let count = read_bootcount();
     if count > BOOTCOUNT_LIMIT {
         warn!(
-            "preinit was disabled after {BOOTCOUNT_LIMIT} failed boots, run `ksud module preinit reset` to retry"
+            "preinit was disabled after {BOOTCOUNT_LIMIT} failed boots, run `ncore module preinit reset` to retry"
         );
         return;
     }
@@ -543,7 +543,7 @@ pub fn print_status() {
     let count = read_bootcount();
     if count > BOOTCOUNT_LIMIT {
         println!(
-            "preinit: disabled after {BOOTCOUNT_LIMIT} failed boots (reset with `ksud module preinit reset`)"
+            "preinit: disabled after {BOOTCOUNT_LIMIT} failed boots (reset with `ncore module preinit reset`)"
         );
     } else {
         println!("preinit: bootcount {count}/{BOOTCOUNT_LIMIT}");

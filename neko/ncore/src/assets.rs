@@ -21,7 +21,7 @@ mod android {
             ensure_binary(format!("{BINARY_DIR}{file}"), &asset.data, ignore_if_exist)?;
         }
 
-        // Create resetprop -> ksud symlink (resetprop is now built into ksud)
+        // Create resetprop -> ncore symlink (resetprop is now built into ncore)
         let resetprop_link = RESETPROP_PATH;
         let _ = std::fs::remove_file(resetprop_link);
         std::os::unix::fs::symlink(crate::defs::DAEMON_PATH, resetprop_link)?;

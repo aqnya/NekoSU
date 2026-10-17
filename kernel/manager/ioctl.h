@@ -8,7 +8,7 @@
 /*
  * The wire contract (flags, struct fmac_ioc, payload offsets and prctl
  * opcodes) lives in the shared UAPI header so the kernel, the manager app and
- * ksud never drift apart.
+ * ncore never drift apart.
  */
 #include <uapi/ioctl.h>
 
@@ -39,7 +39,7 @@ int fmac_ctlfd_get(void);
 
 /*
  * Steady-state grant of the control fd to root (see manager/daemon.c).  Lets
- * ksud obtain the fd at every stage, not just before zygote.
+ * ncore obtain the fd at every stage, not just before zygote.
  */
 int nksu_daemon_fd_init(void);
 void nksu_daemon_fd_exit(void);

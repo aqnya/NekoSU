@@ -4,7 +4,7 @@
  *
  * Upstream ksud generates these bindings from KernelSU's uapi/ksu.h.  NekoSU
  * exposes a different (multiplexed ioctl) interface, so this module only keeps
- * the small set of names and layouts that the rest of ksud uses.  The actual
+ * the small set of names and layouts that the rest of ncore uses.  The actual
  * ioctl encoding lives in ksucalls.rs.
  */
 #![allow(nonstandard_style, dead_code)]

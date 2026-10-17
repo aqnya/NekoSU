@@ -19,7 +19,7 @@ object VendorBootInstaller {
     /** 内核模块在 assets 中的存放目录，例如 assets/ko/android14-6.1_nksu.ko。 */
     private const val KO_ASSET_DIR = "ko"
 
-    private const val KSUD_LIB_NAME = "libksud.so"
+    private const val NCORE_LIB_NAME = "libncore.so"
     private const val NEKO_BOOT_LIB_NAME = "libneko-boot.so"
 
     /** 本地 LKM 在安装目录中暂存的文件名。 */
@@ -39,9 +39,9 @@ object VendorBootInstaller {
     fun installDir(context: Context): File =
         File(context.filesDir, "nksu-install").apply { mkdirs() }
 
-    /** ksud, the module runtime / su daemon bundled by the manager. */
-    fun ksudPath(context: Context): File =
-        File(context.applicationInfo.nativeLibraryDir, KSUD_LIB_NAME)
+    /** ncore, the module runtime / su daemon bundled by the manager. */
+    fun ncorePath(context: Context): File =
+        File(context.applicationInfo.nativeLibraryDir, NCORE_LIB_NAME)
 
     /** neko-boot, the vendor_boot patcher. */
     fun nekoBootPath(context: Context): File =
@@ -162,12 +162,12 @@ object VendorBootInstaller {
         }
 
     /**
-     * 用 ksud 直接把 [koFile] 打进 [sourceImage]（v3/v4 vendor_boot）：
+     * 用 ncore 直接把 [koFile] 打进 [sourceImage]（v3/v4 vendor_boot）：
      * neko-boot 负责解包、把模块安装到 `lib/modules/nksu.ko`、登记 `modules.load` /
      * `modules.dep`，保持各 ramdisk 的压缩与 v4 ramdisk 表，最后写出
      * `<image>.new`。成功返回该文件，失败返回 null。
      *
-     * 只操作本地文件，以当前进程身份运行 ksud，无需 root。
+     * 只操作本地文件，以当前进程身份运行 ncore，无需 root。
      */
     private fun patchImage(
         nekoBoot: File,

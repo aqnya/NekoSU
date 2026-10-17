@@ -2,7 +2,7 @@
 //!
 //! A module opts in from customize.sh with `MODULE_HOT_INSTALL_REQUEST=true` (and optionally
 //! `MODULE_HOT_RUN_SCRIPT=<script>`). installer.sh records the request in a marker file inside
-//! the staged module dir; after the install script succeeds ksud moves the staged dir over the
+//! the staged module dir; after the install script succeeds ncore moves the staged dir over the
 //! live one, applies sepolicy.rule and runs the requested script. Anything that only happens at
 //! boot (mounting system/, system.prop, post-fs-data.sh, ...) still waits for the next boot.
 

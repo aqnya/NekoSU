@@ -1,13 +1,13 @@
 [workspace]
 members = [
-    "ksud",
+    "ncore",
     "neko-boot",
     "third_party/android-bootimg",
     "third_party/ksu_props/crates/prop-rs",
     "third_party/ksu_props/crates/prop-rs-android",
 ]
 default-members = [
-    "ksud",
+    "ncore",
     "neko-boot",
 ]
 resolver = "3"
@@ -25,5 +25,5 @@ lto = true
 opt-level = "z"
 panic = "abort"
 
-[profile.release.package.ksud]
+[profile.release.package.ncore]
 codegen-units = 1

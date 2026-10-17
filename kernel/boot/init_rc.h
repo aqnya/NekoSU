@@ -8,19 +8,19 @@
  * KernelSU-style init.rc injection.
  *
  * nksu hooks init's read() of /system/etc/init/hw/init.rc through the syscall
- * table (__NR_read / __NR_fstat) and appends a static rc that execs ksud,
+ * table (__NR_read / __NR_fstat) and appends a static rc that execs ncore,
  * nksu's userspace module runtime, at the well-defined boot stages:
  *
  *   on post-fs-data
- *       exec u:r:nksu:s0 root -- /data/adb/ksud post-fs-data
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore post-fs-data
  *   on nonencrypted
  *   on property:vold.decrypt=trigger_restart_framework
- *       exec u:r:nksu:s0 root -- /data/adb/ksud services
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore services
  *   on property:sys.boot_completed=1
- *       exec u:r:nksu:s0 root -- /data/adb/ksud boot-completed
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore boot-completed
  *
- * /data/adb/ksud is installed by the manager (it is the same binary the
- * app ships as libksud.so).  ksud is a KernelSU-compatible userspace module
+ * /data/adb/ncore is installed by the manager (it is the same binary the
+ * app ships as libncore.so).  ncore is a KernelSU-compatible userspace module
  * runtime: it enumerates /data/adb/modules, runs the boot hooks, drives the
  * metamodule mount, and pushes each module's sepolicy.rule through the control
  * fd (IOC_SET_SEPOLICY).
@@ -32,7 +32,7 @@
  * The module is loaded from init's first stage (modules.load), so this is a
  * boot-time feature: a late load injects nothing here and brings no modules up.
  */
-#define NKSU_DAEMON_PATH "/data/adb/ksud"
+#define NKSU_DAEMON_PATH "/data/adb/ncore"
 
 int nksu_init_rc_init(void);
 void nksu_init_rc_exit(void);

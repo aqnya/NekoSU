@@ -4,19 +4,19 @@
  *
  * KernelSU hooks init's read() of /system/etc/init/hw/init.rc through the
  * syscall table (__NR_read / __NR_fstat) and appends a static rc that execs
- * its userspace daemon ksud at the well-defined boot stages.  nksu does the
- * same, exec'ing ksud instead:
+ * its userspace daemon ncore at the well-defined boot stages.  nksu does the
+ * same, exec'ing ncore instead:
  *
  *   on post-fs-data
- *       exec u:r:nksu:s0 root -- /data/adb/ksud post-fs-data
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore post-fs-data
  *   on nonencrypted
  *   on property:vold.decrypt=trigger_restart_framework
- *       exec u:r:nksu:s0 root -- /data/adb/ksud services
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore services
  *   on property:sys.boot_completed=1
- *       exec u:r:nksu:s0 root -- /data/adb/ksud boot-completed
+ *       exec u:r:nksu:s0 root -- /data/adb/ncore boot-completed
  *
- * ksud (neko/ksud, shipped by the manager as
- * /data/adb/ksud) is the KernelSU-compatible module runtime.  The kernel
+ * ncore (neko/ncore, shipped by the manager as
+ * /data/adb/ncore) is the KernelSU-compatible module runtime.  The kernel
  * only edits init's view of init.rc.  Because init's `exec` is synchronous, the
  * post-fs-data hooks (metamodule mount included) finish before init continues,
  * so modules are mounted before zygote/system_server start.
@@ -55,7 +55,7 @@
 /* nksu domain; see selinux/selinux.h */
 #define NKSU_RC_CONTEXT DOMAIN_CTX
 
-/* The rc that init parses; it just reaches ksud at each stage. */
+/* The rc that init parses; it just reaches ncore at each stage. */
 static const char nksu_rc[] =
     "\n"
     "on post-fs-data\n"

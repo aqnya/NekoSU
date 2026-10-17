@@ -2,7 +2,7 @@
 /*
  * Kernel feature registry, driven by the manager over IOC_FEATURE_*.
  *
- * KernelSU keeps an equivalent table (policy/feature.c) and lets ksud flip the
+ * KernelSU keeps an equivalent table (policy/feature.c) and lets the daemon flip the
  * switches; here the manager talks to the kernel directly through the control
  * fd, so there is no userspace daemon in the loop.
  */

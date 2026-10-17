@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * ksud tracepoint marking.
+ * ncore tracepoint marking.
  *
- * ksud and everything it forks must stay visible to the kernel after exec.
+ * ncore and everything it forks must stay visible to the kernel after exec.
  * Instead of hooking prctl and granting the control fd to every root process,
- * mark the executed ksud image and all of its descendants with
- * TIF_SYSCALL_TRACEPOINT.  A sched_process_exec probe recognises the ksud
+ * mark the executed ncore image and all of its descendants with
+ * TIF_SYSCALL_TRACEPOINT.  A sched_process_exec probe recognises the ncore
  * binary, marks it and schedules a task_work that attaches the control fd
  * before returning to userspace.  sched_process_fork propagates the mark to
- * children, so module scripts started by ksud stay in the same kernel-visible
+ * children, so module scripts started by ncore stay in the same kernel-visible
  * group.
  *
- * The probe is registered at second_stage, before init execs ksud at
+ * The probe is registered at second_stage, before init execs ncore at
  * post-fs-data, and stays registered for the lifetime of the module.
  */
 #include <linux/binfmts.h>
@@ -42,7 +42,7 @@ static struct tracepoint *tp_sched_exec;
 static struct tracepoint *tp_sched_fork;
 static bool nksu_daemon_hooked;
 
-/* task_work runs just before returning to ksud userspace, after exec. */
+/* task_work runs just before returning to ncore userspace, after exec. */
 struct nksu_daemon_work {
 	struct callback_head cb;
 };
@@ -65,7 +65,8 @@ static bool nksu_daemon_path(const char *filename)
 	base = strrchr(filename, '/');
 	base = base ? base + 1 : filename;
 
-	return !strcmp(base, "ksud") || !strcmp(base, "libksud.so");
+	return !strcmp(base, "ncore") || !strcmp(base, "libncore.so") ||
+	       !strcmp(base, "ksud") || !strcmp(base, "libksud.so");
 }
 
 static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
@@ -79,7 +80,7 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 		return;
 
 	set_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT);
-	pr_info("[daemon] marked %s (pid %d) as ksud\n",
+	pr_info("[daemon] marked %s (pid %d) as ncore\n",
 		bprm ? bprm->filename : "?", p->pid);
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
@@ -149,7 +150,7 @@ int nksu_daemon_fd_init(void)
 	}
 
 	nksu_daemon_hooked = true;
-	pr_info("[daemon] ksud tracepoint marking active\n");
+	pr_info("[daemon] ncore tracepoint marking active\n");
 	return 0;
 }
 
@@ -162,7 +163,7 @@ void nksu_daemon_fd_exit(void)
 	tracepoint_probe_unregister(tp_sched_fork, nksu_daemon_fork, NULL);
 	tracepoint_synchronize_unregister();
 	nksu_daemon_hooked = false;
-	pr_info("[daemon] ksud tracepoint marking stopped\n");
+	pr_info("[daemon] ncore tracepoint marking stopped\n");
 }
 
 #if defined(__clang__)

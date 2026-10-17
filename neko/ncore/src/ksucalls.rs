@@ -68,8 +68,8 @@ fn init_driver_fd() -> Option<RawFd> {
         return Some(fd);
     }
 
-    // The kernel attaches the control fd via task_work when this ksud binary
-    // (or libksud.so) is exec'd, so it is already in /proc/self/fd here.
+    // The kernel attaches the control fd via task_work when this ncore binary
+    // (or libncore.so) is exec'd, so it is already in /proc/self/fd here.
     scan_driver_fd().ok().flatten()
 }
 
@@ -160,7 +160,7 @@ pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {
     let userspace_uapi = uapi_version();
     if kernel_uapi != userspace_uapi {
         bail!(
-            "UAPI version mismatch: kernel={kernel_uapi}, ksud={userspace_uapi}. Please update NekoSU!"
+            "UAPI version mismatch: kernel={kernel_uapi}, ncore={userspace_uapi}. Please update NekoSU!"
         );
     }
     Ok(())

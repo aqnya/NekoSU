@@ -117,7 +117,7 @@ jobs:
         mv android-ndk-"$NDK_VERSION" "$ANDROID_NDK_HOME"
         rm -f ndk.zip
 
-    # ksud and neko-boot live under neko/ and are compiled by Gradle through
+    # ncore and neko-boot live under neko/ and are compiled by Gradle through
     # cargo-ndk, so the APK always carries a userspace runtime built from the
     # same checkout.
     - name: Set up Rust

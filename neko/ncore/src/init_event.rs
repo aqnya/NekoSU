@@ -70,7 +70,7 @@ pub fn on_post_fs_data() -> Result<()> {
 
     // Refresh /metadata/watchdog/ksu/{modules.rc,preinit/} so the next boot's kernel hook sees the
     // current module set. Acts as a safety net when state was changed outside
-    // of ksud's normal mutation commands.
+    // of ncore's normal mutation commands.
     if let Err(e) = crate::module::regenerate_preinit() {
         warn!("regenerate preinit failed: {e:#}");
     }
@@ -215,11 +215,18 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 /// KernelSU modules and scripts hardcode /data/adb/ksu; keep it pointing at
 /// NekoSU's runtime directory like ncore did.
 pub(crate) fn ensure_ksu_compat_link() {
+    let target = defs::WORKING_DIR.trim_end_matches('/');
+    ensure_symlink("/data/adb/ksu", target);
+
+    // KernelSU modules and installers hardcode these paths.
+    ensure_symlink("/data/adb/ksud", defs::DAEMON_PATH);
+    ensure_symlink(&format!("{}ksud", defs::BINARY_DIR), defs::DAEMON_PATH);
+}
+
+fn ensure_symlink(link: &str, target: &str) {
     use std::os::unix::fs::symlink;
 
-    let link = Path::new("/data/adb/ksu");
-    let target = defs::WORKING_DIR.trim_end_matches('/');
-
+    let link = Path::new(link);
     if link.is_symlink() {
         if std::fs::read_link(link)
             .map(|path| path == Path::new(target))
@@ -233,6 +240,6 @@ pub(crate) fn ensure_ksu_compat_link() {
     }
 
     if let Err(e) = symlink(target, link) {
-        warn!("link /data/adb/ksu -> {target} failed: {e}");
+        warn!("link {} -> {target} failed: {e}", link.display());
     }
 }
