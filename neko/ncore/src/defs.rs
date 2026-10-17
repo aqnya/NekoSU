@@ -5,9 +5,6 @@ mod android {
 
     pub const BOOT_STAGE_TIMEOUT: Duration = Duration::from_secs(35);
     pub const HOT_INSTALL_SCRIPT_TIMEOUT: Duration = Duration::from_secs(30);
-    pub const EMULATED_SOFT_REBOOT_TIMEOUT: Duration = Duration::from_secs(5);
-    pub const WAITSYS_READY_TIMEOUT: Duration = Duration::from_secs(2);
-    pub const WAITSYS_STOP_TIMEOUT: Duration = Duration::from_secs(5);
     pub const BOOTLOG_TIMEOUT: &str = "30s";
 
     pub const ADB_DIR: &str = "/data/adb/";
@@ -15,11 +12,6 @@ mod android {
     pub const BINARY_DIR: &str = concatcp!(WORKING_DIR, "bin/");
     pub const LIBRARY_DIR: &str = concatcp!(WORKING_DIR, "lib/");
     pub const LOG_DIR: &str = concatcp!(WORKING_DIR, "log/");
-    pub const SULOGD_LOCK_PATH: &str = concatcp!(WORKING_DIR, "sulogd.lock");
-
-    pub const PROFILE_DIR: &str = concatcp!(WORKING_DIR, "profile/");
-    pub const PROFILE_SELINUX_DIR: &str = concatcp!(PROFILE_DIR, "selinux/");
-    pub const PROFILE_TEMPLATE_DIR: &str = concatcp!(PROFILE_DIR, "templates/");
 
     pub const KSURC_PATH: &str = concatcp!(WORKING_DIR, ".ksurc");
     pub const DAEMON_PATH: &str = concatcp!(ADB_DIR, "ncore");
@@ -71,14 +63,12 @@ mod android {
 
     pub const KSU_BACKUP_DIR: &str = WORKING_DIR;
     pub const KSU_BACKUP_FILE_PREFIX: &str = "ksu_backup_";
-    pub const BACKUP_FILENAME: &str = "stock_image.sha1";
     pub const KSU_TEMP_BACKUP_DIR_NAME: &str = "boot_backup";
-
-    pub const DEFAULT_PACKAGE_NAME: &str = env!("KSU_PACKAGE_NAME");
 }
 
 #[allow(unused)]
 pub const VERSION_CODE: &str = env!("VERSION_CODE");
+#[cfg(target_os = "android")]
 pub const VERSION_NAME: &str = env!("VERSION_NAME");
 #[cfg(target_os = "android")]
 pub const FULL_VERSION: &str = const_format::formatcp!(

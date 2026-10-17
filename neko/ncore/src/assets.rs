@@ -1,4 +1,4 @@
-use anyhow::Result;
+#[cfg(target_os = "android")]
 use rust_embed::RustEmbed;
 
 #[cfg(target_os = "android")]
@@ -36,10 +36,4 @@ pub use android::*;
 #[cfg(all(target_arch = "aarch64", target_os = "android"))]
 #[derive(RustEmbed)]
 #[folder = "bin/aarch64"]
-struct Asset;
-
-// If not Android, ie. macos, linux, windows, include all architectures.
-#[cfg(not(target_os = "android"))]
-#[derive(RustEmbed)]
-#[folder = "bin"]
 struct Asset;

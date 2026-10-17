@@ -940,25 +940,7 @@ pub fn disable_module(id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn disable_all_modules() -> Result<()> {
-    mark_all_modules(defs::DISABLE_FILE_NAME)?;
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-    Ok(())
-}
-
-pub fn uninstall_all_modules() -> Result<()> {
-    info!("Uninstalling all modules");
-    mark_all_modules(defs::REMOVE_FILE_NAME)?;
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-    Ok(())
-}
-
 fn mark_all_modules(flag_file: &str) -> Result<()> {
-    // we assume the module dir is already mounted
     let dir = std::fs::read_dir(defs::MODULE_DIR)?;
     for entry in dir.flatten() {
         let path = entry.path();
@@ -967,11 +949,17 @@ fn mark_all_modules(flag_file: &str) -> Result<()> {
             warn!("Failed to mark module: {}: {e}", path.display());
         }
     }
-
     Ok(())
 }
 
-/// Read module.prop from the given module path and return as a HashMap
+pub fn disable_all_modules() -> Result<()> {
+    mark_all_modules(defs::DISABLE_FILE_NAME)?;
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+    Ok(())
+}
+
 pub fn read_module_prop(module_path: &Path) -> Result<HashMap<String, String>> {
     let module_prop = module_path.join("module.prop");
     ensure!(
@@ -1179,52 +1167,4 @@ pub fn list_modules() -> Result<()> {
         .collect();
     println!("{}", serde_json::to_string_pretty(&modules)?);
     Ok(())
-}
-
-/// Get all managed features from active modules
-/// Modules declare managed features via config system (manage.<feature>=true)
-/// Returns: HashMap<ModuleId, Vec<ManagedFeature>>
-pub fn get_managed_features() -> Result<HashMap<String, Vec<String>>> {
-    let mut managed_features_map: HashMap<String, Vec<String>> = HashMap::new();
-
-    foreach_active_module(|module_path| {
-        // Get module ID
-        let Some(module_id) = module_path.file_name().and_then(|n| n.to_str()) else {
-            warn!(
-                "Failed to get module id from path: {}",
-                module_path.display()
-            );
-            return Ok(());
-        };
-
-        // Read module config
-        let config = match crate::module_config::merge_configs(module_id) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to merge configs for module '{module_id}': {e}");
-                return Ok(()); // Skip this module
-            }
-        };
-
-        // Extract manage.* config entries
-        let mut feature_list = Vec::new();
-        for (key, value) in &config {
-            if key.starts_with("manage.") {
-                // Parse feature name
-                if let Some(feature_name) = key.strip_prefix("manage.")
-                    && crate::module_config::parse_bool_config(value)
-                {
-                    feature_list.push(feature_name.to_string());
-                }
-            }
-        }
-
-        if !feature_list.is_empty() {
-            managed_features_map.insert(module_id.to_string(), feature_list);
-        }
-
-        Ok(())
-    })?;
-
-    Ok(managed_features_map)
 }

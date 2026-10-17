@@ -2,11 +2,10 @@ use anyhow::{Context, Result, bail};
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::defs;
-use crate::utils::ensure_dir_exists;
 
 #[allow(clippy::unreadable_literal)]
 const MODULE_CONFIG_MAGIC: u32 = 0x4b53554d; // "KSUM"
@@ -44,57 +43,6 @@ pub fn parse_bool_config(value: &str) -> bool {
 /// - Must start with a letter (a-zA-Z)
 /// - Followed by one or more alphanumeric, dot, underscore, or hyphen characters
 /// - Minimum length: 2 characters
-pub fn validate_config_key(key: &str) -> Result<()> {
-    if key.is_empty() {
-        bail!("Config key cannot be empty");
-    }
-
-    if key.len() > MAX_CONFIG_KEY_LEN {
-        bail!(
-            "Config key too long: {} bytes (max: {})",
-            key.len(),
-            MAX_CONFIG_KEY_LEN
-        );
-    }
-
-    // Use same pattern as module_id for consistency
-    let re = regex_lite::Regex::new(r"^[a-zA-Z][a-zA-Z0-9._-]+$")?;
-    if !re.is_match(key) {
-        bail!("Invalid config key: '{key}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]+$/");
-    }
-
-    Ok(())
-}
-
-/// Validate config value
-/// Only enforces maximum length - no character restrictions
-/// Values are stored in binary format with length prefix, so any UTF-8 data is safe
-pub fn validate_config_value(value: &str) -> Result<()> {
-    if value.len() > MAX_CONFIG_VALUE_LEN {
-        bail!(
-            "Config value too long: {} bytes (max: {})",
-            value.len(),
-            MAX_CONFIG_VALUE_LEN
-        );
-    }
-
-    // No character restrictions - binary storage format handles all UTF-8 safely
-    Ok(())
-}
-
-/// Validate config count
-fn validate_config_count(config: &HashMap<String, String>) -> Result<()> {
-    if config.len() > MAX_CONFIG_COUNT {
-        bail!(
-            "Too many config entries: {} (max: {})",
-            config.len(),
-            MAX_CONFIG_COUNT
-        );
-    }
-    Ok(())
-}
-
-/// Get the config directory path for a module
 fn get_config_dir(module_id: &str) -> PathBuf {
     Path::new(defs::MODULE_CONFIG_DIR).join(module_id)
 }
@@ -105,13 +53,6 @@ fn get_config_path(module_id: &str, config_type: ConfigType) -> PathBuf {
 }
 
 /// Ensure the config directory exists
-fn ensure_config_dir(module_id: &str) -> Result<PathBuf> {
-    let dir = get_config_dir(module_id);
-    ensure_dir_exists(&dir)?;
-    Ok(dir)
-}
-
-/// Load config from binary file
 pub fn load_config(module_id: &str, config_type: ConfigType) -> Result<HashMap<String, String>> {
     crate::module::validate_module_id(module_id)?;
 
@@ -205,145 +146,6 @@ pub fn load_config(module_id: &str, config_type: ConfigType) -> Result<HashMap<S
     Ok(config)
 }
 
-/// Save config to binary file
-pub fn save_config(
-    module_id: &str,
-    config_type: ConfigType,
-    config: &HashMap<String, String>,
-) -> Result<()> {
-    crate::module::validate_module_id(module_id)?;
-
-    // Validate config count
-    validate_config_count(config)?;
-
-    // Validate all keys and values
-    for (key, value) in config {
-        validate_config_key(key).with_context(|| format!("Invalid config key: '{key}'"))?;
-        validate_config_value(value)
-            .with_context(|| format!("Invalid config value for key '{key}'"))?;
-    }
-
-    ensure_config_dir(module_id)?;
-
-    let config_path = get_config_path(module_id, config_type);
-    let temp_path = config_path.with_extension("tmp");
-
-    // Write to temporary file first
-    let mut file = File::create(&temp_path)
-        .with_context(|| format!("Failed to create temp config file: {}", temp_path.display()))?;
-
-    // Write magic
-    file.write_all(&MODULE_CONFIG_MAGIC.to_le_bytes())
-        .with_context(|| "Failed to write magic")?;
-
-    // Write version
-    file.write_all(&MODULE_CONFIG_VERSION.to_le_bytes())
-        .with_context(|| "Failed to write version")?;
-
-    // Write count
-    let count = config.len() as u32;
-    file.write_all(&count.to_le_bytes())
-        .with_context(|| "Failed to write count")?;
-
-    // Write entries
-    for (key, value) in config {
-        // Write key length
-        let key_bytes = key.as_bytes();
-        let key_len = key_bytes.len() as u32;
-        file.write_all(&key_len.to_le_bytes())
-            .with_context(|| format!("Failed to write key length for '{key}'"))?;
-
-        // Write key data
-        file.write_all(key_bytes)
-            .with_context(|| format!("Failed to write key data for '{key}'"))?;
-
-        // Write value length
-        let value_bytes = value.as_bytes();
-        let value_len = value_bytes.len() as u32;
-        file.write_all(&value_len.to_le_bytes())
-            .with_context(|| format!("Failed to write value length for '{key}'"))?;
-
-        // Write value data
-        file.write_all(value_bytes)
-            .with_context(|| format!("Failed to write value data for '{key}'"))?;
-    }
-
-    file.sync_all()
-        .with_context(|| "Failed to sync config file")?;
-
-    // Atomic rename
-    fs::rename(&temp_path, &config_path).with_context(|| {
-        format!(
-            "Failed to rename config file: {} -> {}",
-            temp_path.display(),
-            config_path.display()
-        )
-    })?;
-
-    debug!(
-        "Saved {} entries to {}",
-        config.len(),
-        config_path.display()
-    );
-    Ok(())
-}
-
-/// Get a single config value
-#[allow(dead_code)]
-pub fn get_config_value(
-    module_id: &str,
-    key: &str,
-    config_type: ConfigType,
-) -> Result<Option<String>> {
-    let config = load_config(module_id, config_type)?;
-    Ok(config.get(key).cloned())
-}
-
-/// Set a single config value
-pub fn set_config_value(
-    module_id: &str,
-    key: &str,
-    value: &str,
-    config_type: ConfigType,
-) -> Result<()> {
-    // Validate input early for better error messages
-    validate_config_key(key)?;
-    validate_config_value(value)?;
-
-    let mut config = load_config(module_id, config_type)?;
-    config.insert(key.to_string(), value.to_string());
-
-    // Note: save_config will also validate, but this provides earlier feedback
-    save_config(module_id, config_type, &config)?;
-    Ok(())
-}
-
-/// Delete a single config value
-pub fn delete_config_value(module_id: &str, key: &str, config_type: ConfigType) -> Result<()> {
-    let mut config = load_config(module_id, config_type)?;
-
-    if config.remove(key).is_none() {
-        bail!("Key '{key}' not found in config");
-    }
-
-    save_config(module_id, config_type, &config)?;
-    Ok(())
-}
-
-/// Clear all config values
-pub fn clear_config(module_id: &str, config_type: ConfigType) -> Result<()> {
-    let config_path = get_config_path(module_id, config_type);
-
-    if config_path.exists() {
-        fs::remove_file(&config_path)
-            .with_context(|| format!("Failed to remove config file: {}", config_path.display()))?;
-        debug!("Cleared config: {}", config_path.display());
-    }
-
-    Ok(())
-}
-
-/// Merge persist and temp configs (temp takes priority)
 pub fn merge_configs(module_id: &str) -> Result<HashMap<String, String>> {
     crate::module::validate_module_id(module_id)?;
 

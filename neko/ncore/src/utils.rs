@@ -1,7 +1,5 @@
 use anyhow::{Context, Error, Ok, Result, bail};
-use rustix::fs::{Mode, OFlags, open};
 use rustix::process::setpgid;
-use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 use std::{
     ffi::{CString, c_char},
     fs::{File, OpenOptions, create_dir_all, remove_file, write},
@@ -244,89 +242,6 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
     }
 
     Ok(())
-}
-
-pub fn reset_std() -> Result<()> {
-    let null_fd = open("/dev/null", OFlags::RDWR, Mode::empty())?;
-    dup2_stdin(&null_fd)?;
-    dup2_stdout(&null_fd)?;
-    dup2_stderr(&null_fd)?;
-    Ok(())
-}
-
-pub fn daemonize_with<F: FnOnce() -> Result<()>>(use_init_pgrp: bool, configure: F) -> Result<()> {
-    if !create_daemon_impl(use_init_pgrp, configure)? {
-        unsafe { libc::_exit(0) }
-    }
-    Ok(())
-}
-
-pub fn daemonize(use_init_pgrp: bool) -> Result<()> {
-    daemonize_with(use_init_pgrp, || Ok(()))
-}
-
-pub fn create_daemon(use_init_pgrp: bool) -> Result<bool> {
-    create_daemon_with(use_init_pgrp, || Ok(()))
-}
-
-pub fn create_daemon_with<F: FnOnce() -> Result<()>>(
-    use_init_pgrp: bool,
-    configure: F,
-) -> Result<bool> {
-    create_daemon_impl(use_init_pgrp, configure)
-}
-
-fn create_daemon_impl<F: FnOnce() -> Result<()>>(
-    use_init_pgrp: bool,
-    configure: F,
-) -> Result<bool> {
-    unsafe {
-        let pid = libc::fork();
-        if pid < 0 {
-            bail!("fork error {}", std::io::Error::last_os_error());
-        } else if pid > 0 {
-            let mut status: i32 = -1;
-            loop {
-                if libc::waitpid(pid, &raw mut status, 0) < 0 {
-                    if *libc::__errno() != libc::EINTR {
-                        libc::_exit(1);
-                    }
-                } else {
-                    break;
-                }
-            }
-            if !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
-                bail!("child exited with unexpected status {status}")
-            }
-            return Ok(false);
-        }
-    }
-
-    let do_configure = || -> Result<()> {
-        detach_process_group(use_init_pgrp);
-        switch_cgroups();
-        configure()?;
-        reset_std()?;
-
-        unsafe {
-            let pid = libc::fork();
-            if pid < 0 {
-                bail!("fork error {}", std::io::Error::last_os_error());
-            } else if pid > 0 {
-                libc::_exit(0);
-            }
-        }
-        Ok(())
-    };
-
-    if let Err(e) = do_configure() {
-        log::error!("failed to configure daemon: {e:?}");
-        unsafe {
-            libc::_exit(1);
-        }
-    }
-
-    Ok(true)
 }
 
 pub fn detach_process_group(use_init_pgrp: bool) {

@@ -24,13 +24,9 @@ const IOC_CMD: libc::c_int = 0xC008_4600u32 as libc::c_int;
 
 const IOC_SET_SEPOLICY: u32 = 12;
 const IOC_GET_VERSION: u32 = 14;
-const IOC_FEATURE_GET: u32 = 16;
-const IOC_FEATURE_SET: u32 = 17;
 const IOC_GET_SAFEMODE: u32 = 18;
 const IOC_DISARM_SAFEMODE: u32 = 19;
 const IOC_SET_INIT_PGRP: u32 = 20;
-
-const NKSU_FEATURE_SELINUX_HIDE: u32 = 1;
 
 std::thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
@@ -166,12 +162,6 @@ pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn grant_root() -> Result<()> {
-    // The NekoSU kernel has already escalated the process when it redirected
-    // su to this binary.
-    Ok(())
-}
-
 pub fn report_post_fs_data() {}
 
 pub fn report_services() -> Result<bool> {
@@ -183,8 +173,6 @@ pub fn report_boot_complete() {
     // last boot stage releases the watcher.
     let _ = ksuctl(IOC_DISARM_SAFEMODE, &mut []);
 }
-
-pub fn report_module_mounted() {}
 
 pub fn check_kernel_safemode() -> bool {
     let mut data = [];
@@ -200,95 +188,10 @@ pub fn set_sepolicy(payload: *const u8, payload_len: u64) -> Result<i32> {
     ksuctl(IOC_SET_SEPOLICY, &mut data)
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct FeatureState {
-    pub value: u64,
-    pub supported: bool,
-    pub forced: bool,
-}
-
-fn nksu_feature_id(feature_id: u32) -> Option<u32> {
-    match feature_id {
-        4 => Some(NKSU_FEATURE_SELINUX_HIDE),
-        _ => None,
-    }
-}
-
-pub fn get_feature(feature_id: u32) -> Result<FeatureState> {
-    let Some(id) = nksu_feature_id(feature_id) else {
-        return Ok(FeatureState::default());
-    };
-
-    let mut data = [0u8; 12];
-    data[..4].copy_from_slice(&id.to_ne_bytes());
-    if ksuctl(IOC_FEATURE_GET, &mut data).is_err() {
-        return Ok(FeatureState::default());
-    }
-
-    let value = u64::from_ne_bytes(data[4..12].try_into().unwrap());
-    Ok(FeatureState {
-        value,
-        supported: true,
-        forced: false,
-    })
-}
-
-pub fn set_feature(feature_id: u32, value: u64) -> Result<()> {
-    let Some(id) = nksu_feature_id(feature_id) else {
-        return Ok(());
-    };
-
-    let mut data = [0u8; 12];
-    data[..4].copy_from_slice(&id.to_ne_bytes());
-    data[4..12].copy_from_slice(&value.to_ne_bytes());
-    ksuctl(IOC_FEATURE_SET, &mut data)?;
-    Ok(())
-}
-
-pub fn get_sulog_fd() -> Result<RawFd> {
-    bail!("SU logging is not supported by NekoSU")
-}
-
-pub fn mark_get(_pid: i32) -> Result<u32> {
-    Ok(0)
-}
-
-pub fn mark_set(_pid: i32) -> Result<()> {
-    Ok(())
-}
-
-pub fn mark_unset(_pid: i32) -> Result<()> {
-    Ok(())
-}
-
-pub fn mark_refresh() -> Result<()> {
-    Ok(())
-}
-
-pub fn nuke_ext4_sysfs(_mnt: &str) -> anyhow::Result<()> {
-    Ok(())
-}
-
-pub fn umount_list_wipe() -> Result<()> {
-    Ok(())
-}
-
-pub fn umount_list_add(_path: &str, _flags: u32) -> anyhow::Result<()> {
-    Ok(())
-}
-
-pub fn umount_list_del(_path: &str) -> anyhow::Result<()> {
-    Ok(())
-}
-
 pub fn set_init_pgrp() -> Result<()> {
     let mut data = [];
     ksuctl(IOC_SET_INIT_PGRP, &mut data)?;
     Ok(())
-}
-
-pub fn lookup_symbols(names: &[&str]) -> Result<Vec<Option<u64>>> {
-    Ok(vec![None; names.len()])
 }
 
 pub fn set_no_new_privs() -> anyhow::Result<()> {

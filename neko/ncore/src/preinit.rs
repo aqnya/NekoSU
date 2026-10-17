@@ -496,15 +496,6 @@ pub fn on_boot_completed() {
     }
 }
 
-pub fn reset_bootcount() -> Result<()> {
-    let path = bootcount_path();
-    if path.exists() {
-        fs::remove_file(&path).with_context(|| format!("Failed to remove {}", path.display()))?;
-    }
-    Ok(())
-}
-
-/// Per-module preinit state for the next boot: ok, no_space, error or bootloop.
 pub fn module_states() -> HashMap<String, String> {
     let bootloop = disabled_by_bootloop();
     let Ok(content) = fs::read_to_string(defs::PREINIT_STATUS_PATH) else {
@@ -537,17 +528,4 @@ pub fn status_of(id: &str) -> Option<(String, String)> {
             )
         })
     })
-}
-
-pub fn print_status() {
-    let count = read_bootcount();
-    if count > BOOTCOUNT_LIMIT {
-        println!(
-            "preinit: disabled after {BOOTCOUNT_LIMIT} failed boots (reset with `ncore module preinit reset`)"
-        );
-    } else {
-        println!("preinit: bootcount {count}/{BOOTCOUNT_LIMIT}");
-    }
-    let content = fs::read_to_string(defs::PREINIT_STATUS_PATH).unwrap_or_default();
-    print!("{content}");
 }

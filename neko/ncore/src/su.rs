@@ -17,23 +17,6 @@ use rustix::{
     thread::{Gid, Uid, set_thread_res_gid, set_thread_res_uid},
 };
 
-pub fn grant_root(global_mnt: bool) -> Result<()> {
-    crate::ksucalls::grant_root()?;
-
-    let mut command = Command::new("sh");
-    let command = unsafe {
-        command.pre_exec(move || {
-            if global_mnt {
-                let _ = utils::switch_mnt_ns(1);
-            }
-            Result::Ok(())
-        })
-    };
-    // add the NekoSU bin directory to PATH
-    add_path_to_env(defs::BINARY_DIR)?;
-    Err(command.exec().into())
-}
-
 fn print_usage(program: &str, opts: &Options) {
     let brief = format!("NekoSU\n\nUsage: {program} [options] [-] [user [argument...]]");
     print!("{}", opts.usage(&brief));
