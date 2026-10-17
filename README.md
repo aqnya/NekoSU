@@ -4,6 +4,8 @@
 [![Build LKM](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/build-lkm.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
+## Introduction 
+
 Kernel-level root solution for Android: a kernel module plus a Material 3 manager app.
 KernelSU-compatible module system, WebUI and SELinux rule wire format support.
 
