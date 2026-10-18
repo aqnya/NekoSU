@@ -12,7 +12,7 @@ use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
 
-const FMAC_MAX_DATA: usize = 4096;
+const FMAC_MAX_DATA: usize = 64 * 1024;
 const FMAC_DATA_CAP: usize = 12;
 const FMAC_DATA_SELRULE: usize = 264;
 const FMAC_DATA_PROFILE: usize = 84;
@@ -370,10 +370,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_listProfiles(
         return ptr::null_mut();
     };
     let mut data = vec![0u8; 64 * 1024];
-    if ioc_call(fd, IOC_GET_PROFILES, &mut data) < 0 {
+    let ret = ioc_call(fd, IOC_GET_PROFILES, &mut data);
+    if ret < 0 {
+        log::error!("listProfiles failed: ret={ret}");
         return ptr::null_mut();
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
+    log::info!("listProfiles: ret={ret}, text_len={end}");
     put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
