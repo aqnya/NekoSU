@@ -58,10 +58,6 @@ import me.nekosu.aqnya.ui.component.AppTopAppBar
 import me.nekosu.aqnya.ui.component.ExpressiveTextField
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Dialogs
-// ─────────────────────────────────────────────────────────────────────────────
-
 /** Build an [AppConfig] from the screen's draft values (used for live saving). */
 private fun buildConfig(
     allowed: Boolean,
@@ -133,7 +129,6 @@ private fun CapsSheet(
                     .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // ── 标题 + 计数 ─────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -160,7 +155,6 @@ private fun CapsSheet(
                 }
             }
 
-            // ── 搜索 ───────────────────────────────────────────────────
             ExpressiveTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -179,7 +173,6 @@ private fun CapsSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // ── 预设 ───────────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -210,7 +203,6 @@ private fun CapsSheet(
                 )
             }
 
-            // ── 列表 ───────────────────────────────────────────────────
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -326,7 +318,6 @@ private fun CapRow(
 @Composable
 private fun UidDialog(
     current: String,
-    appUid: Int,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -343,20 +334,20 @@ private fun UidDialog(
         },
         dismissText = stringResource(R.string.dialog_cancel),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(
+                text = stringResource(R.string.app_root_uid_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ExpressiveTextField(
                 value = draft,
                 onValueChange = { value ->
                     if (value.length <= 10 && value.all { it.isDigit() }) draft = value
                 },
                 label = stringResource(R.string.app_root_uid_input),
-                supportingText = stringResource(R.string.app_root_uid_desc),
-                counterText = "${draft.length}/10",
                 placeholder = "0",
                 monospace = true,
-                leadingIcon = {
-                    Icon(Icons.Rounded.Badge, contentDescription = null, modifier = Modifier.size(20.dp))
-                },
                 trailingIcon = {
                     if (draft.isNotEmpty()) {
                         IconButton(onClick = { draft = "" }) {
@@ -374,20 +365,6 @@ private fun UidDialog(
                         imeAction = ImeAction.Done,
                     ),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = draft == "0",
-                    onClick = { draft = "0" },
-                    label = { Text(stringResource(R.string.app_root_uid_zero)) },
-                    shape = ContinuousCornerShape(12.dp),
-                )
-                FilterChip(
-                    selected = draft == appUid.toString(),
-                    onClick = { draft = appUid.toString() },
-                    label = { Text(stringResource(R.string.app_root_uid_app, appUid)) },
-                    shape = ContinuousCornerShape(12.dp),
-                )
-            }
         }
     }
 }
@@ -581,7 +558,6 @@ fun AppDetailScreen(
     if (showUidDialog) {
         UidDialog(
             current = rootUidText,
-            appUid = app.uid,
             onDismiss = { showUidDialog = false },
             onConfirm = { value ->
                 val resolved = value.ifBlank { "0" }

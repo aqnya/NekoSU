@@ -101,8 +101,6 @@
     <string name="app_root_uid">Root UID</string>
     <string name="app_root_uid_input">Process UID</string>
     <string name="app_root_uid_desc">UID the app runs as after being granted root (0 = real root)</string>
-    <string name="app_root_uid_zero">Real root (0)</string>
-    <string name="app_root_uid_app">App UID (%1$d)</string>
     <string name="app_allow_root">Allow Root Access</string>
     <string name="app_root_access_summary">Run this app with the configured identity and capabilities</string>
     <string name="app_root_configuration">Root configuration</string>

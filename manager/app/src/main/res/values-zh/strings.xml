@@ -99,8 +99,6 @@
     <string name="app_root_uid">Root UID</string>
     <string name="app_root_uid_input">进程 UID</string>
     <string name="app_root_uid_desc">授权 root 后进程使用的 UID（0 为真正的 root）</string>
-    <string name="app_root_uid_zero">真实 root（0）</string>
-    <string name="app_root_uid_app">应用 UID（%1$d）</string>
     <string name="app_allow_root">允许 Root 访问</string>
     <string name="app_root_access_summary">使用配置的身份与能力运行此应用</string>
     <string name="app_root_configuration">Root 配置</string>
