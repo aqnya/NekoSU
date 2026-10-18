@@ -27,6 +27,8 @@ const IOC_GET_VERSION: u32 = 14;
 const IOC_GET_SAFEMODE: u32 = 18;
 const IOC_DISARM_SAFEMODE: u32 = 19;
 const IOC_SET_INIT_PGRP: u32 = 20;
+const IOC_ADD_TRY_UMOUNT: u32 = 21;
+const IOC_WIPE_UMOUNT: u32 = 22;
 
 std::thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
@@ -191,6 +193,19 @@ pub fn set_sepolicy(payload: *const u8, payload_len: u64) -> Result<i32> {
 pub fn set_init_pgrp() -> Result<()> {
     let mut data = [];
     ksuctl(IOC_SET_INIT_PGRP, &mut data)?;
+    Ok(())
+}
+
+pub fn wipe_umount_paths() -> Result<()> {
+    let mut data = [];
+    ksuctl(IOC_WIPE_UMOUNT, &mut data)?;
+    Ok(())
+}
+
+pub fn add_umount_path(path: &str) -> Result<()> {
+    let mut data = path.as_bytes().to_vec();
+    data.push(0);
+    ksuctl(IOC_ADD_TRY_UMOUNT, &mut data)?;
     Ok(())
 }
 

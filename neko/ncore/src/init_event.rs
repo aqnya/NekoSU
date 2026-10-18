@@ -104,6 +104,7 @@ pub fn on_post_fs_data() -> Result<()> {
     }
 
     run_stage("post-mount", wait);
+    register_umount_paths();
 
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
@@ -158,6 +159,7 @@ pub fn on_services() {
 
     info!("on_services triggered!");
     run_stage("service", ScriptWait::NoWait);
+    register_umount_paths();
 }
 
 pub fn on_boot_completed() {
@@ -209,4 +211,56 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn unescape_mountinfo(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 3 < bytes.len() {
+            let octal = &value[i + 1..i + 4];
+            if let Ok(byte) = u8::from_str_radix(octal, 8) {
+                out.push(byte as char);
+                i += 4;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Register mounts whose source/root lives under /data/adb/modules.  The
+/// kernel removes them from app mount namespaces when zygote changes uid.
+fn register_umount_paths() {
+    let Ok(text) = std::fs::read_to_string("/proc/self/mountinfo") else {
+        return;
+    };
+    if ksucalls::wipe_umount_paths().is_err() {
+        warn!("cannot wipe kernel umount list");
+        return;
+    }
+    for line in text.lines() {
+        let Some((before, after)) = line.split_once(" - ") else {
+            continue;
+        };
+        let fields: Vec<&str> = before.split_whitespace().collect();
+        if fields.len() < 5 {
+            continue;
+        }
+        let root = unescape_mountinfo(fields[3]);
+        let mountpoint = unescape_mountinfo(fields[4]);
+        let source = after
+            .split_whitespace()
+            .nth(1)
+            .map(unescape_mountinfo)
+            .unwrap_or_default();
+        if root.starts_with("/data/adb/modules/") || source.starts_with("/data/adb/modules/") {
+            if let Err(e) = ksucalls::add_umount_path(&mountpoint) {
+                warn!("register umount {mountpoint} failed: {e:#}");
+            }
+        }
+    }
 }

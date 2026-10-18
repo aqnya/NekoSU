@@ -7,6 +7,7 @@
 
 #include "hook/hook.h"
 #include "manager/manager.h"
+#include "manager/umount.h"
 #include "fd/fd.h"
 #include "privilege/privilege.h"
 #include "selinux/selinux.h"
@@ -281,6 +282,23 @@ void exit_syscall_hook(void)
 }
 #endif /* CONFIG_NKSU_SYSCALL */
 
+
+static bool nksu_umount_uid(uid_t uid)
+{
+    return (uid >= 10000 && uid < 20000) || (uid >= 90000 && uid < 100000);
+}
+
+static uid_t nksu_setresuid_target(const struct pt_regs *regs)
+{
+#if defined(__aarch64__)
+    return (uid_t)regs->regs[1];
+#elif defined(__x86_64__)
+    return (uid_t)regs->si;
+#else
+    return 0;
+#endif
+}
+
 #ifndef CONFIG_NKSU_SYSCALL
 
 static struct tracepoint *tp_sys_enter;
@@ -313,6 +331,9 @@ static void probe_sys_enter(void *data, struct pt_regs *regs, long id)
 	case nr:               \
 		fn(regs);      \
 		return;
+
+	if (id == __NR_setresuid && nksu_umount_uid(nksu_setresuid_target(regs)))
+		nksu_umount_schedule();
 
 	if (!nksu_profile_has_uid(__kuid_val(task_uid(current))))
 		return;

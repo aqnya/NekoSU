@@ -1,5 +1,6 @@
 #include "klog.h"
 #include <linux/fs.h>
+#include <linux/mount.h>
 #include <linux/uaccess.h>
 #include <linux/anon_inodes.h>
 #include <linux/version.h>
@@ -14,6 +15,7 @@
 
 #include "fmac.h"
 #include "manager/feature.h"
+#include "manager/umount.h"
 #include "manager/ioctl.h"
 #include "nksu.h"
 #include "boot/safe_mode.h"
@@ -316,6 +318,18 @@ static long ioc_set_init_pgrp(void)
     return err;
 }
 
+static long ioc_add_try_umount(const void __user *data, unsigned int size)
+{
+    char path[256];
+
+    if (!data || size == 0 || size > sizeof(path))
+        return -EINVAL;
+    if (copy_from_user(path, data, size))
+        return -EFAULT;
+    path[sizeof(path) - 1] = '\0';
+    return nksu_umount_add(path, MNT_DETACH);
+}
+
 static long ioc_disarm_safemode(void)
 {
     nksu_safe_mode_disable();
@@ -380,6 +394,11 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return ioc_disarm_safemode();
     case IOC_SET_INIT_PGRP:
         return ioc_set_init_pgrp();
+    case IOC_ADD_TRY_UMOUNT:
+        return ioc_add_try_umount(data, ioc.size);
+    case IOC_WIPE_UMOUNT:
+        nksu_umount_wipe();
+        return 0;
     default:
         return -ENOTTY;
     }
