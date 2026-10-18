@@ -5,6 +5,7 @@
  * itself; the main syscall hook is not involved.
  */
 #include <linux/cred.h>
+#include <linux/atomic.h>
 #include <linux/dcache.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -17,6 +18,7 @@
 #include <linux/mount.h>
 #include <linux/mutex.h>
 #include <linux/namei.h>
+#include <linux/nsproxy.h>
 #include <linux/path.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
@@ -47,10 +49,16 @@ struct nksu_umount_entry {
 	int flags;
 };
 
+struct mnt_namespace;
+
 static LIST_HEAD(nksu_umount_list);
 static DEFINE_SPINLOCK(nksu_umount_lock);
 static DEFINE_MUTEX(nksu_umount_state_lock);
 static bool nksu_umount_running;
+static struct mnt_namespace *nksu_done_mnt_ns;
+static u64 nksu_done_mnt_gen;
+static atomic64_t nksu_umount_gen = ATOMIC64_INIT(0);
+static bool nksu_mnt_ns_hooks_ready;
 
 int nksu_umount_add(const char *path, int flags)
 {
@@ -64,6 +72,8 @@ int nksu_umount_add(const char *path, int flags)
 	list_for_each_entry(entry, &nksu_umount_list, list) {
 		if (!strcmp(entry->path, path)) {
 			spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+			/* A remount at the same path still invalidates the cache. */
+			atomic64_inc(&nksu_umount_gen);
 			return 0;
 		}
 	}
@@ -82,6 +92,7 @@ int nksu_umount_add(const char *path, int flags)
 	spin_lock_irqsave(&nksu_umount_lock, irqflags);
 	list_add_tail(&entry->list, &nksu_umount_list);
 	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+	atomic64_inc(&nksu_umount_gen);
 	return 0;
 }
 
@@ -106,6 +117,7 @@ void nksu_umount_wipe(void)
 	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
 
 	nksu_umount_free_list(&victim);
+	WRITE_ONCE(nksu_done_mnt_ns, NULL);
 }
 
 static bool nksu_umount_empty(void)
@@ -160,28 +172,32 @@ struct nksu_umount_snapshot {
 };
 
 static struct nksu_umount_snapshot *
-nksu_umount_take_snapshot(size_t *count)
+nksu_umount_take_snapshot(size_t *count, struct nksu_umount_snapshot *inline_buf,
+			  size_t inline_n)
 {
 	struct nksu_umount_snapshot *snapshot;
 	struct nksu_umount_entry *entry;
 	unsigned long irqflags;
 	size_t n = 0, i = 0;
 
+	*count = 0;
+
 	spin_lock_irqsave(&nksu_umount_lock, irqflags);
 	list_for_each_entry(entry, &nksu_umount_list, list)
 		n++;
 	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
 
-	if (!n) {
-		*count = 0;
+	if (!n)
 		return NULL;
-	}
 
-	snapshot = kmalloc_array(n, sizeof(*snapshot), GFP_KERNEL);
-	if (!snapshot) {
-		pr_warn_ratelimited("[umount] cannot allocate snapshot\n");
-		*count = 0;
-		return NULL;
+	if (n <= inline_n) {
+		snapshot = inline_buf;
+	} else {
+		snapshot = kmalloc_array(n, sizeof(*snapshot), GFP_KERNEL);
+		if (!snapshot) {
+			pr_warn_ratelimited("[umount] cannot allocate snapshot\n");
+			return NULL;
+		}
 	}
 
 	spin_lock_irqsave(&nksu_umount_lock, irqflags);
@@ -198,16 +214,43 @@ nksu_umount_take_snapshot(size_t *count)
 	return snapshot;
 }
 
+static bool nksu_mnt_ns_done(void)
+{
+	struct mnt_namespace *ns;
+
+	if (!READ_ONCE(nksu_mnt_ns_hooks_ready) || !current->nsproxy)
+		return false;
+
+	ns = READ_ONCE(current->nsproxy->mnt_ns);
+	if (!ns)
+		return false;
+
+	return READ_ONCE(nksu_done_mnt_ns) == ns &&
+	       READ_ONCE(nksu_done_mnt_gen) ==
+		       atomic64_read(&nksu_umount_gen);
+}
+
 static void nksu_umount_run(void)
 {
 	const struct cred *old;
+	struct nksu_umount_snapshot inline_buf[8];
 	struct nksu_umount_snapshot *snapshot;
+	struct mnt_namespace *ns;
+	u64 gen;
 	size_t count = 0, i;
+	bool failed = false;
 
 	if (!READ_ONCE(nksu_umount_running) || nksu_umount_empty())
 		return;
 
-	snapshot = nksu_umount_take_snapshot(&count);
+	if (nksu_mnt_ns_done())
+		return;
+
+	ns = current->nsproxy ? READ_ONCE(current->nsproxy->mnt_ns) : NULL;
+	gen = atomic64_read(&nksu_umount_gen);
+
+	snapshot = nksu_umount_take_snapshot(&count, inline_buf,
+					     ARRAY_SIZE(inline_buf));
 	if (!snapshot)
 		return;
 
@@ -237,17 +280,27 @@ static void nksu_umount_run(void)
 		if (!path_umount) {
 			pr_err("[umount] path_umount is unresolved\n");
 			path_put(&path);
+			failed = true;
 			continue;
 		}
 		ret = path_umount(&path, snapshot[i].flags);
-		if (ret)
+		if (ret) {
 			pr_info("[umount] %s failed: %d\n", target, ret);
-		else
+			failed = true;
+		} else {
 			pr_info("[umount] removed %s\n", target);
+		}
 	}
 	if (old)
 		nksu_borrow_creds_end(old);
-	kfree(snapshot);
+
+	if (snapshot != inline_buf)
+		kfree(snapshot);
+
+	if (ns && !failed) {
+		WRITE_ONCE(nksu_done_mnt_ns, ns);
+		WRITE_ONCE(nksu_done_mnt_gen, gen);
+	}
 }
 
 struct nksu_umount_work {
@@ -267,7 +320,11 @@ void nksu_umount_schedule(void)
 {
 	struct nksu_umount_work *work;
 
-	if (!READ_ONCE(nksu_umount_running) || nksu_umount_empty())
+	if (!READ_ONCE(nksu_umount_running))
+		return;
+	if (nksu_mnt_ns_done())
+		return;
+	if (nksu_umount_empty())
 		return;
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
@@ -310,6 +367,8 @@ static bool nksu_mount_layout_seen;
 static bool nksu_ida_probe_ready;
 static bool nksu_mount_probes_ready;
 static bool nksu_clone_probe_ready;
+static bool nksu_copy_ns_probe_ready;
+static bool nksu_install_ns_probe_ready;
 static bool nksu_show_probe_ready[3];
 static DEFINE_MUTEX(nksu_mount_layout_lock);
 
@@ -452,6 +511,26 @@ static struct kprobe nksu_kp_clone_mnt = {
 	.pre_handler = nksu_clone_mnt_pre,
 };
 
+/*
+ * A namespace gets a fresh mount view; drop the "already processed" marker so
+ * the first setresuid in it still walks the module mount list.
+ */
+static int nksu_mnt_ns_reset_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	WRITE_ONCE(nksu_done_mnt_ns, NULL);
+	return 0;
+}
+
+static struct kprobe nksu_kp_copy_mnt_ns = {
+	.symbol_name = "copy_mnt_ns",
+	.pre_handler = nksu_mnt_ns_reset_pre,
+};
+
+static struct kprobe nksu_kp_mntns_install = {
+	.symbol_name = "mntns_install",
+	.pre_handler = nksu_mnt_ns_reset_pre,
+};
+
 static struct kprobe nksu_kp_show_mountinfo = {
 	.symbol_name = "show_mountinfo",
 	.pre_handler = nksu_show_pre,
@@ -538,6 +617,21 @@ static int nksu_mount_probes_register_locked(void)
 			nksu_clone_probe_ready = true;
 	}
 
+	if (!nksu_copy_ns_probe_ready) {
+		ret = nksu_register_one(&nksu_kp_copy_mnt_ns, "copy_mnt_ns", false);
+		if (!ret)
+			nksu_copy_ns_probe_ready = true;
+	}
+	if (!nksu_install_ns_probe_ready) {
+		ret = nksu_register_one(&nksu_kp_mntns_install, "mntns_install",
+					false);
+		if (!ret)
+			nksu_install_ns_probe_ready = true;
+	}
+	nksu_mnt_ns_hooks_ready = nksu_copy_ns_probe_ready &&
+				  nksu_install_ns_probe_ready;
+	WRITE_ONCE(nksu_done_mnt_ns, NULL);
+
 	for (i = 0; i < ARRAY_SIZE(nksu_show_probes); i++) {
 		if (nksu_show_probe_ready[i]) {
 			show_ok++;
@@ -610,6 +704,16 @@ static void nksu_mount_probes_exit(void)
 		nksu_unregister_kprobe(&nksu_kp_clone_mnt);
 		nksu_clone_probe_ready = false;
 	}
+	if (nksu_copy_ns_probe_ready) {
+		nksu_unregister_kprobe(&nksu_kp_copy_mnt_ns);
+		nksu_copy_ns_probe_ready = false;
+	}
+	if (nksu_install_ns_probe_ready) {
+		nksu_unregister_kprobe(&nksu_kp_mntns_install);
+		nksu_install_ns_probe_ready = false;
+	}
+	nksu_mnt_ns_hooks_ready = false;
+	WRITE_ONCE(nksu_done_mnt_ns, NULL);
 	for (i = 0; i < ARRAY_SIZE(nksu_show_probes); i++) {
 		if (!nksu_show_probe_ready[i])
 			continue;
