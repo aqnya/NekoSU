@@ -257,9 +257,17 @@ fn register_umount_paths() {
             .nth(1)
             .map(unescape_mountinfo)
             .unwrap_or_default();
-        if root.starts_with("/data/adb/modules/") || source.starts_with("/data/adb/modules/") {
-            if let Err(e) = ksucalls::add_umount_path(&mountpoint) {
-                warn!("register umount {mountpoint} failed: {e:#}");
+        // For a bind mount from the /data filesystem, mountinfo's root is
+        // relative to that filesystem: /adb/modules/... instead of
+        // /data/adb/modules/....
+        if root.starts_with("/data/adb/modules/")
+            || root.starts_with("/adb/modules/")
+            || source.starts_with("/data/adb/modules/")
+            || source.starts_with("/adb/modules/")
+        {
+            match ksucalls::add_umount_path(&mountpoint) {
+                Ok(()) => info!("umount registered: {mountpoint} (root={root})"),
+                Err(e) => warn!("register umount {mountpoint} failed: {e:#}"),
             }
         }
     }
