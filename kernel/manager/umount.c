@@ -96,13 +96,21 @@ static void nksu_umount_run(void)
 	mutex_lock(&nksu_umount_lock);
 	list_for_each_entry(entry, &nksu_umount_list, list) {
 		struct path path;
+		int ret;
 
-		if (kern_path(entry->path, 0, &path))
+		ret = kern_path(entry->path, 0, &path);
+		if (ret) {
+			pr_info("[umount] %s: kern_path failed: %d\n", entry->path, ret);
 			continue;
-		if (path.dentry == path.mnt->mnt_root && path_umount)
-			path_umount(&path, entry->flags);
-		else
+		}
+		if (path.dentry == path.mnt->mnt_root && path_umount) {
+			ret = path_umount(&path, entry->flags);
+			if (ret)
+				pr_info("[umount] %s failed: %d\n", entry->path, ret);
+		} else {
+			pr_info("[umount] %s is not a mount root, skip\n", entry->path);
 			path_put(&path);
+		}
 	}
 	mutex_unlock(&nksu_umount_lock);
 	if (old)
