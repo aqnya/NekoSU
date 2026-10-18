@@ -416,19 +416,6 @@ private fun DomainDialog(
                         imeAction = ImeAction.Done,
                     ),
             )
-            FilterChip(
-                selected = draft == "u:r:nksu:s0",
-                onClick = { draft = "u:r:nksu:s0" },
-                label = { Text(stringResource(R.string.dialog_default)) },
-                leadingIcon = {
-                    Icon(
-                        Icons.Rounded.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-                shape = ContinuousCornerShape(12.dp),
-            )
         }
     }
 }
