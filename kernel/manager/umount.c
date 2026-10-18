@@ -57,6 +57,15 @@ int nksu_umount_add(const char *path, int flags)
 	if (!path || !path[0])
 		return -EINVAL;
 
+	spin_lock_irqsave(&nksu_umount_lock, irqflags);
+	list_for_each_entry(entry, &nksu_umount_list, list) {
+		if (!strcmp(entry->path, path)) {
+			spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+
 	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 	if (!entry)
 		return -ENOMEM;
@@ -142,59 +151,100 @@ static bool nksu_umount_module_root(struct dentry *root)
 	return false;
 }
 
+struct nksu_umount_snapshot {
+	char path[256];
+	int flags;
+};
+
+static struct nksu_umount_snapshot *
+nksu_umount_take_snapshot(size_t *count)
+{
+	struct nksu_umount_snapshot *snapshot;
+	struct nksu_umount_entry *entry;
+	unsigned long irqflags;
+	size_t n = 0, i = 0;
+
+	spin_lock_irqsave(&nksu_umount_lock, irqflags);
+	list_for_each_entry(entry, &nksu_umount_list, list)
+		n++;
+	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+
+	if (!n) {
+		*count = 0;
+		return NULL;
+	}
+
+	snapshot = kmalloc_array(n, sizeof(*snapshot), GFP_KERNEL);
+	if (!snapshot) {
+		pr_warn_ratelimited("[umount] cannot allocate snapshot\n");
+		*count = 0;
+		return NULL;
+	}
+
+	spin_lock_irqsave(&nksu_umount_lock, irqflags);
+	list_for_each_entry(entry, &nksu_umount_list, list) {
+		if (i == n)
+			break;
+		strscpy(snapshot[i].path, entry->path, sizeof(snapshot[i].path));
+		snapshot[i].flags = entry->flags;
+		i++;
+	}
+	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+
+	*count = i;
+	return snapshot;
+}
+
 static void nksu_umount_run(void)
 {
 	const struct cred *old;
-	struct nksu_umount_entry *entry, *tmp;
-	LIST_HEAD(victim);
-	unsigned long irqflags;
+	struct nksu_umount_snapshot *snapshot;
+	size_t count = 0, i;
 
 	if (nksu_umount_empty())
 		return;
 
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_splice_init(&nksu_umount_list, &victim);
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
+	snapshot = nksu_umount_take_snapshot(&count);
+	if (!snapshot)
+		return;
 
 	old = nksu_borrow_creds_begin();
-	list_for_each_entry_safe(entry, tmp, &victim, list) {
+	for (i = 0; i < count; i++) {
+		const char *target = snapshot[i].path;
 		struct path path;
 		int ret;
 
-		ret = kern_path(entry->path, 0, &path);
+		ret = kern_path(target, 0, &path);
 		if (ret) {
-			pr_info("[umount] %s: kern_path failed: %d\n", entry->path, ret);
-			goto next;
+			pr_debug("[umount] %s: kern_path failed: %d\n", target, ret);
+			continue;
 		}
 		if (path.dentry != path.mnt->mnt_root) {
-			pr_info("[umount] %s is not a mount root, skip\n", entry->path);
+			pr_debug("[umount] %s is not a mount root, skip\n", target);
 			path_put(&path);
-			goto next;
+			continue;
 		}
 		if (!nksu_umount_module_root(path.dentry)) {
 			pr_debug("[umount] %s is not under the module store, skip\n",
-				 entry->path);
+				 target);
 			path_put(&path);
-			goto next;
+			continue;
 		}
 
 		if (!path_umount) {
 			pr_err("[umount] path_umount is unresolved\n");
 			path_put(&path);
-			goto next;
+			continue;
 		}
-		ret = path_umount(&path, entry->flags);
+		ret = path_umount(&path, snapshot[i].flags);
 		if (ret)
-			pr_info("[umount] %s failed: %d\n", entry->path, ret);
+			pr_info("[umount] %s failed: %d\n", target, ret);
 		else
-			pr_info("[umount] removed %s\n", entry->path);
-next:
-		list_del(&entry->list);
-		kfree(entry->path);
-		kfree(entry);
+			pr_info("[umount] removed %s\n", target);
 	}
 	if (old)
 		nksu_borrow_creds_end(old);
+	kfree(snapshot);
 }
 
 struct nksu_umount_work {
@@ -607,30 +657,50 @@ static uid_t nksu_setresuid_target(const struct pt_regs *regs)
  * A failed mount leaves a stale path behind; nksu_umount_run() verifies the
  * root is actually a module path before touching it.
  */
-static void nksu_register_mount_target(struct pt_regs *regs, unsigned int argno,
-				       const char *what)
+static bool nksu_path_is_module(const char *path)
 {
-	char path[256];
-	int len;
+	return !strncmp(path, "/data/adb/modules/", 18) ||
+	       !strncmp(path, "/data/adb/modules_update/", 25) ||
+	       !strncmp(path, "/adb/modules/", 13) ||
+	       !strncmp(path, "/adb/modules_update/", 20);
+}
 
-	len = get_path_arg(regs, argno, path, sizeof(path));
-	if (len < 0) {
-		pr_warn("[mount] cannot read %s path: %d\n", what, len);
-		return;
-	}
-	if (len >= (int)sizeof(path) - 1) {
-		pr_warn("[mount] %s path is too long, skip\n", what);
-		return;
-	}
-	if (path[0] != '/') {
-		pr_warn("[mount] %s path is not absolute, skip: %s\n", what, path);
+static bool nksu_read_abs_path(struct pt_regs *regs, unsigned int argno,
+			       char *buf, size_t len)
+{
+	int n = get_path_arg(regs, argno, buf, len);
+
+	return n > 0 && n < (int)len - 1 && buf[0] == '/';
+}
+
+static void nksu_register_mount_target(struct pt_regs *regs,
+				       unsigned int source_arg,
+				       unsigned int target_arg,
+				       const char *what, bool force)
+{
+	char source[256];
+	char target[256];
+	bool source_ok;
+
+	source_ok = nksu_read_abs_path(regs, source_arg, source, sizeof(source));
+	if (!nksu_read_abs_path(regs, target_arg, target, sizeof(target))) {
+		pr_warn("[mount] cannot read %s target\n", what);
 		return;
 	}
 
-	if (nksu_umount_add(path, MNT_DETACH))
-		pr_warn("[mount] cannot register %s: %s\n", what, path);
+	/*
+	 * Keep the list limited to mounts that can possibly be module mounts.
+	 * Target-only checks cover mounts into the module store; the source
+	 * check covers the usual bind mount from /data/adb/modules to /system.
+	 */
+	if (!force && !nksu_path_is_module(target) &&
+	    !(source_ok && nksu_path_is_module(source)))
+		return;
+
+	if (nksu_umount_add(target, MNT_DETACH))
+		pr_warn("[mount] cannot register %s: %s\n", what, target);
 	else
-		pr_debug("[mount] registered %s: %s\n", what, path);
+		pr_debug("[mount] registered %s: %s\n", what, target);
 
 	/*
 	 * A mount made after the app already switched to its final UID (for
@@ -649,18 +719,18 @@ static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
 		nksu_umount_schedule();
 
 	/*
-	 * Record every mount target; nksu_umount_run() rejects anything whose
-	 * root is not under the module store.  This keeps umount independent
-	 * of task markers and of which helper performed the mount, which is
-	 * what makes zygisk/LSPosed mounts reliable.
+	 * Record mount targets, but only when the source or target can be a
+	 * module path.  nksu_umount_run() still verifies the mount root before
+	 * removing anything.
 	 */
 	switch (id) {
 	case __NR_mount:
-		nksu_register_mount_target(regs, 1, "mount");
+		nksu_register_mount_target(regs, 0, 1, "mount", false);
 		break;
 #ifdef __NR_move_mount
 	case __NR_move_mount:
-		nksu_register_mount_target(regs, 3, "move_mount");
+		/* Source may be an O_PATH fd, so the path can be empty. */
+		nksu_register_mount_target(regs, 1, 3, "move_mount", true);
 		break;
 #endif
 	}
