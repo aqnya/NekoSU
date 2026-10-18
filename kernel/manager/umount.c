@@ -293,7 +293,8 @@ static void nksu_umount_run(void)
 			pr_info("[umount] %s failed: %d\n", target, ret);
 			failed = true;
 		} else {
-			pr_info("[umount] removed %s\n", target);
+			pr_info_ratelimited("[umount] removed %s (pid %d)\n",
+                    target, current->pid);
 		}
 	}
 	if (old)
