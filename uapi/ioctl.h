@@ -90,11 +90,6 @@ enum fmac_flag {
      * the first module mount script.
      */
     IOC_SET_MNT_LAYOUT = 23,
-    /*
-     * data 为空。ncore 在运行任何 module mount 脚本前调用：标记 ncore 线程组，
-     * 并安装本模块自己的 mount/umount sys_enter probe。
-     */
-    IOC_UMOUNT_INIT = 24,
 };
 
 #define NKSU_PROFILE_TEXT_MAX (64 * 1024)

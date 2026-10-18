@@ -28,7 +28,6 @@ const IOC_GET_SAFEMODE: u32 = 18;
 const IOC_DISARM_SAFEMODE: u32 = 19;
 const IOC_SET_INIT_PGRP: u32 = 20;
 const IOC_SET_MNT_LAYOUT: u32 = 23;
-const IOC_UMOUNT_INIT: u32 = 24;
 
 std::thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
@@ -201,12 +200,6 @@ pub fn set_mount_layout(mnt_id_off: u32, mnt_off: u32) -> Result<()> {
     data.extend_from_slice(&mnt_id_off.to_ne_bytes());
     data.extend_from_slice(&mnt_off.to_ne_bytes());
     ksuctl(IOC_SET_MNT_LAYOUT, &mut data)?;
-    Ok(())
-}
-
-pub fn init_umount() -> Result<()> {
-    let mut data = [];
-    ksuctl(IOC_UMOUNT_INIT, &mut data)?;
     Ok(())
 }
 

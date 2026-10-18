@@ -217,10 +217,6 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 }
 
 fn setup_mount_layout() {
-    if let Err(e) = ksucalls::init_umount() {
-        warn!("initialize umount feature failed: {e:#}");
-    }
-
     match crate::btf::read_mount_layout() {
         Ok(layout) => match ksucalls::set_mount_layout(layout.mnt_id_off, layout.mnt_off) {
             Ok(()) => info!(
@@ -229,6 +225,11 @@ fn setup_mount_layout() {
             ),
             Err(e) => warn!("install mount layout failed: {e:#}"),
         },
-        Err(e) => warn!("cannot read mount layout: {e:#}"),
+        Err(e) => {
+            warn!("cannot read mount layout: {e:#}");
+            if let Err(e) = ksucalls::set_mount_layout(0, 0) {
+                warn!("mark ncore for mount handling failed: {e:#}");
+            }
+        }
     }
 }

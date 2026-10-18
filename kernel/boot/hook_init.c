@@ -60,7 +60,6 @@ static bool stage_pending;
 static bool init_exiting;
 static bool zygote_seen;
 static bool early_loaded;
-static bool early_features_loaded;
 static bool selinux_loaded;
 static bool features_loaded;
 
@@ -281,17 +280,6 @@ static int init_thread_fn(void *data)
                 else
                     pr_err("nksu: early component init failed\n");
             }
-            /*
-             * Must be armed before init execs ncore at post-fs-data.  This
-             * feature group is deliberately separate from the core early
-             * components, but shares their second_stage timing.
-             */
-            if (!early_features_loaded) {
-                if (nksu_init_early_feature_components() == 0)
-                    early_features_loaded = true;
-                else
-                    pr_err("nksu: early feature init failed\n");
-            }
             if (!selinux_loaded) {
                 if (nksu_init_selinux_components() == 0)
                     selinux_loaded = true;
@@ -400,9 +388,6 @@ void hook_exit(void)
 
     if (READ_ONCE(selinux_loaded))
         nksu_exit_selinux_components();
-
-    if (READ_ONCE(early_features_loaded))
-        nksu_exit_early_feature_components();
 
     if (READ_ONCE(early_loaded))
         nksu_exit_early_components();

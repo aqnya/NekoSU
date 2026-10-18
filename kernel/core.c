@@ -69,18 +69,10 @@ static const module_component_t early_components[] = {
 };
 
 /*
- * Features that must be armed before ncore runs at post-fs-data.  They are
- * kept out of the core boot group above but are initialized at the same
- * second_stage point; feature_components (below) is too late because it is
- * gated on zygote detection.
+ * Features that must be armed before ncore runs are initialized directly from
+ * module init, not through the staged component groups.  Their implementation
+ * stays in manager/.
  */
-static const module_component_t early_feature_components[] = {
-    {
-        .name = "module mounts",
-        .init = nksu_umount_init,
-        .exit = nksu_umount_exit,
-    },
-};
 
 /*
  * SELinux needs the policy, which is loaded during the "selinux_setup"
@@ -214,18 +206,6 @@ void nksu_exit_early_components(void)
                               ARRAY_SIZE(early_components));
 }
 
-int nksu_init_early_feature_components(void)
-{
-    return init_component_list(early_feature_components,
-                               ARRAY_SIZE(early_feature_components));
-}
-
-void nksu_exit_early_feature_components(void)
-{
-    nekosu_cleanup_components(early_feature_components,
-                              ARRAY_SIZE(early_feature_components));
-}
-
 int nksu_init_selinux_components(void)
 {
     return init_component_list(selinux_components,
@@ -257,15 +237,8 @@ static int nekosu_init_all_components(void)
     if (ret)
         return ret;
 
-    ret = nksu_init_early_feature_components();
-    if (ret) {
-        nksu_exit_early_components();
-        return ret;
-    }
-
     ret = nksu_init_selinux_components();
     if (ret) {
-        nksu_exit_early_feature_components();
         nksu_exit_early_components();
         return ret;
     }
@@ -273,7 +246,6 @@ static int nekosu_init_all_components(void)
     ret = nksu_init_feature_components();
     if (ret) {
         nksu_exit_selinux_components();
-        nksu_exit_early_feature_components();
         nksu_exit_early_components();
     }
 
@@ -284,7 +256,6 @@ static void nekosu_cleanup_all_components(void)
 {
     nksu_exit_feature_components();
     nksu_exit_selinux_components();
-    nksu_exit_early_feature_components();
     nksu_exit_early_components();
 }
 
@@ -313,6 +284,17 @@ static int __init nekosu_init(void)
         return ret;
     }
 
+    /*
+     * This feature must be armed before ncore can mount modules, so it is
+     * initialized here rather than in a staged component group.
+     */
+    ret = nksu_umount_init();
+    if (ret) {
+        pr_err("Failed to initialize module mount feature: %d\n", ret);
+        nksu_symbol_compat_exit();
+        return ret;
+    }
+
     if (!late_load) {
         ret = hook_init();
     } else {
@@ -321,6 +303,7 @@ static int __init nekosu_init(void)
 
     if (ret) {
         pr_err("Failed to initialize nekosu: %d\n", ret);
+        nksu_umount_exit();
         nksu_symbol_compat_exit();
         return ret;
     }
@@ -337,6 +320,7 @@ static void __exit nekosu_exit(void)
     else
         nekosu_cleanup_all_components();
 
+    nksu_umount_exit();
     nksu_symbol_compat_exit();
     nksu_ksym_cache_clear();
     pr_info("nekosu module unloaded\n");

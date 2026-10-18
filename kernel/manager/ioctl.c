@@ -354,19 +354,9 @@ static void nksu_mark_current_ncore(void)
     rcu_read_unlock();
 }
 
-static long ioc_umount_init(void)
-{
-    if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
-        return -EPERM;
-
-    nksu_mark_current_ncore();
-    return nksu_umount_init();
-}
-
 static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
 {
     struct nksu_mnt_layout layout;
-    int ret;
 
     if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
         return -EPERM;
@@ -377,9 +367,9 @@ static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
 
     nksu_mark_current_ncore();
 
-    ret = nksu_umount_init();
-    if (ret)
-        return ret;
+    /* Mark-only request: ncore could not read BTF, but mounting still works. */
+    if (layout.mnt_id_off == 0 && layout.mnt_off == 0)
+        return 0;
 
     return nksu_mount_id_set_layout(layout.mnt_id_off, layout.mnt_off);
 }
@@ -455,8 +445,6 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return 0;
     case IOC_SET_MNT_LAYOUT:
         return ioc_set_mnt_layout(data, ioc.size);
-    case IOC_UMOUNT_INIT:
-        return ioc_umount_init();
     default:
         return -ENOTTY;
     }

@@ -22,8 +22,6 @@
  */
 int nksu_init_early_components(void);
 void nksu_exit_early_components(void);
-int nksu_init_early_feature_components(void);
-void nksu_exit_early_feature_components(void);
 int nksu_init_selinux_components(void);
 void nksu_exit_selinux_components(void);
 int nksu_init_feature_components(void);

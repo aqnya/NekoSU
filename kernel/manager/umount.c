@@ -172,8 +172,8 @@ static void nksu_umount_run(void)
 			goto next;
 		}
 		if (!nksu_umount_module_root(path.dentry)) {
-			pr_info("[umount] %s is not under the module store, skip\n",
-				entry->path);
+			pr_debug("[umount] %s is not under the module store, skip\n",
+				 entry->path);
 			path_put(&path);
 			goto next;
 		}
@@ -186,6 +186,8 @@ static void nksu_umount_run(void)
 		ret = path_umount(&path, entry->flags);
 		if (ret)
 			pr_info("[umount] %s failed: %d\n", entry->path, ret);
+		else
+			pr_info("[umount] removed %s\n", entry->path);
 next:
 		list_del(&entry->list);
 		kfree(entry->path);
@@ -628,7 +630,16 @@ static void nksu_register_mount_target(struct pt_regs *regs, unsigned int argno,
 	if (nksu_umount_add(path, MNT_DETACH))
 		pr_warn("[mount] cannot register %s: %s\n", what, path);
 	else
-		pr_info("[mount] registered %s: %s\n", what, path);
+		pr_debug("[mount] registered %s: %s\n", what, path);
+
+	/*
+	 * A mount made after the app already switched to its final UID (for
+	 * example a zygisk daemon mounting in the app namespace) will not get a
+	 * later setresuid trigger.  Queue the removal from this syscall's
+	 * task_work instead.
+	 */
+	if (nksu_umount_uid(__kuid_val(current_euid())))
+		nksu_umount_schedule();
 }
 
 static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
@@ -637,9 +648,12 @@ static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
 	    nksu_umount_uid(nksu_setresuid_target(regs)))
 		nksu_umount_schedule();
 
-	if (!nksu_task_is_ncore(current))
-		return;
-
+	/*
+	 * Record every mount target; nksu_umount_run() rejects anything whose
+	 * root is not under the module store.  This keeps umount independent
+	 * of task markers and of which helper performed the mount, which is
+	 * what makes zygisk/LSPosed mounts reliable.
+	 */
 	switch (id) {
 	case __NR_mount:
 		nksu_register_mount_target(regs, 1, "mount");
