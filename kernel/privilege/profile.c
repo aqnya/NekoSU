@@ -132,8 +132,7 @@ static void blob_free_rcu(struct rcu_head *head)
 	blob_free(container_of(head, struct nksu_profile_blob, rcu));
 }
 
-static bool blob_domain_ok(const struct nksu_profile_blob *b,
-			   const struct nksu_profile_entry *e);
+static bool blob_domain_ok(const struct nksu_profile_blob *b, const struct nksu_profile_entry *e);
 
 /*
  * Allocate a fresh snapshot with the requested capacity, copying src into it.
@@ -144,8 +143,8 @@ static bool blob_domain_ok(const struct nksu_profile_blob *b,
  * repeated domain updates cannot grow it without bound and no dead bytes are
  * carried across snapshots.
  */
-static struct nksu_profile_blob *blob_clone(const struct nksu_profile_blob *src,
-					    u32 capacity, u32 arena_cap)
+static struct nksu_profile_blob *blob_clone(const struct nksu_profile_blob *src, u32 capacity,
+					    u32 arena_cap)
 {
 	struct nksu_profile_blob *dst;
 	u32 i;
@@ -165,8 +164,7 @@ static struct nksu_profile_blob *blob_clone(const struct nksu_profile_blob *src,
 	dst->version = src->version + 1;
 	dst->count = src->count;
 	if (src->count)
-		memcpy(dst->entries, src->entries,
-		       src->count * sizeof(dst->entries[0]));
+		memcpy(dst->entries, src->entries, src->count * sizeof(dst->entries[0]));
 
 	for (i = 0; i < dst->count; i++) {
 		struct nksu_profile_entry *e = &dst->entries[i];
@@ -176,8 +174,7 @@ static struct nksu_profile_blob *blob_clone(const struct nksu_profile_blob *src,
 			e->domain_len = 0;
 			continue;
 		}
-		memcpy(dst->arena + dst->arena_used, src->arena + e->domain_off,
-		       e->domain_len);
+		memcpy(dst->arena + dst->arena_used, src->arena + e->domain_off, e->domain_len);
 		e->domain_off = dst->arena_used;
 		dst->arena_used += e->domain_len;
 	}
@@ -193,8 +190,7 @@ static struct nksu_profile_blob *blob_clone(const struct nksu_profile_blob *src,
  * bytes.  The superseded snapshot is freed, since *bp is always a private
  * working copy at this point.
  */
-static int blob_reserve(struct nksu_profile_blob **bp, u32 min_capacity,
-			u32 min_arena)
+static int blob_reserve(struct nksu_profile_blob **bp, u32 min_capacity, u32 min_arena)
 {
 	struct nksu_profile_blob *src = *bp;
 	struct nksu_profile_blob *dst;
@@ -237,8 +233,7 @@ static int blob_reserve(struct nksu_profile_blob **bp, u32 min_capacity,
  * and returns true.  If not found, *idx is the insertion point (where uid
  * belongs to keep the array sorted) and returns false.
  */
-static bool blob_bsearch(const struct nksu_profile_blob *b, uid_t uid,
-			 u32 *idx)
+static bool blob_bsearch(const struct nksu_profile_blob *b, uid_t uid, u32 *idx)
 {
 	u32 lo = 0, hi = b->count;
 
@@ -260,8 +255,7 @@ static bool blob_bsearch(const struct nksu_profile_blob *b, uid_t uid,
  * Append `len` bytes to the arena of *bp, growing (and replacing) the working
  * snapshot if needed.  On success *off_out receives the byte offset.
  */
-static int arena_put(struct nksu_profile_blob **bp, const char *str, u32 len,
-		     u32 *off_out)
+static int arena_put(struct nksu_profile_blob **bp, const char *str, u32 len, u32 *off_out)
 {
 	struct nksu_profile_blob *b = *bp;
 	int ret;
@@ -288,8 +282,7 @@ static int arena_put(struct nksu_profile_blob **bp, const char *str, u32 len,
  * Validate an entry's domain view against the arena.  Returns true when the
  * (offset, length) pair is entirely inside the used part of the arena.
  */
-static bool blob_domain_ok(const struct nksu_profile_blob *b,
-			   const struct nksu_profile_entry *e)
+static bool blob_domain_ok(const struct nksu_profile_blob *b, const struct nksu_profile_entry *e)
 {
 	if (e->domain_len == 0 || e->domain_off == NKSU_DOMAIN_NONE)
 		return false;
@@ -311,18 +304,17 @@ static int blob_update(blob_modify_fn mod, void *ctx)
 	struct nksu_profile_blob *old, *new_blob;
 	int ret;
 
-	scoped_guard(nksu_mutex, &profile_lock) {
+	scoped_guard(nksu_mutex, &profile_lock)
+	{
 		if (profile_shutdown)
 			return -ENODEV;
 
-		old = rcu_dereference_protected(g_profile_blob,
-						lockdep_is_held(&profile_lock));
+		old = rcu_dereference_protected(g_profile_blob, lockdep_is_held(&profile_lock));
 
 		if (old)
 			new_blob = blob_clone(old, old->capacity, old->arena_cap);
 		else
-			new_blob = blob_clone(NULL, NKSU_PROFILE_INIT_CAP,
-					      NKSU_PROFILE_INIT_ARENA);
+			new_blob = blob_clone(NULL, NKSU_PROFILE_INIT_CAP, NKSU_PROFILE_INIT_ARENA);
 
 		if (IS_ERR(new_blob))
 			return PTR_ERR(new_blob);
@@ -559,8 +551,8 @@ bool nksu_profile_has_uid(uid_t uid)
 	return result;
 }
 
-int nksu_profile_get(uid_t uid, uid_t *root_uid, kernel_cap_t *caps, int *ns,
-		     char *domain_buf, size_t domain_len)
+int nksu_profile_get(uid_t uid, uid_t *root_uid, kernel_cap_t *caps, int *ns, char *domain_buf,
+		     size_t domain_len)
 {
 	struct nksu_profile_blob *b;
 	struct nksu_profile_entry *e;
@@ -615,8 +607,7 @@ static int blob_update_and_persist(blob_modify_fn mod, void *ctx)
 	return ret;
 }
 
-int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps,
-		     const char *domain, int ns)
+int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps, const char *domain, int ns)
 {
 	struct set_all_ctx ctx = {
 		.uid = uid,
@@ -691,10 +682,10 @@ void nksu_profile_exit(void)
 {
 	struct nksu_profile_blob *b;
 
-	scoped_guard(nksu_mutex, &profile_lock) {
+	scoped_guard(nksu_mutex, &profile_lock)
+	{
 		profile_shutdown = true;
-		b = rcu_dereference_protected(g_profile_blob,
-					      lockdep_is_held(&profile_lock));
+		b = rcu_dereference_protected(g_profile_blob, lockdep_is_held(&profile_lock));
 		rcu_assign_pointer(g_profile_blob, NULL);
 	}
 
@@ -724,7 +715,8 @@ int nksu_profile_init(void)
 		return PTR_ERR(b);
 
 	/* Idempotent: never publish (or leak) a second table. */
-	scoped_guard(nksu_mutex, &profile_lock) {
+	scoped_guard(nksu_mutex, &profile_lock)
+	{
 		if (rcu_access_pointer(g_profile_blob)) {
 			blob_free(b);
 			return 0;
@@ -768,8 +760,7 @@ void nksu_profile_foreach(nksu_profile_iter_fn fn, void *ctx)
 				domain = b->arena + e->domain_off;
 				domain_len = e->domain_len;
 			}
-			fn(e->uid, e->root_uid, entry_caps(e), e->ns, domain,
-			   domain_len, ctx);
+			fn(e->uid, e->root_uid, entry_caps(e), e->ns, domain, domain_len, ctx);
 		}
 	}
 	rcu_read_unlock();

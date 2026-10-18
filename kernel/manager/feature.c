@@ -31,7 +31,7 @@
  * from the running kernel's.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 #define NKSU_MAX_FEATURES 16
@@ -42,83 +42,84 @@ static int nksu_feature_count;
 
 static const struct nksu_feature *nksu_feature_find(u32 id)
 {
-    int i;
+	int i;
 
-    for (i = 0; i < nksu_feature_count; i++) {
-        if (nksu_features[i]->id == id)
-            return nksu_features[i];
-    }
-    return NULL;
+	for (i = 0; i < nksu_feature_count; i++) {
+		if (nksu_features[i]->id == id)
+			return nksu_features[i];
+	}
+	return NULL;
 }
 
 int nksu_feature_register(const struct nksu_feature *feature)
 {
-    int i;
+	int i;
 
-    if (!feature || !feature->name)
-        return -EINVAL;
+	if (!feature || !feature->name)
+		return -EINVAL;
 
-    scoped_guard(nksu_mutex, &nksu_feature_mutex) {
-        for (i = 0; i < nksu_feature_count; i++) {
-            if (nksu_features[i]->id == feature->id)
-                return -EEXIST;
-        }
-        if (nksu_feature_count >= NKSU_MAX_FEATURES)
-            return -ENOSPC;
-        nksu_features[nksu_feature_count++] = feature;
-    }
-    return 0;
+	scoped_guard(nksu_mutex, &nksu_feature_mutex)
+	{
+		for (i = 0; i < nksu_feature_count; i++) {
+			if (nksu_features[i]->id == feature->id)
+				return -EEXIST;
+		}
+		if (nksu_feature_count >= NKSU_MAX_FEATURES)
+			return -ENOSPC;
+		nksu_features[nksu_feature_count++] = feature;
+	}
+	return 0;
 }
 
 int nksu_feature_get(u32 id, u64 *value)
 {
-    const struct nksu_feature *feature;
-    int ret = -ENOENT;
+	const struct nksu_feature *feature;
+	int ret = -ENOENT;
 
-    if (!value)
-        return -EINVAL;
+	if (!value)
+		return -EINVAL;
 
-    guard(nksu_mutex)(&nksu_feature_mutex);
-    feature = nksu_feature_find(id);
-    if (feature && feature->get)
-        ret = feature->get(value);
-    return ret;
+	guard(nksu_mutex)(&nksu_feature_mutex);
+	feature = nksu_feature_find(id);
+	if (feature && feature->get)
+		ret = feature->get(value);
+	return ret;
 }
 
 int nksu_feature_set(u32 id, u64 value)
 {
-    const struct nksu_feature *feature;
-    int ret = -ENOENT;
+	const struct nksu_feature *feature;
+	int ret = -ENOENT;
 
-    guard(nksu_mutex)(&nksu_feature_mutex);
-    feature = nksu_feature_find(id);
-    if (feature && feature->set)
-        ret = feature->set(value);
-    return ret;
+	guard(nksu_mutex)(&nksu_feature_mutex);
+	feature = nksu_feature_find(id);
+	if (feature && feature->set)
+		ret = feature->set(value);
+	return ret;
 }
 
 int nksu_feature_render(char *buf, size_t size)
 {
-    int i, len = 0;
+	int i, len = 0;
 
-    if (!buf || size == 0)
-        return -EINVAL;
+	if (!buf || size == 0)
+		return -EINVAL;
 
-    guard(nksu_mutex)(&nksu_feature_mutex);
-    for (i = 0; i < nksu_feature_count; i++) {
-        const struct nksu_feature *feature = nksu_features[i];
-        u64 value = 0;
+	guard(nksu_mutex)(&nksu_feature_mutex);
+	for (i = 0; i < nksu_feature_count; i++) {
+		const struct nksu_feature *feature = nksu_features[i];
+		u64 value = 0;
 
-        if (feature->get)
-            feature->get(&value);
+		if (feature->get)
+			feature->get(&value);
 
-        len += scnprintf(buf + len, size - len, "%u %s %llu\n", feature->id,
-                         feature->name, (unsigned long long)value);
-        if ((size_t)len >= size)
-            break;
-    }
+		len += scnprintf(buf + len, size - len, "%u %s %llu\n", feature->id, feature->name,
+				 (unsigned long long)value);
+		if ((size_t)len >= size)
+			break;
+	}
 
-    return len;
+	return len;
 }
 
 /*
@@ -136,147 +137,145 @@ int nksu_feature_render(char *buf, size_t size)
 /* True when `line` is exactly `name` (surrounding blanks ignored). */
 static bool nksu_feature_name_in_line(const char *line, const char *name)
 {
-    size_t nlen = strlen(name), llen;
+	size_t nlen = strlen(name), llen;
 
-    while (*line == ' ' || *line == '\t' || *line == '\r')
-        line++;
-    llen = strlen(line);
-    while (llen && (line[llen - 1] == ' ' || line[llen - 1] == '\t' ||
-                    line[llen - 1] == '\r'))
-        llen--;
+	while (*line == ' ' || *line == '\t' || *line == '\r')
+		line++;
+	llen = strlen(line);
+	while (llen && (line[llen - 1] == ' ' || line[llen - 1] == '\t' || line[llen - 1] == '\r'))
+		llen--;
 
-    return llen == nlen && memcmp(line, name, nlen) == 0;
+	return llen == nlen && memcmp(line, name, nlen) == 0;
 }
 
 bool nksu_feature_persist_has(const char *name)
 {
-    const struct cred *old;
-    loff_t pos = 0, size;
-    bool found = false;
-    struct file *fp __free(nksu_filp) = NULL;
-    char *buf __free(nksu_kvfree) = NULL;
+	const struct cred *old;
+	loff_t pos = 0, size;
+	bool found = false;
+	struct file *fp __free(nksu_filp) = NULL;
+	char *buf __free(nksu_kvfree) = NULL;
 
-    if (!name || !name[0])
-        return false;
+	if (!name || !name[0])
+		return false;
 
-    old = nksu_borrow_creds_begin();
-    if (!old)
-        return false;
+	old = nksu_borrow_creds_begin();
+	if (!old)
+		return false;
 
-    fp = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
-    if (IS_ERR(fp))
-        goto out;
+	fp = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
+	if (IS_ERR(fp))
+		goto out;
 
-    size = i_size_read(fp->f_inode);
-    if (size <= 0 || size > NKSU_FEATURE_FILE_MAX)
-        goto out;
+	size = i_size_read(fp->f_inode);
+	if (size <= 0 || size > NKSU_FEATURE_FILE_MAX)
+		goto out;
 
-    buf = kvmalloc((size_t)size + 1, GFP_KERNEL);
-    if (!buf)
-        goto out;
+	buf = kvmalloc((size_t)size + 1, GFP_KERNEL);
+	if (!buf)
+		goto out;
 
-    {
-        ssize_t rd = kernel_read(fp, buf, (size_t)size, &pos);
+	{
+		ssize_t rd = kernel_read(fp, buf, (size_t)size, &pos);
 
-        if (rd > 0) {
-            char *cursor = buf;
+		if (rd > 0) {
+			char *cursor = buf;
 
-            buf[rd] = '\0';
-            while (cursor && *cursor) {
-                char *line = strsep(&cursor, "\n");
+			buf[rd] = '\0';
+			while (cursor && *cursor) {
+				char *line = strsep(&cursor, "\n");
 
-                if (line && nksu_feature_name_in_line(line, name)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-    }
+				if (line && nksu_feature_name_in_line(line, name)) {
+					found = true;
+					break;
+				}
+			}
+		}
+	}
 
 out:
-    nksu_borrow_creds_end(old);
-    return found;
+	nksu_borrow_creds_end(old);
+	return found;
 }
 
 int nksu_feature_persist_set(const char *name, bool enabled)
 {
-    const struct cred *old;
-    loff_t pos = 0, size;
-    size_t out_cap, out_len = 0;
-    bool present = false;
-    int ret = 0;
-    struct file *rf __free(nksu_filp) = NULL;
-    struct file *wf __free(nksu_filp) = NULL;
-    char *in __free(nksu_kvfree) = NULL;
-    char *out __free(nksu_kvfree) = NULL;
+	const struct cred *old;
+	loff_t pos = 0, size;
+	size_t out_cap, out_len = 0;
+	bool present = false;
+	int ret = 0;
+	struct file *rf __free(nksu_filp) = NULL;
+	struct file *wf __free(nksu_filp) = NULL;
+	char *in __free(nksu_kvfree) = NULL;
+	char *out __free(nksu_kvfree) = NULL;
 
-    if (!name || !name[0])
-        return -EINVAL;
+	if (!name || !name[0])
+		return -EINVAL;
 
-    old = nksu_borrow_creds_begin();
-    if (!old)
-        return -ENOMEM;
+	old = nksu_borrow_creds_begin();
+	if (!old)
+		return -ENOMEM;
 
-    rf = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
-    if (!IS_ERR(rf)) {
-        size = i_size_read(rf->f_inode);
-        if (size > 0 && size <= NKSU_FEATURE_FILE_MAX) {
-            in = kvmalloc((size_t)size + 1, GFP_KERNEL);
-            if (in) {
-                ssize_t rd = kernel_read(rf, in, (size_t)size, &pos);
+	rf = filp_open(NKSU_FEATURE_FILE, O_RDONLY, 0);
+	if (!IS_ERR(rf)) {
+		size = i_size_read(rf->f_inode);
+		if (size > 0 && size <= NKSU_FEATURE_FILE_MAX) {
+			in = kvmalloc((size_t)size + 1, GFP_KERNEL);
+			if (in) {
+				ssize_t rd = kernel_read(rf, in, (size_t)size, &pos);
 
-                if (rd > 0)
-                    in[rd] = '\0';
-                else {
-                    kvfree(in);
-                    in = NULL;
-                }
-            }
-        }
-    } else if (PTR_ERR(rf) != -ENOENT) {
-        ret = PTR_ERR(rf);
-        goto out;
-    }
+				if (rd > 0)
+					in[rd] = '\0';
+				else {
+					kvfree(in);
+					in = NULL;
+				}
+			}
+		}
+	} else if (PTR_ERR(rf) != -ENOENT) {
+		ret = PTR_ERR(rf);
+		goto out;
+	}
 
-    out_cap = NKSU_FEATURE_FILE_MAX + strlen(name) + 2;
-    out = kvmalloc(out_cap, GFP_KERNEL);
-    if (!out) {
-        ret = -ENOMEM;
-        goto out;
-    }
+	out_cap = NKSU_FEATURE_FILE_MAX + strlen(name) + 2;
+	out = kvmalloc(out_cap, GFP_KERNEL);
+	if (!out) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
-    if (in) {
-        char *cursor = in;
+	if (in) {
+		char *cursor = in;
 
-        while (cursor && *cursor) {
-            char *line = strsep(&cursor, "\n");
+		while (cursor && *cursor) {
+			char *line = strsep(&cursor, "\n");
 
-            if (!line || !*line)
-                continue;
-            if (nksu_feature_name_in_line(line, name)) {
-                present = true;
-                if (!enabled)
-                    continue; /* drop our own entry */
-            }
-            out_len += scnprintf(out + out_len, out_cap - out_len, "%s\n",
-                                 line);
-        }
-    }
+			if (!line || !*line)
+				continue;
+			if (nksu_feature_name_in_line(line, name)) {
+				present = true;
+				if (!enabled)
+					continue; /* drop our own entry */
+			}
+			out_len += scnprintf(out + out_len, out_cap - out_len, "%s\n", line);
+		}
+	}
 
-    if (enabled && !present)
-        out_len += scnprintf(out + out_len, out_cap - out_len, "%s\n", name);
+	if (enabled && !present)
+		out_len += scnprintf(out + out_len, out_cap - out_len, "%s\n", name);
 
-    wf = filp_open(NKSU_FEATURE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (IS_ERR(wf)) {
-        ret = PTR_ERR(wf);
-    } else {
-        pos = 0;
-        kernel_write(wf, out, out_len, &pos);
-    }
+	wf = filp_open(NKSU_FEATURE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	if (IS_ERR(wf)) {
+		ret = PTR_ERR(wf);
+	} else {
+		pos = 0;
+		kernel_write(wf, out, out_len, &pos);
+	}
 
 out:
-    nksu_borrow_creds_end(old);
-    return ret;
+	nksu_borrow_creds_end(old);
+	return ret;
 }
 
 #if defined(__clang__)

@@ -15,10 +15,10 @@
  * deliberately outside the kernel's work masks; nothing else in the kernel
  * tests them.  They are inherited across fork and never cleared.
  */
-#define NKSU_TIF_NCORE      30
-#define NKSU_TIF_CLONE_MNT  29
-#define NKSU_TIF_IDA_ALLOC  28
-#define NKSU_TIF_HIGH_MNT   27
+#define NKSU_TIF_NCORE 30
+#define NKSU_TIF_CLONE_MNT 29
+#define NKSU_TIF_IDA_ALLOC 28
+#define NKSU_TIF_HIGH_MNT 27
 
 static inline bool nksu_task_is_ncore(struct task_struct *task)
 {

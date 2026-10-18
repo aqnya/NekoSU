@@ -48,7 +48,7 @@
  * the running kernel's.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 #define NKSU_PROFILE_FILE "/data/adb/nksu/allow.profile"
@@ -89,8 +89,8 @@ struct save_ctx {
 	bool overflow;
 };
 
-static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns,
-		       const char *domain, size_t domain_len, void *ctx)
+static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns, const char *domain,
+		       size_t domain_len, void *ctx)
 {
 	struct save_ctx *s = ctx;
 	char line[160];
@@ -102,13 +102,11 @@ static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns,
 
 	if (domain_len > 0)
 		n = scnprintf(line, sizeof(line), "%u %016llx %d %u %.*s\n", uid,
-			      (unsigned long long)encode_caps(caps), ns,
-			      (unsigned)root_uid,
+			      (unsigned long long)encode_caps(caps), ns, (unsigned)root_uid,
 			      (int)min_t(size_t, domain_len, 64), domain);
 	else
 		n = scnprintf(line, sizeof(line), "%u %016llx %d %u -\n", uid,
-			      (unsigned long long)encode_caps(caps), ns,
-			      (unsigned)root_uid);
+			      (unsigned long long)encode_caps(caps), ns, (unsigned)root_uid);
 	if (n <= 0)
 		return;
 	if (s->len + (size_t)n >= s->cap) {
@@ -166,8 +164,7 @@ void nksu_profile_store_save(void)
 	len = nksu_profile_to_text(buf, cap);
 	if (len < 0) {
 		/* Should not happen: cap is sized from the entry count. */
-		pr_warn("[profile] serialize for %s failed: %d\n",
-			NKSU_PROFILE_FILE, len);
+		pr_warn("[profile] serialize for %s failed: %d\n", NKSU_PROFILE_FILE, len);
 		return;
 	}
 
@@ -179,8 +176,7 @@ void nksu_profile_store_save(void)
 	if (!IS_ERR(fp)) {
 		kernel_write(fp, buf, (size_t)len, &pos);
 	} else if (PTR_ERR(fp) != -ENOENT) {
-		pr_warn("[profile] save %s failed: %ld\n", NKSU_PROFILE_FILE,
-			PTR_ERR(fp));
+		pr_warn("[profile] save %s failed: %ld\n", NKSU_PROFILE_FILE, PTR_ERR(fp));
 	}
 
 	nksu_borrow_creds_end(old);
@@ -189,15 +185,13 @@ void nksu_profile_store_save(void)
 /* ── parsing ── */
 
 /* Copy `src` (not necessarily NUL-terminated) into `dst`, dropping blanks. */
-static void copy_trimmed(char *dst, size_t dst_size, const char *src,
-			 size_t src_len)
+static void copy_trimmed(char *dst, size_t dst_size, const char *src, size_t src_len)
 {
 	size_t start = 0, end = src_len;
 
 	while (start < end && (src[start] == ' ' || src[start] == '\t'))
 		start++;
-	while (end > start && (src[end - 1] == ' ' || src[end - 1] == '\t' ||
-			       src[end - 1] == '\r'))
+	while (end > start && (src[end - 1] == ' ' || src[end - 1] == '\t' || src[end - 1] == '\r'))
 		end--;
 
 	if (end - start >= dst_size)
@@ -343,8 +337,8 @@ int nksu_profile_store_load(void)
 	WRITE_ONCE(store_suppress, false);
 
 	if (ret)
-		pr_warn("[profile] %s had an entry that failed to load: %d\n",
-			NKSU_PROFILE_FILE, ret);
+		pr_warn("[profile] %s had an entry that failed to load: %d\n", NKSU_PROFILE_FILE,
+			ret);
 	return ret;
 }
 
@@ -359,11 +353,10 @@ int nksu_profile_store_init(void)
 	int ret = nksu_profile_store_load();
 
 	if (ret)
-		pr_warn("[profile] failed to restore %s: %d\n", NKSU_PROFILE_FILE,
-			ret);
+		pr_warn("[profile] failed to restore %s: %d\n", NKSU_PROFILE_FILE, ret);
 	else
-		pr_info("[profile] restored %u entries from %s\n",
-			nksu_profile_count(), NKSU_PROFILE_FILE);
+		pr_info("[profile] restored %u entries from %s\n", nksu_profile_count(),
+			NKSU_PROFILE_FILE);
 	return 0;
 }
 

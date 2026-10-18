@@ -15,8 +15,8 @@ struct syscall_hook {
 	long (*handler)(struct pt_regs *);
 };
 
-#define SU_PATH             "/system/bin/su"
-#define SU_PATH_LEN         (sizeof(SU_PATH))
+#define SU_PATH "/system/bin/su"
+#define SU_PATH_LEN (sizeof(SU_PATH))
 
 /*
  * `su` is redirected to our own userspace binary, which runs the `su` command
@@ -24,12 +24,11 @@ struct syscall_hook {
  * it is exec'd, so ncore just parses the su arguments and execs the shell; it
  * also no longer depends on KernelSU's daemon.
  */
-#define REDIRECT_TARGET     NKSU_DAEMON_PATH
+#define REDIRECT_TARGET NKSU_DAEMON_PATH
 #define REDIRECT_TARGET_LEN (sizeof(REDIRECT_TARGET))
 
-#define SH_PATH             "/system/bin/sh"
-#define SH_PATH_LEN         (sizeof(SH_PATH))
-
+#define SH_PATH "/system/bin/sh"
+#define SH_PATH_LEN (sizeof(SH_PATH))
 
 static inline bool path_is_su(const char *p)
 {

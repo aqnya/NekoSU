@@ -90,7 +90,7 @@
  * running kernel's, so opt this file out of CFI like the other users do.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 /*
@@ -99,12 +99,12 @@
  * decompressed name at KSYM_NAME_LEN (128 on 5.15, larger on newer kernels);
  * 512 comfortably exceeds both on every supported version.
  */
-#define KSYM_NAME_MAX     512
-#define KSYM_MARKERS_MAX  8192        /* at most 8192 markers */
+#define KSYM_NAME_MAX 512
+#define KSYM_MARKERS_MAX 8192 /* at most 8192 markers */
 
 /* bounce buffer: copy this much before and after the table */
-#define KSYM_BOUNCE_BACK  (16u << 20)
-#define KSYM_BOUNCE_FWD   (1u << 20)
+#define KSYM_BOUNCE_BACK (16u << 20)
+#define KSYM_BOUNCE_FWD (1u << 20)
 
 /* cache buckets: 2^18, very low load for ~100k symbols */
 static DEFINE_HASHTABLE(ksym_htable, 18);
@@ -119,47 +119,47 @@ static bool ksym_proc_hidden;
 static bool ksym_proc_checked;
 
 struct ksym_entry {
-    struct hlist_node node;
-    unsigned long addr;
-    char name[];
+	struct hlist_node node;
+	unsigned long addr;
+	char name[];
 };
 
 static u32 ksym_hash(const char *name)
 {
-    u32 h = 5381;
+	u32 h = 5381;
 
-    while (*name)
-        h = h * 33 + (unsigned char)*name++;
-    return h;
+	while (*name)
+		h = h * 33 + (unsigned char)*name++;
+	return h;
 }
 
 static struct ksym_entry *ksym_find_locked(const char *name)
 {
-    struct ksym_entry *e;
-    u32 h = ksym_hash(name);
+	struct ksym_entry *e;
+	u32 h = ksym_hash(name);
 
-    hash_for_each_possible(ksym_htable, e, node, h) {
-        if (strcmp(e->name, name) == 0)
-            return e;
-    }
-    return NULL;
+	hash_for_each_possible(ksym_htable, e, node, h) {
+		if (strcmp(e->name, name) == 0)
+			return e;
+	}
+	return NULL;
 }
 
 static void ksym_cache_add(const char *name, unsigned long addr)
 {
-    struct ksym_entry *e;
+	struct ksym_entry *e;
 
-    if (!name || !name[0] || !addr || ksym_find_locked(name))
-        return;
+	if (!name || !name[0] || !addr || ksym_find_locked(name))
+		return;
 
-    e = kmalloc(sizeof(*e) + strlen(name) + 1, GFP_KERNEL);
-    if (!e)
-        return;
+	e = kmalloc(sizeof(*e) + strlen(name) + 1, GFP_KERNEL);
+	if (!e)
+		return;
 
-    strcpy(e->name, name);
-    e->addr = addr;
-    hash_add(ksym_htable, &e->node, ksym_hash(name));
-    atomic_inc(&ksym_count);
+	strcpy(e->name, name);
+	e->addr = addr;
+	hash_add(ksym_htable, &e->node, ksym_hash(name));
+	atomic_inc(&ksym_count);
 }
 
 /*
@@ -169,7 +169,7 @@ static void ksym_cache_add(const char *name, unsigned long addr)
 
 static int kread(const void *addr, void *dst, size_t len)
 {
-    return copy_from_kernel_nofault(dst, addr, len);
+	return copy_from_kernel_nofault(dst, addr, len);
 }
 
 /*
@@ -179,16 +179,15 @@ static int kread(const void *addr, void *dst, size_t len)
  */
 static void kread_best_effort(void *dst, unsigned long src, size_t len)
 {
-    size_t done = 0;
+	size_t done = 0;
 
-    while (done < len) {
-        size_t n = min_t(size_t, PAGE_SIZE - (src & (PAGE_SIZE - 1)),
-                         len - done);
+	while (done < len) {
+		size_t n = min_t(size_t, PAGE_SIZE - (src & (PAGE_SIZE - 1)), len - done);
 
-        if (kread((const void *)(src + done), (u8 *)dst + done, n) < 0)
-            memset((u8 *)dst + done, 0, n);
-        done += n;
-    }
+		if (kread((const void *)(src + done), (u8 *)dst + done, n) < 0)
+			memset((u8 *)dst + done, 0, n);
+		done += n;
+	}
 }
 
 /*
@@ -203,64 +202,63 @@ static void kread_best_effort(void *dst, unsigned long src, size_t len)
  * single byte followed by that many token indices, and the first character of
  * the expanded string (the symbol type) is dropped.
  */
-static int decode_symbol(const u8 *names, const u8 *names_end,
-                         const u16 *token_index, const u8 *token_table,
-                         u32 *offset, char *out, int outsz)
+static int decode_symbol(const u8 *names, const u8 *names_end, const u16 *token_index,
+			 const u8 *token_table, u32 *offset, char *out, int outsz)
 {
-    u32 pos = *offset;
-    u32 names_len = (u32)(names_end - names);
-    u32 len;
-    char *dst = out;
-    char *limit = out + outsz - 1;
-    bool first = true;
+	u32 pos = *offset;
+	u32 names_len = (u32)(names_end - names);
+	u32 len;
+	char *dst = out;
+	char *limit = out + outsz - 1;
+	bool first = true;
 
-    if (pos >= names_len)
-        return -1;
+	if (pos >= names_len)
+		return -1;
 
-    len = names[pos++];
-    if (len >= KSYM_NAME_MAX || pos + len > names_len)
-        return -1;
+	len = names[pos++];
+	if (len >= KSYM_NAME_MAX || pos + len > names_len)
+		return -1;
 
-    while (len--) {
-        u16 idx = token_index[names[pos++]];
-        const char *tok = (const char *)token_table + idx;
+	while (len--) {
+		u16 idx = token_index[names[pos++]];
+		const char *tok = (const char *)token_table + idx;
 
-        while (*tok) {
-            if (first)
-                first = false;   /* drop the symbol-type character */
-            else if (dst < limit)
-                *dst++ = *tok;
-            else
-                return -1;
-            tok++;
-        }
-    }
+		while (*tok) {
+			if (first)
+				first = false; /* drop the symbol-type character */
+			else if (dst < limit)
+				*dst++ = *tok;
+			else
+				return -1;
+			tok++;
+		}
+	}
 
-    *dst = '\0';
-    *offset = pos;
-    return 0;
+	*dst = '\0';
+	*offset = pos;
+	return 0;
 }
 
 /* Strip compiler suffixes: foo.cfi_jt / foo$xxx / foo.llvm.xxx -> foo */
 static void strip_symbol_suffix(char *name)
 {
-    char *cut = NULL;
-    char *p;
+	char *cut = NULL;
+	char *p;
 
-    if ((p = strchr(name, '$')))
-        cut = p;
-    if ((p = strstr(name, ".llvm.")))
-        if (!cut || p < cut)
-            cut = p;
-    if ((p = strstr(name, ".cfi_jt")))
-        if (!cut || p < cut)
-            cut = p;
-    if ((p = strstr(name, ".constprop")))
-        if (!cut || p < cut)
-            cut = p;
+	if ((p = strchr(name, '$')))
+		cut = p;
+	if ((p = strstr(name, ".llvm.")))
+		if (!cut || p < cut)
+			cut = p;
+	if ((p = strstr(name, ".cfi_jt")))
+		if (!cut || p < cut)
+			cut = p;
+	if ((p = strstr(name, ".constprop")))
+		if (!cut || p < cut)
+			cut = p;
 
-    if (cut)
-        *cut = '\0';
+	if (cut)
+		*cut = '\0';
 }
 
 /*
@@ -268,13 +266,13 @@ static void strip_symbol_suffix(char *name)
  */
 
 struct kallsyms_view {
-    const u8  *token_table;
-    u32        tlen;
-    const u16 *token_index;   /* 256 entries */
-    const u32 *markers;       /* one offset per 256 symbols */
-    u32        marker_count;
-    const u8  *names;         /* start of kallsyms_names */
-    const u8  *names_end;     /* == markers */
+	const u8 *token_table;
+	u32 tlen;
+	const u16 *token_index; /* 256 entries */
+	const u32 *markers; /* one offset per 256 symbols */
+	u32 marker_count;
+	const u8 *names; /* start of kallsyms_names */
+	const u8 *names_end; /* == markers */
 };
 
 /*
@@ -291,16 +289,16 @@ struct kallsyms_view {
  */
 static u32 token_table_len(const u8 *p, const u8 *end)
 {
-    const u8 *q = p;
-    u32 offsets[256];
-    u32 tlen;
-    const u16 *ti;
-    int i;
+	const u8 *q = p;
+	u32 offsets[256];
+	u32 tlen;
+	const u16 *ti;
+	int i;
 
-    if (end - p < 16)
-        return 0;
+	if (end - p < 16)
+		return 0;
 
-    /*
+	/*
      * Quick reject: kallsyms_token_table is a dense run of NUL-terminated
      * tokens, so its leading bytes contain many NULs (~15 in the first 64 for
      * the 5.15 vermeer table).  The window must tolerate a long first token:
@@ -311,47 +309,47 @@ static u32 token_table_len(const u8 *p, const u8 *end)
      * then failed (cache=0).  Count over 64 bytes instead; ordinary
      * code/rodata rarely holds 8 NULs there.
      */
-    {
-        const u8 *s = p;
-        const u8 *s_end = p + 64;
-        int nuls = 0;
+	{
+		const u8 *s = p;
+		const u8 *s_end = p + 64;
+		int nuls = 0;
 
-        if (s_end > end)
-            s_end = end;
-        while (s < s_end) {
-            if (!*s && ++nuls >= 8)
-                break;
-            s++;
-        }
-        if (nuls < 8)
-            return 0;
-    }
+		if (s_end > end)
+			s_end = end;
+		while (s < s_end) {
+			if (!*s && ++nuls >= 8)
+				break;
+			s++;
+		}
+		if (nuls < 8)
+			return 0;
+	}
 
-    for (i = 0; i < 256; i++) {
-        const u8 *start = q;
+	for (i = 0; i < 256; i++) {
+		const u8 *start = q;
 
-        offsets[i] = (u32)(start - p);
-        while (q < end && *q)
-            q++;
-        if (q >= end || *q != '\0' || q == start)
-            return 0;
-        if ((size_t)(q - p) > 4096)
-            return 0;
-        q++;
-    }
+		offsets[i] = (u32)(start - p);
+		while (q < end && *q)
+			q++;
+		if (q >= end || *q != '\0' || q == start)
+			return 0;
+		if ((size_t)(q - p) > 4096)
+			return 0;
+		q++;
+	}
 
-    tlen = (u32)(q - p);
-    /* kallsyms_token_index is emitted with the label's 8-byte alignment */
-    ti = (const u16 *)PTR_ALIGN(q, 8);
-    if ((const u8 *)ti + 512 > end)
-        return 0;
+	tlen = (u32)(q - p);
+	/* kallsyms_token_index is emitted with the label's 8-byte alignment */
+	ti = (const u16 *)PTR_ALIGN(q, 8);
+	if ((const u8 *)ti + 512 > end)
+		return 0;
 
-    for (i = 0; i < 256; i++) {
-        if (ti[i] != offsets[i])
-            return 0;
-    }
+	for (i = 0; i < 256; i++) {
+		if (ti[i] != offsets[i])
+			return 0;
+	}
 
-    return tlen;
+	return tlen;
 }
 
 /*
@@ -363,65 +361,65 @@ static u32 token_table_len(const u8 *p, const u8 *end)
  * 0. Walk backwards from the last marker while the sequence keeps increasing;
  * the result is markers[0].
  */
-static bool locate_markers(const u8 *buf_start, const u8 *token_table,
-                           const u32 **markers_out, u32 *count_out)
+static bool locate_markers(const u8 *buf_start, const u8 *token_table, const u32 **markers_out,
+			   u32 *count_out)
 {
-    const u8 *limit = token_table - (size_t)KSYM_MARKERS_MAX * 4;
-    const u8 *p, *start;
-    u32 count;
+	const u8 *limit = token_table - (size_t)KSYM_MARKERS_MAX * 4;
+	const u8 *p, *start;
+	u32 count;
 
-    if (limit < buf_start)
-        limit = buf_start;
+	if (limit < buf_start)
+		limit = buf_start;
 
-    /* token_table must be 4-byte aligned for the backwards u32 walk */
-    if (((unsigned long)token_table & 3) != 0)
-        return false;
+	/* token_table must be 4-byte aligned for the backwards u32 walk */
+	if (((unsigned long)token_table & 3) != 0)
+		return false;
 
-    p = token_table - 4;
-    if (p < limit)
-        return false;
+	p = token_table - 4;
+	if (p < limit)
+		return false;
 
-    /* skip the 0..4 bytes of alignment padding before token_table */
-    if (*(const u32 *)p == 0 && p - 4 >= limit)
-        p -= 4;
+	/* skip the 0..4 bytes of alignment padding before token_table */
+	if (*(const u32 *)p == 0 && p - 4 >= limit)
+		p -= 4;
 
-    start = p;
-    count = 1;
+	start = p;
+	count = 1;
 
-    while (start - 4 >= limit) {
-        u32 cur = *(const u32 *)(start - 4);
-        u32 nxt = *(const u32 *)start;
+	while (start - 4 >= limit) {
+		u32 cur = *(const u32 *)(start - 4);
+		u32 nxt = *(const u32 *)start;
 
-        if (cur < nxt && nxt - cur < 0x20000) {
-            start -= 4;
-            count++;
-        } else {
-            break;
-        }
-    }
+		if (cur < nxt && nxt - cur < 0x20000) {
+			start -= 4;
+			count++;
+		} else {
+			break;
+		}
+	}
 
-    /*
+	/*
      * The real markers array starts at 0. If we did not land on 0, the
      * walk went into preceding data; scan forward for the first 0.
      */
-    if (count >= 2 && *(const u32 *)start != 0) {
-        const u8 *q;
+	if (count >= 2 && *(const u32 *)start != 0) {
+		const u8 *q;
 
-        for (q = start; q < token_table; q += 4) {
-            if (*(const u32 *)q == 0) {
-                start = q;
-                count = (u32)(token_table - q) / 4;
-                break;
-            }
-        }
-    }
+		for (q = start; q < token_table; q += 4) {
+			if (*(const u32 *)q == 0) {
+				start = q;
+				count = (u32)(token_table - q) / 4;
+				break;
+			}
+		}
+	}
 
-    if (count < 2 || *(const u32 *)start != 0)
-        return false;
+	if (count < 2 || *(const u32 *)start != 0)
+		return false;
 
-    *markers_out = (const u32 *)start;
-    *count_out = count;
-    return true;
+	*markers_out = (const u32 *)start;
+	*count_out = count;
+	return true;
 }
 
 /*
@@ -432,41 +430,41 @@ static bool locate_markers(const u8 *buf_start, const u8 *token_table,
  */
 static bool names_start_valid(const u8 *cand, const struct kallsyms_view *v)
 {
-    const u8 *names_end = v->names_end;
-    u32 names_size = (u32)(names_end - cand);
-    u32 off = 0;
-    u32 k = 1;
-    u32 sym_in_group = 0;
+	const u8 *names_end = v->names_end;
+	u32 names_size = (u32)(names_end - cand);
+	u32 off = 0;
+	u32 k = 1;
+	u32 sym_in_group = 0;
 
-    for (;;) {
-        char tmp[KSYM_NAME_MAX];
-        u32 before = off;
+	for (;;) {
+		char tmp[KSYM_NAME_MAX];
+		u32 before = off;
 
-        if (decode_symbol(cand, names_end, v->token_index, v->token_table,
-                          &off, tmp, sizeof(tmp)) < 0)
-            break;
+		if (decode_symbol(cand, names_end, v->token_index, v->token_table, &off, tmp,
+				  sizeof(tmp)) < 0)
+			break;
 
-        if (off <= before)
-            return false;
+		if (off <= before)
+			return false;
 
-        if (++sym_in_group == 256) {
-            sym_in_group = 0;
-            if (k < v->marker_count) {
-                if (off != v->markers[k])
-                    return false;
-                k++;
-            }
-        }
-    }
+		if (++sym_in_group == 256) {
+			sym_in_group = 0;
+			if (k < v->marker_count) {
+				if (off != v->markers[k])
+					return false;
+				k++;
+			}
+		}
+	}
 
-    /*
+	/*
      * All markers matched and decoding ended near the end of names. There
      * may be a little alignment padding between names and markers (16 bytes
      * of slack).
      */
-    if (k != v->marker_count)
-        return false;
-    return off + 16 >= names_size;
+	if (k != v->marker_count)
+		return false;
+	return off + 16 >= names_size;
 }
 
 /*
@@ -476,91 +474,85 @@ static bool names_start_valid(const u8 *cand, const struct kallsyms_view *v)
  * [markers[last], markers[last] + 256 * KSYM_NAME_MAX] and every 256-symbol
  * boundary matching markers.
  */
-static const u8 *find_names_start(const u8 *buf_start,
-                                  const struct kallsyms_view *v,
-                                  bool (*try)(const u8 *names,
-                                              const u8 *names_end, void *arg),
-                                  void *arg)
+static const u8 *find_names_start(const u8 *buf_start, const struct kallsyms_view *v,
+				  bool (*try)(const u8 *names, const u8 *names_end, void *arg),
+				  void *arg)
 {
-    const u8 *names_end = v->names_end;
-    const u8 *cand;
-    u32 last_marker;
-    u32 max_names_size;
+	const u8 *names_end = v->names_end;
+	const u8 *cand;
+	u32 last_marker;
+	u32 max_names_size;
 
-    if (v->marker_count < 2)
-        return NULL;
-    last_marker = v->markers[v->marker_count - 1];
-    if (last_marker < 1 ||
-        (size_t)last_marker >= (size_t)(names_end - buf_start))
-        return NULL;
+	if (v->marker_count < 2)
+		return NULL;
+	last_marker = v->markers[v->marker_count - 1];
+	if (last_marker < 1 || (size_t)last_marker >= (size_t)(names_end - buf_start))
+		return NULL;
 
-    /*
+	/*
      * names_size lies in [last_marker, last_marker + 256*KSYM_NAME_MAX]:
      * the last marker points at the start of the final group, which has at
      * most 256 symbols of at most KSYM_NAME_MAX bytes each.
      */
-    max_names_size = last_marker + 256u * KSYM_NAME_MAX;
-    if (max_names_size < last_marker) /* overflow guard */
-        return NULL;
+	max_names_size = last_marker + 256u * KSYM_NAME_MAX;
+	if (max_names_size < last_marker) /* overflow guard */
+		return NULL;
 
-    cand = names_end - last_marker;
+	cand = names_end - last_marker;
 
-    /*
+	/*
      * Walk candidate starts downward, but never form a pointer before
      * buf_start (that would be undefined behaviour): terminate explicitly
      * when cand == buf_start instead of decrementing past it. As cand
      * decreases names_end - cand grows, so the size bound is tested first.
      */
-    for (;;) {
-        if ((size_t)(names_end - cand) > max_names_size)
-            break;
-        if (names_start_valid(cand, v) &&
-            try(cand, names_end, arg))
-            return cand;
-        if (cand == buf_start)
-            break;
-        cand--;
-    }
-    return NULL;
+	for (;;) {
+		if ((size_t)(names_end - cand) > max_names_size)
+			break;
+		if (names_start_valid(cand, v) && try(cand, names_end, arg))
+			return cand;
+		if (cand == buf_start)
+			break;
+		cand--;
+	}
+	return NULL;
 }
 
 /*
  * Given token_table, fill token_index / markers. Returns 0 on success.
  * The names start is left to the caller (there may be several candidates).
  */
-static int view_from_token_table(const u8 *buf_start, const u8 *token_table,
-                                 const u8 *buf_end, struct kallsyms_view *v)
+static int view_from_token_table(const u8 *buf_start, const u8 *token_table, const u8 *buf_end,
+				 struct kallsyms_view *v)
 {
-    u32 tlen;
-    int i;
+	u32 tlen;
+	int i;
 
-    memset(v, 0, sizeof(*v));
+	memset(v, 0, sizeof(*v));
 
-    tlen = token_table_len(token_table, buf_end);
-    if (!tlen)
-        return -ENOENT;
-    /* token_index is 8-byte aligned by output_label's ALGN */
-    if (token_table + tlen + 7 + 512 > buf_end)
-        return -ENOENT;
+	tlen = token_table_len(token_table, buf_end);
+	if (!tlen)
+		return -ENOENT;
+	/* token_index is 8-byte aligned by output_label's ALGN */
+	if (token_table + tlen + 7 + 512 > buf_end)
+		return -ENOENT;
 
-    v->token_table = token_table;
-    v->tlen = tlen;
-    v->token_index = (const u16 *)PTR_ALIGN(token_table + tlen, 8);
+	v->token_table = token_table;
+	v->tlen = tlen;
+	v->token_index = (const u16 *)PTR_ALIGN(token_table + tlen, 8);
 
-    if (v->token_index[0] != 0)
-        return -ENOENT;
-    for (i = 1; i < 256; i++) {
-        if (v->token_index[i] <= v->token_index[i - 1] ||
-            v->token_index[i] >= tlen)
-            return -ENOENT;
-    }
+	if (v->token_index[0] != 0)
+		return -ENOENT;
+	for (i = 1; i < 256; i++) {
+		if (v->token_index[i] <= v->token_index[i - 1] || v->token_index[i] >= tlen)
+			return -ENOENT;
+	}
 
-    if (!locate_markers(buf_start, token_table, &v->markers,
-                        &v->marker_count))
-        return -ENOENT;
+	if (!locate_markers(buf_start, token_table, &v->markers, &v->marker_count))
+		return -ENOENT;
 
-    v->names_end = (const u8 *)v->markers;
-    return 0;
+	v->names_end = (const u8 *)v->markers;
+	return 0;
 }
 
 /*
@@ -573,10 +565,10 @@ static int view_from_token_table(const u8 *buf_start, const u8 *token_table,
  */
 
 struct addr_info {
-    bool                base_relative;
-    const u32          *offsets;      /* BASE_RELATIVE mode */
-    unsigned long       relative_base;
-    const unsigned long *addresses;   /* absolute mode (kallsyms_addresses) */
+	bool base_relative;
+	const u32 *offsets; /* BASE_RELATIVE mode */
+	unsigned long relative_base;
+	const unsigned long *addresses; /* absolute mode (kallsyms_addresses) */
 };
 
 /*
@@ -596,20 +588,20 @@ struct addr_info {
  */
 static unsigned long symbol_addr(const struct addr_info *ai, u32 i)
 {
-    if (ai->base_relative) {
+	if (ai->base_relative) {
 #if IS_ENABLED(CONFIG_KALLSYMS_ABSOLUTE_PERCPU)
-        s32 off = (s32)ai->offsets[i];
+		s32 off = (s32)ai->offsets[i];
 
-        if (off >= 0)
-            return (unsigned long)off;                  /* absolute */
-        return ai->relative_base - 1 - (unsigned long)(long)off;
+		if (off >= 0)
+			return (unsigned long)off; /* absolute */
+		return ai->relative_base - 1 - (unsigned long)(long)off;
 #else
-        return ai->relative_base + (u32)ai->offsets[i];
+		return ai->relative_base + (u32)ai->offsets[i];
 #endif
-    }
-    if (ai->addresses)
-        return ai->addresses[i];
-    return 0;
+	}
+	if (ai->addresses)
+		return ai->addresses[i];
+	return 0;
 }
 
 /*
@@ -626,33 +618,31 @@ static unsigned long symbol_addr(const struct addr_info *ai, u32 i)
  * 8-byte aligned, so its span is rounded up). num_syms must be consistent
  * with the number of markers, which validates the layout.
  */
-static int resolve_addresses(const struct kallsyms_view *v,
-                             const u8 *buf_start, const u8 *buf_end,
-                             struct addr_info *ai, u32 *num_out)
+static int resolve_addresses(const struct kallsyms_view *v, const u8 *buf_start, const u8 *buf_end,
+			     struct addr_info *ai, u32 *num_out)
 {
-    const u8 *names = v->names;
-    unsigned long names_addr = (unsigned long)names;
-    unsigned long rel_base;
-    size_t offsets_size, offsets_span;
-    u32 num_syms;
+	const u8 *names = v->names;
+	unsigned long names_addr = (unsigned long)names;
+	unsigned long rel_base;
+	size_t offsets_size, offsets_span;
+	u32 num_syms;
 
-    memset(ai, 0, sizeof(*ai));
+	memset(ai, 0, sizeof(*ai));
 
-    /* marker_count = ceil(num_syms / 256) */
-    if (v->marker_count < 2)
-        return -ENOENT;
+	/* marker_count = ceil(num_syms / 256) */
+	if (v->marker_count < 2)
+		return -ENOENT;
 
-    /* the two scalars sit just before names */
-    if (names_addr < (unsigned long)buf_start + 24)
-        return -ENOENT;
+	/* the two scalars sit just before names */
+	if (names_addr < (unsigned long)buf_start + 24)
+		return -ENOENT;
 
-    memcpy(&num_syms, names - 8, sizeof(num_syms));
-    if (num_syms == 0 ||
-        num_syms <= (v->marker_count - 1) * 256u ||
-        num_syms > v->marker_count * 256u)
-        return -ENOENT;
+	memcpy(&num_syms, names - 8, sizeof(num_syms));
+	if (num_syms == 0 || num_syms <= (v->marker_count - 1) * 256u ||
+	    num_syms > v->marker_count * 256u)
+		return -ENOENT;
 
-    /*
+	/*
      * scripts/kallsyms.c emits kallsyms_offsets[] through output_label(), so
      * the array starts on an 8-byte boundary and is immediately followed by
      * the 8-byte-aligned kallsyms_relative_base. With an odd symbol count the
@@ -661,31 +651,30 @@ static int resolve_addresses(const struct kallsyms_view *v,
      * be rounded up to 8 bytes, otherwise the array start -- and therefore
      * every decoded address -- shifts by one u32.
      */
-    offsets_size = (size_t)num_syms * sizeof(u32);
-    offsets_span = ALIGN(offsets_size, 8);
+	offsets_size = (size_t)num_syms * sizeof(u32);
+	offsets_span = ALIGN(offsets_size, 8);
 
-    /* names must lie inside the scanned buffer */
-    if (names_addr < (unsigned long)buf_start ||
-        names_addr > (unsigned long)buf_end)
-        return -ENOENT;
+	/* names must lie inside the scanned buffer */
+	if (names_addr < (unsigned long)buf_start || names_addr > (unsigned long)buf_end)
+		return -ENOENT;
 
-    /*
+	/*
      * The offsets array, num_syms and relative_base all sit below names, so
      * names - buf_start must leave room for both scalars and the aligned
      * array. Subtract first so the comparison cannot overflow.
      */
-    if (names_addr - (unsigned long)buf_start < 16 + offsets_span)
-        return -ENOENT;
+	if (names_addr - (unsigned long)buf_start < 16 + offsets_span)
+		return -ENOENT;
 
-    memcpy(&rel_base, names - 16, sizeof(rel_base));
-    if (rel_base < 0xffff000000000000UL)
-        return -ENOENT;
+	memcpy(&rel_base, names - 16, sizeof(rel_base));
+	if (rel_base < 0xffff000000000000UL)
+		return -ENOENT;
 
-    ai->base_relative = true;
-    ai->offsets = (const u32 *)(names_addr - 16 - offsets_span);
-    ai->relative_base = rel_base;
-    *num_out = num_syms;
-    return 0;
+	ai->base_relative = true;
+	ai->offsets = (const u32 *)(names_addr - 16 - offsets_span);
+	ai->relative_base = rel_base;
+	*num_out = num_syms;
+	return 0;
 }
 
 /*
@@ -693,75 +682,72 @@ static int resolve_addresses(const struct kallsyms_view *v,
  */
 
 struct try_ctx {
-    const struct kallsyms_view *v;
-    const u8 *buf;
-    const u8 *buf_end;
-    /* results */
-    u32 num_syms;
-    struct addr_info ai;
-    bool ok;
+	const struct kallsyms_view *v;
+	const u8 *buf;
+	const u8 *buf_end;
+	/* results */
+	u32 num_syms;
+	struct addr_info ai;
+	bool ok;
 };
 
 /*
  * Candidate names callback: locate the address array from the fixed layout
  * that follows the names stream.
  */
-static bool try_names_candidate(const u8 *names, const u8 *names_end,
-                                void *arg)
+static bool try_names_candidate(const u8 *names, const u8 *names_end, void *arg)
 {
-    struct try_ctx *ctx = arg;
-    struct kallsyms_view v = *ctx->v;
+	struct try_ctx *ctx = arg;
+	struct kallsyms_view v = *ctx->v;
 
-    v.names = names;
-    v.names_end = names_end;
+	v.names = names;
+	v.names_end = names_end;
 
-    if (resolve_addresses(&v, ctx->buf, ctx->buf_end,
-                          &ctx->ai, &ctx->num_syms) != 0)
-        return false;
+	if (resolve_addresses(&v, ctx->buf, ctx->buf_end, &ctx->ai, &ctx->num_syms) != 0)
+		return false;
 
-    ctx->ok = true;
-    return true;
+	ctx->ok = true;
+	return true;
 }
 
-static int consume_buffer(const u8 *buf, unsigned long len,
-                          const u8 *token_table)
+static int consume_buffer(const u8 *buf, unsigned long len, const u8 *token_table)
 {
-    struct kallsyms_view v;
-    struct try_ctx ctx;
-    const u8 *names;
-    int rc;
-    u32 i, offset;
+	struct kallsyms_view v;
+	struct try_ctx ctx;
+	const u8 *names;
+	int rc;
+	u32 i, offset;
 
-    rc = view_from_token_table(buf, token_table, buf + len, &v);
-    if (rc)
-        return rc;
+	rc = view_from_token_table(buf, token_table, buf + len, &v);
+	if (rc)
+		return rc;
 
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.v = &v;
-    ctx.buf = buf;
-    ctx.buf_end = buf + len;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.v = &v;
+	ctx.buf = buf;
+	ctx.buf_end = buf + len;
 
-    names = find_names_start(buf, &v, try_names_candidate, &ctx);
-    if (!names || !ctx.ok)
-        return -ENOENT;
-    v.names = names;
+	names = find_names_start(buf, &v, try_names_candidate, &ctx);
+	if (!names || !ctx.ok)
+		return -ENOENT;
+	v.names = names;
 
-    /* decode each name and cache name -> address */
-    offset = 0;
-    for (i = 0; i < ctx.num_syms; i++) {
-        char nm[KSYM_NAME_MAX];
-        char raw[KSYM_NAME_MAX];
-        unsigned long a;
+	/* decode each name and cache name -> address */
+	offset = 0;
+	for (i = 0; i < ctx.num_syms; i++) {
+		char nm[KSYM_NAME_MAX];
+		char raw[KSYM_NAME_MAX];
+		unsigned long a;
 
-        if (decode_symbol(names, v.names_end, v.token_index,
-                          v.token_table, &offset, nm, sizeof(nm)) < 0)
-            break;
+		if (decode_symbol(names, v.names_end, v.token_index, v.token_table, &offset, nm,
+				  sizeof(nm)) < 0)
+			break;
 
-        a = symbol_addr(&ctx.ai, i);
-        if (!a)
-            continue;
+		a = symbol_addr(&ctx.ai, i);
+		if (!a)
+			continue;
 
-        /*
+		/*
          * Keep the original name as well as the suffix-stripped alias.
          *
          * With CONFIG_CFI_CLANG the linker emits a jump-table stub per
@@ -772,15 +758,15 @@ static int consume_buffer(const u8 *buf, unsigned long len,
          * sys_call_table entry must get the stub, so the exact name has to
          * stay resolvable too.
          */
-        strscpy(raw, nm, sizeof(raw));
-        strip_symbol_suffix(nm);
-        if (nm[0])
-            ksym_cache_add(nm, a);
-        if (strstr(raw, ".cfi_jt"))
-            ksym_cache_add(raw, a);
-    }
+		strscpy(raw, nm, sizeof(raw));
+		strip_symbol_suffix(nm);
+		if (nm[0])
+			ksym_cache_add(nm, a);
+		if (strstr(raw, ".cfi_jt"))
+			ksym_cache_add(raw, a);
+	}
 
-    return 0;
+	return 0;
 }
 
 /*
@@ -792,83 +778,81 @@ static int consume_buffer(const u8 *buf, unsigned long len,
  */
 static int scan_region(unsigned long start, unsigned long end)
 {
-    const size_t chunk = SZ_64K;
-    /* overlap so a token_table spanning a chunk boundary is still seen */
-    const size_t step = SZ_64K - 4096;
-    u8 *probe;
-    unsigned long first, pos;
-    int found = 0;
+	const size_t chunk = SZ_64K;
+	/* overlap so a token_table spanning a chunk boundary is still seen */
+	const size_t step = SZ_64K - 4096;
+	u8 *probe;
+	unsigned long first, pos;
+	int found = 0;
 
-    /* inverted or empty range: nothing to do */
-    if (end <= start)
-        return 0;
+	/* inverted or empty range: nothing to do */
+	if (end <= start)
+		return 0;
 
-    first = ALIGN(start, 8);
-    if (first < start)      /* ALIGN wrapped past the top of the address space */
-        first = start;
+	first = ALIGN(start, 8);
+	if (first < start) /* ALIGN wrapped past the top of the address space */
+		first = start;
 
-    probe = kvmalloc(chunk, GFP_KERNEL);
-    if (!probe)
-        return -ENOMEM;
+	probe = kvmalloc(chunk, GFP_KERNEL);
+	if (!probe)
+		return -ENOMEM;
 
-    /*
+	/*
      * Include the final partial chunk rather than requiring pos+chunk<=end.
      * pos += step cannot wrap: it only runs after the "len < chunk" break
      * test, i.e. only while end - pos >= chunk > step, so pos + step < end.
      */
-    for (pos = first; pos < end; pos += step) {
-        size_t len = min_t(unsigned long, chunk, end - pos);
-        size_t off;
-        bool hit = false;
+	for (pos = first; pos < end; pos += step) {
+		size_t len = min_t(unsigned long, chunk, end - pos);
+		size_t off;
+		bool hit = false;
 
-        /*
+		/*
          * Fast path: one bulk copy when the whole chunk is mapped. Only if
          * that fails fall back to the page-granular best-effort copy, which
          * always fully initialises `probe` (unreadable pages -> zero), so no
          * stale bytes from a previous iteration can be mistaken for data.
          */
-        if (kread((const void *)pos, probe, len) < 0)
-            kread_best_effort(probe, pos, len);
+		if (kread((const void *)pos, probe, len) < 0)
+			kread_best_effort(probe, pos, len);
 
-        /* token_table is 8-byte aligned via ALGN; step 8 */
-        for (off = 0; off + 16 <= len; off += 8) {
-            const u8 *tt = probe + off;
-            unsigned long tt_kaddr = pos + off;
-            u8 *buf;
-            unsigned long buf_len, buf_kaddr;
+		/* token_table is 8-byte aligned via ALGN; step 8 */
+		for (off = 0; off + 16 <= len; off += 8) {
+			const u8 *tt = probe + off;
+			unsigned long tt_kaddr = pos + off;
+			u8 *buf;
+			unsigned long buf_len, buf_kaddr;
 
-            if (!token_table_len(tt, probe + len))
-                continue;
+			if (!token_table_len(tt, probe + len))
+				continue;
 
-            /* candidate hit: copy a window ending past token_table */
-            buf_len = KSYM_BOUNCE_BACK + KSYM_BOUNCE_FWD;
-            buf = kvmalloc(buf_len, GFP_KERNEL);
-            if (!buf)
-                break;
+			/* candidate hit: copy a window ending past token_table */
+			buf_len = KSYM_BOUNCE_BACK + KSYM_BOUNCE_FWD;
+			buf = kvmalloc(buf_len, GFP_KERNEL);
+			if (!buf)
+				break;
 
-            buf_kaddr = tt_kaddr > KSYM_BOUNCE_BACK ?
-                        tt_kaddr - KSYM_BOUNCE_BACK : 0;
+			buf_kaddr = tt_kaddr > KSYM_BOUNCE_BACK ? tt_kaddr - KSYM_BOUNCE_BACK : 0;
 
-            kread_best_effort(buf, buf_kaddr, buf_len);
+			kread_best_effort(buf, buf_kaddr, buf_len);
 
-            if (consume_buffer(buf, buf_len,
-                               buf + (tt_kaddr - buf_kaddr)) == 0) {
-                found++;
-                hit = true;
-            }
-            kvfree(buf);
+			if (consume_buffer(buf, buf_len, buf + (tt_kaddr - buf_kaddr)) == 0) {
+				found++;
+				hit = true;
+			}
+			kvfree(buf);
 
-            if (hit)
-                break;
-        }
+			if (hit)
+				break;
+		}
 
-        /* stop after the last (short) chunk or once something was found */
-        if (hit || len < chunk)
-            break;
-    }
+		/* stop after the last (short) chunk or once something was found */
+		if (hit || len < chunk)
+			break;
+	}
 
-    kvfree(probe);
-    return found;
+	kvfree(probe);
+	return found;
 }
 
 /*
@@ -896,44 +880,44 @@ static int scan_region(unsigned long start, unsigned long end)
  */
 static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
 {
-    loff_t pos = 0;
-    ssize_t rd;
-    size_t total = 0;
-    unsigned long addr = 0;
-    char key[64];
-    char *p;
-    struct file *f __free(nksu_filp) = NULL;
+	loff_t pos = 0;
+	ssize_t rd;
+	size_t total = 0;
+	unsigned long addr = 0;
+	char key[64];
+	char *p;
+	struct file *f __free(nksu_filp) = NULL;
 
-    snprintf(key, sizeof(key), "%s(%s)=", kind, name);
+	snprintf(key, sizeof(key), "%s(%s)=", kind, name);
 
-    /* Unavailable until the first scan has resolved the file primitives. */
-    if (!nksu_filp_open || !nksu_kernel_read)
-        return 0;
+	/* Unavailable until the first scan has resolved the file primitives. */
+	if (!nksu_filp_open || !nksu_kernel_read)
+		return 0;
 
-    f = nksu_filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
-    if (IS_ERR(f))
-        return 0;
+	f = nksu_filp_open(VMCOREINFO_PATH, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return 0;
 
-    char *buf __free(nksu_kvfree) = kvmalloc(SZ_64K, GFP_KERNEL);
-    if (!buf)
-        return 0;
+	char *buf __free(nksu_kvfree) = kvmalloc(SZ_64K, GFP_KERNEL);
+	if (!buf)
+		return 0;
 
-    /* the file can be much larger than a page; read it all */
-    while (total < SZ_64K - 1) {
-        rd = nksu_kernel_read(f, buf + total, SZ_64K - 1 - total, &pos);
-        if (rd <= 0)
-            break;
-        total += (size_t)rd;
-    }
-    buf[total] = '\0';
+	/* the file can be much larger than a page; read it all */
+	while (total < SZ_64K - 1) {
+		rd = nksu_kernel_read(f, buf + total, SZ_64K - 1 - total, &pos);
+		if (rd <= 0)
+			break;
+		total += (size_t)rd;
+	}
+	buf[total] = '\0';
 
-    p = strstr(buf, key);
-    if (p) {
-        p += strlen(key);
-        addr = simple_strtoul(p, NULL, 16);
-    }
+	p = strstr(buf, key);
+	if (p) {
+		p += strlen(key);
+		addr = simple_strtoul(p, NULL, 16);
+	}
 
-    return addr;
+	return addr;
 }
 
 /*
@@ -941,31 +925,30 @@ static unsigned long read_vmcoreinfo_entry(const char *kind, const char *name)
  */
 static void scan_kernel_memory_locked(void)
 {
-    unsigned long stext, img_size, anchor;
-    int found;
+	unsigned long stext, img_size, anchor;
+	int found;
 
-    /*
+	/*
      * Preferred: /sys/kernel/vmcoreinfo exposes the runtime kernel image
      * base and size, so the scan can be confined to the real image
      * (typically tens of MB) instead of a broad guess window.
      */
-    stext = read_vmcoreinfo_entry("SYMBOL", "_stext");
-    if (!stext)
-        stext = read_vmcoreinfo_entry("SYMBOL", "_text");
-    img_size = read_vmcoreinfo_entry("NUMBER", "KERNEL_IMAGE_SIZE");
+	stext = read_vmcoreinfo_entry("SYMBOL", "_stext");
+	if (!stext)
+		stext = read_vmcoreinfo_entry("SYMBOL", "_text");
+	img_size = read_vmcoreinfo_entry("NUMBER", "KERNEL_IMAGE_SIZE");
 
-    if (stext) {
-        if (!img_size || img_size > SZ_1G)
-            img_size = SZ_512M;
+	if (stext) {
+		if (!img_size || img_size > SZ_1G)
+			img_size = SZ_512M;
 
-        /* guard against stext + img_size wrapping the address space */
-        found = stext <= ULONG_MAX - img_size ?
-                scan_region(stext, stext + img_size) : 0;
-        if (found)
-            return;
-    }
+		/* guard against stext + img_size wrapping the address space */
+		found = stext <= ULONG_MAX - img_size ? scan_region(stext, stext + img_size) : 0;
+		if (found)
+			return;
+	}
 
-    /*
+	/*
      * Fallback 1: anchor the scan to the runtime address of an exported
      * vmlinux symbol that this module already links against. The kernel
      * resolves it after KASLR, so it points inside the real kernel image
@@ -976,37 +959,37 @@ static void scan_kernel_memory_locked(void)
      * sit at higher addresses: scan upward first and only fall back to the
      * region below the anchor if that misses.
      */
-    anchor = (unsigned long)&copy_from_kernel_nofault;
-    if (anchor) {
-        if (anchor <= ULONG_MAX - SZ_256M) {
-            found = scan_region(anchor, anchor + SZ_256M);
-            if (found)
-                return;
-        }
+	anchor = (unsigned long)&copy_from_kernel_nofault;
+	if (anchor) {
+		if (anchor <= ULONG_MAX - SZ_256M) {
+			found = scan_region(anchor, anchor + SZ_256M);
+			if (found)
+				return;
+		}
 
-        if (anchor > SZ_256M) {
-            found = scan_region(anchor - SZ_256M, anchor);
-            if (found)
-                return;
-        }
-    }
+		if (anchor > SZ_256M) {
+			found = scan_region(anchor - SZ_256M, anchor);
+			if (found)
+				return;
+		}
+	}
 
-    /* Fallback 2: common arm64 KIMAGE bases. */
-    {
-        static const unsigned long bases[] = {
-            0xffffff8000000000UL,  /* 39-bit VA */
-            0xffff800000000000UL,  /* 48-bit VA */
-        };
-        int i;
+	/* Fallback 2: common arm64 KIMAGE bases. */
+	{
+		static const unsigned long bases[] = {
+			0xffffff8000000000UL, /* 39-bit VA */
+			0xffff800000000000UL, /* 48-bit VA */
+		};
+		int i;
 
-        for (i = 0; i < ARRAY_SIZE(bases); i++) {
-            if (bases[i] > ULONG_MAX - SZ_1G)
-                continue;
-            found = scan_region(bases[i], bases[i] + SZ_1G);
-            if (found)
-                break;
-        }
-    }
+		for (i = 0; i < ARRAY_SIZE(bases); i++) {
+			if (bases[i] > ULONG_MAX - SZ_1G)
+				continue;
+			found = scan_region(bases[i], bases[i] + SZ_1G);
+			if (found)
+				break;
+		}
+	}
 }
 
 /*
@@ -1017,42 +1000,40 @@ static void scan_kernel_memory_locked(void)
  * Parse one "addr type name" kallsyms line in place. Returns the address if
  * the name matches, otherwise 0. `line` is modified (delimiters -> NUL).
  */
-static unsigned long match_kallsyms_line(char *line, const char *name,
-                                         size_t namelen)
+static unsigned long match_kallsyms_line(char *line, const char *name, size_t namelen)
 {
-    char *sp1, *sp2, *sym;
+	char *sp1, *sp2, *sym;
 
-    if (!*line)
-        return 0;
+	if (!*line)
+		return 0;
 
-    sp1 = strchr(line, ' ');
-    if (!sp1)
-        return 0;
-    *sp1 = '\0';
+	sp1 = strchr(line, ' ');
+	if (!sp1)
+		return 0;
+	*sp1 = '\0';
 
-    sym = sp1 + 1;
-    sp2 = strchr(sym, ' ');
-    if (!sp2)
-        return 0;
-    sym = sp2 + 1;
+	sym = sp1 + 1;
+	sp2 = strchr(sym, ' ');
+	if (!sp2)
+		return 0;
+	sym = sp2 + 1;
 
-    {
-        char *e = sym + strcspn(sym, " \t");
+	{
+		char *e = sym + strcspn(sym, " \t");
 
-        *e = '\0';
-    }
+		*e = '\0';
+	}
 
-    if (sym[0] && strlen(sym) == namelen &&
-        memcmp(sym, name, namelen) == 0) {
-        char *endp;
-        unsigned long a = simple_strtoul(line, &endp, 16);
+	if (sym[0] && strlen(sym) == namelen && memcmp(sym, name, namelen) == 0) {
+		char *endp;
+		unsigned long a = simple_strtoul(line, &endp, 16);
 
-        /* reject lines whose address did not parse cleanly */
-        if (endp != line)
-            return a;
-    }
+		/* reject lines whose address did not parse cleanly */
+		if (endp != line)
+			return a;
+	}
 
-    return 0;
+	return 0;
 }
 
 /*
@@ -1062,27 +1043,27 @@ static unsigned long match_kallsyms_line(char *line, const char *name,
  */
 static bool kallsyms_addrs_hidden(const char *buf, size_t len)
 {
-    const char *p = buf, *end = buf + len;
-    int lines = 0;
+	const char *p = buf, *end = buf + len;
+	int lines = 0;
 
-    while (p < end && lines < 32) {
-        const char *nl = memchr(p, '\n', end - p);
-        size_t ll = nl ? (size_t)(nl - p) : (size_t)(end - p);
-        const char *sp = memchr(p, ' ', ll);
+	while (p < end && lines < 32) {
+		const char *nl = memchr(p, '\n', end - p);
+		size_t ll = nl ? (size_t)(nl - p) : (size_t)(end - p);
+		const char *sp = memchr(p, ' ', ll);
 
-        if (sp && sp > p) {
-            const char *q;
+		if (sp && sp > p) {
+			const char *q;
 
-            for (q = p; q < sp; q++)
-                if (*q != '0')
-                    return false;
-        }
-        lines++;
-        if (!nl)
-            break;
-        p = nl + 1;
-    }
-    return lines > 0;
+			for (q = p; q < sp; q++)
+				if (*q != '0')
+					return false;
+		}
+		lines++;
+		if (!nl)
+			break;
+		p = nl + 1;
+	}
+	return lines > 0;
 }
 
 /*
@@ -1094,110 +1075,110 @@ static bool kallsyms_addrs_hidden(const char *buf, size_t len)
  */
 static unsigned long lookup_proc_kallsyms(const char *name)
 {
-    loff_t pos = 0;
-    ssize_t rd;
-    unsigned long addr = 0;
-    size_t namelen = strlen(name);
-    size_t used = 0;
-    struct file *f __free(nksu_filp) = NULL;
-    char *buf __free(nksu_kvfree) = NULL;
+	loff_t pos = 0;
+	ssize_t rd;
+	unsigned long addr = 0;
+	size_t namelen = strlen(name);
+	size_t used = 0;
+	struct file *f __free(nksu_filp) = NULL;
+	char *buf __free(nksu_kvfree) = NULL;
 
-    if (ksym_proc_hidden)
-        return 0;
+	if (ksym_proc_hidden)
+		return 0;
 
-    /* Same as above: no file primitives before the first scan. */
-    if (!nksu_filp_open || !nksu_kernel_read)
-        return 0;
+	/* Same as above: no file primitives before the first scan. */
+	if (!nksu_filp_open || !nksu_kernel_read)
+		return 0;
 
-    f = nksu_filp_open("/proc/kallsyms", O_RDONLY, 0);
-    if (IS_ERR(f))
-        return 0;
+	f = nksu_filp_open("/proc/kallsyms", O_RDONLY, 0);
+	if (IS_ERR(f))
+		return 0;
 
-    /*
+	/*
      * kernel_read() drives ->read_iter only. This kernel's kallsyms proc
      * file registers .proc_read = seq_read without proc_read_iter, so
      * kernel_read() fails with -EINVAL and prints "kernel read not
      * supported for file /kallsyms". Detect that up-front and let the
      * in-memory kallsyms scan handle the lookup instead.
      */
-    if (!f->f_op->read_iter)
-        return 0;
+	if (!f->f_op->read_iter)
+		return 0;
 
-    buf = kvmalloc(SZ_64K, GFP_KERNEL);
-    if (!buf)
-        return 0;
+	buf = kvmalloc(SZ_64K, GFP_KERNEL);
+	if (!buf)
+		return 0;
 
-    for (;;) {
-        char *p, *line;
+	for (;;) {
+		char *p, *line;
 
-        if (used >= SZ_64K - 1) {
-            /*
+		if (used >= SZ_64K - 1) {
+			/*
              * A single kallsyms line is at most a few hundred bytes, so a
              * pending partial line filling the whole buffer means there was
              * no newline in 64 KiB: malformed input. Stop instead of
              * silently reusing the buffer, which could misparse the line
              * tail as a fresh entry and produce a wrong match.
              */
-            break;
-        }
+			break;
+		}
 
-        rd = nksu_kernel_read(f, buf + used, SZ_64K - 1 - used, &pos);
-        if (rd < 0)
-            break;
-        if (rd == 0) {
-            /* EOF: the remaining bytes (if any) are the final line */
-            if (used) {
-                buf[used] = '\0';
-                addr = match_kallsyms_line(buf, name, namelen);
-            }
-            break;
-        }
+		rd = nksu_kernel_read(f, buf + used, SZ_64K - 1 - used, &pos);
+		if (rd < 0)
+			break;
+		if (rd == 0) {
+			/* EOF: the remaining bytes (if any) are the final line */
+			if (used) {
+				buf[used] = '\0';
+				addr = match_kallsyms_line(buf, name, namelen);
+			}
+			break;
+		}
 
-        buf[used + rd] = '\0';
-        used += (size_t)rd;
+		buf[used + rd] = '\0';
+		used += (size_t)rd;
 
-        /*
+		/*
          * One-time probe: if the kernel hides addresses, bail out
          * immediately and remember it, so we don't re-read the whole
          * file for every symbol we resolve.
          */
-        if (!ksym_proc_checked) {
-            ksym_proc_checked = true;
-            if (kallsyms_addrs_hidden(buf, used)) {
-                ksym_proc_hidden = true;
-                break;
-            }
-        }
+		if (!ksym_proc_checked) {
+			ksym_proc_checked = true;
+			if (kallsyms_addrs_hidden(buf, used)) {
+				ksym_proc_hidden = true;
+				break;
+			}
+		}
 
-        p = buf;
-        while ((line = strsep(&p, "\n")) != NULL) {
-            if (!p) {
-                /*
+		p = buf;
+		while ((line = strsep(&p, "\n")) != NULL) {
+			if (!p) {
+				/*
                  * Last piece. If the buffer ended on a newline this is an
                  * empty tail: reset the buffer. Otherwise keep the partial
                  * line for the next read.
                  */
-                size_t linelen = strlen(line);
+				size_t linelen = strlen(line);
 
-                if (linelen == 0) {
-                    used = 0;
-                    break;
-                }
-                if (line != buf) {
-                    /* move partial line to the front for the next round */
-                    memmove(buf, line, linelen + 1);
-                }
-                used = linelen;
-                break;
-            }
+				if (linelen == 0) {
+					used = 0;
+					break;
+				}
+				if (line != buf) {
+					/* move partial line to the front for the next round */
+					memmove(buf, line, linelen + 1);
+				}
+				used = linelen;
+				break;
+			}
 
-            addr = match_kallsyms_line(line, name, namelen);
-            if (addr)
-                return addr;
-        }
-    }
+			addr = match_kallsyms_line(line, name, namelen);
+			if (addr)
+				return addr;
+		}
+	}
 
-    return addr;
+	return addr;
 }
 
 /*
@@ -1206,73 +1187,73 @@ static unsigned long lookup_proc_kallsyms(const char *name)
 
 unsigned long nksu_ksym_lookup(const char *name)
 {
-    unsigned long addr;
-    struct ksym_entry *e;
+	unsigned long addr;
+	struct ksym_entry *e;
 
-    if (!name || !name[0])
-        return 0;
+	if (!name || !name[0])
+		return 0;
 
-    guard(nksu_mutex)(&ksym_lock);
+	guard(nksu_mutex)(&ksym_lock);
 
-    e = ksym_find_locked(name);
-    if (e)
-        return e->addr;
+	e = ksym_find_locked(name);
+	if (e)
+		return e->addr;
 
-    /* 1) /proc/kallsyms */
-    addr = lookup_proc_kallsyms(name);
-    if (addr) {
-        ksym_cache_add(name, addr);
-        return addr;
-    }
+	/* 1) /proc/kallsyms */
+	addr = lookup_proc_kallsyms(name);
+	if (addr) {
+		ksym_cache_add(name, addr);
+		return addr;
+	}
 
-    /*
+	/*
      * 2) Scan kernel memory once, then re-check the cache. The scan is
      *    expensive, so it must never run twice even if it finds nothing.
      */
-    if (!ksym_scanned) {
-        ksym_scanned = true;
-        scan_kernel_memory_locked();
+	if (!ksym_scanned) {
+		ksym_scanned = true;
+		scan_kernel_memory_locked();
 
-        e = ksym_find_locked(name);
-        addr = e ? e->addr : 0;
-    } else {
-        addr = 0;
-    }
+		e = ksym_find_locked(name);
+		addr = e ? e->addr : 0;
+	} else {
+		addr = 0;
+	}
 
-    return addr;
+	return addr;
 }
 
 unsigned long nksu_ksym_count(void)
 {
-    return (unsigned long)atomic_read(&ksym_count);
+	return (unsigned long)atomic_read(&ksym_count);
 }
 
 void nksu_ksym_cache_clear(void)
 {
-    struct ksym_entry *e;
-    struct hlist_node *tmp;
-    int bkt;
+	struct ksym_entry *e;
+	struct hlist_node *tmp;
+	int bkt;
 
-    guard(nksu_mutex)(&ksym_lock);
-    hash_for_each_safe(ksym_htable, bkt, tmp, e, node) {
-        hash_del(&e->node);
-        kfree(e);
-    }
-    atomic_set(&ksym_count, 0);
-    ksym_scanned = false;
-    ksym_proc_hidden = false;
-    ksym_proc_checked = false;
+	guard(nksu_mutex)(&ksym_lock);
+	hash_for_each_safe(ksym_htable, bkt, tmp, e, node) {
+		hash_del(&e->node);
+		kfree(e);
+	}
+	atomic_set(&ksym_count, 0);
+	ksym_scanned = false;
+	ksym_proc_hidden = false;
+	ksym_proc_checked = false;
 }
 
 #ifdef CONFIG_NKSU_DEBUG
 void nksu_ksym_dump(void)
 {
-    struct ksym_entry *e;
-    int bkt;
+	struct ksym_entry *e;
+	int bkt;
 
-    guard(nksu_mutex)(&ksym_lock);
-    hash_for_each(ksym_htable, bkt, e, node)
-        pr_info("[ksym] %s = 0x%lx\n", e->name, e->addr);
+	guard(nksu_mutex)(&ksym_lock);
+	hash_for_each(ksym_htable, bkt, e, node)
+		pr_info("[ksym] %s = 0x%lx\n", e->name, e->addr);
 }
 #else
 void nksu_ksym_dump(void)

@@ -29,18 +29,18 @@
  */
 
 enum nksu_spawn_wait {
-	NKSU_SPAWN_NOWAIT    = 0, /* spawn and return at once */
+	NKSU_SPAWN_NOWAIT = 0, /* spawn and return at once */
 	NKSU_SPAWN_WAIT_EXEC = 1, /* wait until execve() succeeded or failed */
 	NKSU_SPAWN_WAIT_PROC = 2, /* wait until the program exits */
 };
 
 struct nksu_spawn_args {
-	const char *path;   /* required, kernel memory */
-	char *const *argv;  /* NULL-terminated kernel strings, may be NULL */
-	char *const *envp;  /* NULL-terminated kernel strings, may be NULL */
+	const char *path; /* required, kernel memory */
+	char *const *argv; /* NULL-terminated kernel strings, may be NULL */
+	char *const *envp; /* NULL-terminated kernel strings, may be NULL */
 	const char *domain; /* SELinux domain for the helper, or NULL to keep
 	                     * the kernel (init) domain */
-	int wait;           /* one of enum nksu_spawn_wait */
+	int wait; /* one of enum nksu_spawn_wait */
 };
 
 int nksu_spawn(const struct nksu_spawn_args *args);

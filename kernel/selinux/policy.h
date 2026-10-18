@@ -2,11 +2,11 @@
 #ifndef _NKSU_SELINUX_POLICY_H
 #define _NKSU_SELINUX_POLICY_H
 
-int  sepolicy_dup_and_apply(void);
+int sepolicy_dup_and_apply(void);
 void sepolicy_restore(void);
-int  sepolicy_init(void);
+int sepolicy_init(void);
 void sepolicy_exit(void);
-int  load_policy(void);
+int load_policy(void);
 
 /*
  * The untouched pre-NekoSU policy, kept aside by sepolicy_dup_and_apply().

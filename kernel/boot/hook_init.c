@@ -14,10 +14,10 @@
 #include "klog.h"
 
 enum init_boot_stage {
-    INIT_FIRST_STAGE,
-    INIT_SELINUX_SETUP,
-    INIT_SECOND_STAGE,
-    INIT_STAGE_UNKNOWN,
+	INIT_FIRST_STAGE,
+	INIT_SELINUX_SETUP,
+	INIT_SECOND_STAGE,
+	INIT_STAGE_UNKNOWN,
 };
 
 int boot_stage = INIT_FIRST_STAGE;
@@ -65,17 +65,16 @@ static bool features_loaded;
 
 static void notify_stage(void)
 {
-    if (init_thread) {
-        WRITE_ONCE(stage_pending, true);
-        wake_up_interruptible(&stage_wq);
-    }
+	if (init_thread) {
+		WRITE_ONCE(stage_pending, true);
+		wake_up_interruptible(&stage_wq);
+	}
 }
 
 /* argv[1] of the current execve/execveat; returns length or < 0. */
-static int read_argv1(struct pt_regs *regs, unsigned int argv_argno,
-                      char *buf, size_t len)
+static int read_argv1(struct pt_regs *regs, unsigned int argv_argno, char *buf, size_t len)
 {
-    return get_argvx(regs, argv_argno, 1, buf, len);
+	return get_argvx(regs, argv_argno, 1, buf, len);
 }
 
 /*
@@ -92,21 +91,20 @@ static int read_argv1(struct pt_regs *regs, unsigned int argv_argno,
  * programs that can actually matter.
  */
 #define NKSU_APP_PROCESS_PATH "/system/bin/app_process"
-#define NKSU_EXEC_PATH_MAX    32
+#define NKSU_EXEC_PATH_MAX 32
 
 /* "/system/bin/app_process" with an optional 32/64 ABI suffix. */
 static bool exec_path_is_app_process(const char *path, int n)
 {
-    const size_t base = sizeof(NKSU_APP_PROCESS_PATH) - 1;
+	const size_t base = sizeof(NKSU_APP_PROCESS_PATH) - 1;
 
-    if (unlikely(n < (int)base))
-        return false;
-    if (memcmp(path, NKSU_APP_PROCESS_PATH, base) != 0)
-        return false;
+	if (unlikely(n < (int)base))
+		return false;
+	if (memcmp(path, NKSU_APP_PROCESS_PATH, base) != 0)
+		return false;
 
-    return path[base] == '\0' ||
-           strcmp(path + base, "32") == 0 ||
-           strcmp(path + base, "64") == 0;
+	return path[base] == '\0' || strcmp(path + base, "32") == 0 ||
+	       strcmp(path + base, "64") == 0;
 }
 
 /*
@@ -116,63 +114,63 @@ static bool exec_path_is_app_process(const char *path, int n)
  */
 static void watch_exec(struct pt_regs *regs, unsigned int argv_argno)
 {
-    char arg1[MAX_ARG_LEN];
-    char path[NKSU_EXEC_PATH_MAX];
-    int n;
+	char arg1[MAX_ARG_LEN];
+	char path[NKSU_EXEC_PATH_MAX];
+	int n;
 
-    if (unlikely(current->pid == 1)) {
-        n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
-        if (n < 0) {
-            pr_warn("nksu: get_argvx failed: %d\n", n);
-            return;
-        }
+	if (unlikely(current->pid == 1)) {
+		n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
+		if (n < 0) {
+			pr_warn("nksu: get_argvx failed: %d\n", n);
+			return;
+		}
 
-        if (argv_eq(arg1, n, sizeof(arg1), "selinux_setup")) {
-            WRITE_ONCE(boot_stage, INIT_SELINUX_SETUP);
-            pr_info("nksu: init entered selinux_setup\n");
-            notify_stage();
-        } else if (argv_eq(arg1, n, sizeof(arg1), "second_stage")) {
-            WRITE_ONCE(boot_stage, INIT_SECOND_STAGE);
-            pr_info("nksu: init entered second_stage\n");
-            notify_stage();
-        }
-        return;
-    }
+		if (argv_eq(arg1, n, sizeof(arg1), "selinux_setup")) {
+			WRITE_ONCE(boot_stage, INIT_SELINUX_SETUP);
+			pr_info("nksu: init entered selinux_setup\n");
+			notify_stage();
+		} else if (argv_eq(arg1, n, sizeof(arg1), "second_stage")) {
+			WRITE_ONCE(boot_stage, INIT_SECOND_STAGE);
+			pr_info("nksu: init entered second_stage\n");
+			notify_stage();
+		}
+		return;
+	}
 
-    if (READ_ONCE(zygote_seen))
-        return;
+	if (READ_ONCE(zygote_seen))
+		return;
 
-    /*
+	/*
      * The zygote is the first app_process* exec'd by init while still root
      * (its service has `user root`; it only drops uid once it forks apps).
      * Reject everything else before touching user memory: most boot execs
      * are non-root services, and the rest fail the path match.
      */
-    if (unlikely(!uid_eq(current_euid(), GLOBAL_ROOT_UID)))
-        return;
+	if (unlikely(!uid_eq(current_euid(), GLOBAL_ROOT_UID)))
+		return;
 
-    n = get_path_arg(regs, argv_argno - 1, path, sizeof(path));
-    if (n < 0 || !exec_path_is_app_process(path, n))
-        return;
+	n = get_path_arg(regs, argv_argno - 1, path, sizeof(path));
+	if (n < 0 || !exec_path_is_app_process(path, n))
+		return;
 
-    n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
-    if (n > 0 && argv_eq(arg1, n, sizeof(arg1), "-Xzygote")) {
-        WRITE_ONCE(zygote_seen, true);
-        pr_info("nksu: zygote is starting\n");
-        notify_stage();
-    }
+	n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
+	if (n > 0 && argv_eq(arg1, n, sizeof(arg1), "-Xzygote")) {
+		WRITE_ONCE(zygote_seen, true);
+		pr_info("nksu: zygote is starting\n");
+		notify_stage();
+	}
 }
 
 static long handle__NR_execve(struct pt_regs *regs)
 {
-    watch_exec(regs, 1);
-    return 0;
+	watch_exec(regs, 1);
+	return 0;
 }
 
 static long handle__NR_execveat(struct pt_regs *regs)
 {
-    watch_exec(regs, 2);
-    return 0;
+	watch_exec(regs, 2);
+	return 0;
 }
 
 /*
@@ -185,46 +183,49 @@ static long handle__NR_execveat(struct pt_regs *regs)
  * in manager/daemon.c and is armed earlier, at second_stage.
  */
 static const struct syscall_hook boot_syscall_hooks[] = {
-    { __NR_execve, handle__NR_execve },
-    { __NR_execveat, handle__NR_execveat },
+	{ __NR_execve, handle__NR_execve },
+	{ __NR_execveat, handle__NR_execveat },
 };
 
 static bool temp_syscall_loaded;
 
 int load_temp_syscall(void)
 {
-    int ret, i;
+	int ret, i;
 
-    /*
+	/*
      * init and zygote are not in the profile, so the dispatcher must run
      * handlers unconditionally while the temporary watcher is installed.
      */
-    nksu_dispatch_set_unconditional(true);
+	nksu_dispatch_set_unconditional(true);
 
-    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++) {
-        ret = nksu_redirect_syscall(boot_syscall_hooks[i].nr);
-        if (ret) {
-            pr_err("[hook]: can't redirect syscall %d: %d\n", boot_syscall_hooks[i].nr, ret);
-            goto err;
-        }
-    }
+	for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++) {
+		ret = nksu_redirect_syscall(boot_syscall_hooks[i].nr);
+		if (ret) {
+			pr_err("[hook]: can't redirect syscall %d: %d\n", boot_syscall_hooks[i].nr,
+			       ret);
+			goto err;
+		}
+	}
 
-    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++) {
-        ret = nksu_register_handler(boot_syscall_hooks[i].nr, boot_syscall_hooks[i].handler);
-        if (ret) {
-            pr_err("[hook]: can't register handler for syscall %d: %d\n", boot_syscall_hooks[i].nr, ret);
-            goto err;
-        }
-    }
-    temp_syscall_loaded = true;
-    return 0;
+	for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++) {
+		ret = nksu_register_handler(boot_syscall_hooks[i].nr,
+					    boot_syscall_hooks[i].handler);
+		if (ret) {
+			pr_err("[hook]: can't register handler for syscall %d: %d\n",
+			       boot_syscall_hooks[i].nr, ret);
+			goto err;
+		}
+	}
+	temp_syscall_loaded = true;
+	return 0;
 
 err:
-    /* Undo a partial install; unhooking an unrecorded slot is a no-op. */
-    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
-        nksu_unhook_syscall(boot_syscall_hooks[i].nr);
-    nksu_dispatch_set_unconditional(false);
-    return ret;
+	/* Undo a partial install; unhooking an unrecorded slot is a no-op. */
+	for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
+		nksu_unhook_syscall(boot_syscall_hooks[i].nr);
+	nksu_dispatch_set_unconditional(false);
+	return ret;
 }
 
 /*
@@ -233,37 +234,36 @@ err:
  */
 static void unload_temp_syscall(void)
 {
-    int i;
+	int i;
 
-    if (!temp_syscall_loaded)
-        return;
-    temp_syscall_loaded = false;
+	if (!temp_syscall_loaded)
+		return;
+	temp_syscall_loaded = false;
 
-    nksu_init_rc_exit();
-    for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
-        nksu_unhook_syscall(boot_syscall_hooks[i].nr);
-    nksu_dispatch_set_unconditional(false);
+	nksu_init_rc_exit();
+	for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++)
+		nksu_unhook_syscall(boot_syscall_hooks[i].nr);
+	nksu_dispatch_set_unconditional(false);
 }
 
 static int init_thread_fn(void *data)
 {
-    /*
+	/*
      * The watcher follows init until the zygote starts; at that point every
      * component is up and there is nothing left to wait for, so it leaves on
      * its own.  hook_exit() asks it to leave earlier by setting init_exiting.
      * Either way it signals init_done before returning so the unload path can
      * wait for it -- see stop_init_thread() for why we never kthread_stop().
      */
-    while (!READ_ONCE(init_exiting)) {
-        wait_event_interruptible(stage_wq,
-                                 READ_ONCE(stage_pending) ||
-                                 READ_ONCE(init_exiting));
-        if (READ_ONCE(init_exiting))
-            break;
+	while (!READ_ONCE(init_exiting)) {
+		wait_event_interruptible(stage_wq,
+					 READ_ONCE(stage_pending) || READ_ONCE(init_exiting));
+		if (READ_ONCE(init_exiting))
+			break;
 
-        WRITE_ONCE(stage_pending, false);
+		WRITE_ONCE(stage_pending, false);
 
-        /*
+		/*
          * The policy is loaded during selinux_setup, so by second_stage we
          * can inject the nksu domain and its rules.  The early group (safe
          * mode) needs neither the policy nor /data, so it is armed here too --
@@ -273,124 +273,123 @@ static int init_thread_fn(void *data)
          * /data/adb/modules does not exist yet (this is what made every module
          * look absent).
          */
-        if (READ_ONCE(boot_stage) == INIT_SECOND_STAGE) {
-            if (!early_loaded) {
-                if (nksu_init_early_components() == 0)
-                    early_loaded = true;
-                else
-                    pr_err("nksu: early component init failed\n");
-            }
-            if (!selinux_loaded) {
-                if (nksu_init_selinux_components() == 0)
-                    selinux_loaded = true;
-                else
-                    pr_err("nksu: SELinux hook init failed\n");
-            }
-        }
+		if (READ_ONCE(boot_stage) == INIT_SECOND_STAGE) {
+			if (!early_loaded) {
+				if (nksu_init_early_components() == 0)
+					early_loaded = true;
+				else
+					pr_err("nksu: early component init failed\n");
+			}
+			if (!selinux_loaded) {
+				if (nksu_init_selinux_components() == 0)
+					selinux_loaded = true;
+				else
+					pr_err("nksu: SELinux hook init failed\n");
+			}
+		}
 
-        if (READ_ONCE(zygote_seen) && !features_loaded) {
-            /*
+		if (READ_ONCE(zygote_seen) && !features_loaded) {
+			/*
              * Drop the temporary boot watcher first: the steady-state hooks
              * (and the daemon fd grant) install into the same slots.
              */
-            unload_temp_syscall();
+			unload_temp_syscall();
 
-            /* Let the execve() that announced zygote settle. */
-            msleep(100);
+			/* Let the execve() that announced zygote settle. */
+			msleep(100);
 
-            if (!selinux_loaded &&
-                nksu_init_selinux_components() == 0)
-                selinux_loaded = true;
+			if (!selinux_loaded && nksu_init_selinux_components() == 0)
+				selinux_loaded = true;
 
-            if (nksu_init_feature_components() == 0)
-                features_loaded = true;
-            else
-                pr_err("nksu: feature init failed\n");
+			if (nksu_init_feature_components() == 0)
+				features_loaded = true;
+			else
+				pr_err("nksu: feature init failed\n");
 
-            /* Zygote was the last boot stage to watch for. */
-            break;
-        }
-    }
+			/* Zygote was the last boot stage to watch for. */
+			break;
+		}
+	}
 
-    complete(&init_done);
-    return 0;
+	complete(&init_done);
+	return 0;
 }
 
 static int start_init_thread(void)
 {
-    reinit_completion(&init_done);
-    init_thread = kthread_run(init_thread_fn, NULL, "nksu-init");
-    if (IS_ERR(init_thread)) {
-        int ret = PTR_ERR(init_thread);
-        init_thread = NULL;
-        pr_err("nksu: create init thread failed: %d\n", ret);
-        return ret;
-    }
-    return 0;
+	reinit_completion(&init_done);
+	init_thread = kthread_run(init_thread_fn, NULL, "nksu-init");
+	if (IS_ERR(init_thread)) {
+		int ret = PTR_ERR(init_thread);
+		init_thread = NULL;
+		pr_err("nksu: create init thread failed: %d\n", ret);
+		return ret;
+	}
+	return 0;
 }
 
 static void stop_init_thread(void)
 {
-    if (!init_thread)
-        return;
+	if (!init_thread)
+		return;
 
-    /*
+	/*
      * The watcher may already have exited on its own after the zygote stage,
      * so kthread_stop() would dereference a freed task_struct.  Ask it to
      * leave and wait for it to signal init_done instead; once complete() has
      * run no further module code executes, so it is safe to tear down.
      */
-    WRITE_ONCE(init_exiting, true);
-    wake_up_interruptible(&stage_wq);
-    wait_for_completion(&init_done);
-    init_thread = NULL;
+	WRITE_ONCE(init_exiting, true);
+	wake_up_interruptible(&stage_wq);
+	wait_for_completion(&init_done);
+	init_thread = NULL;
 }
 
 int hook_init(void)
 {
-    int ret;
+	int ret;
 
-    ret = load_temp_syscall();
-    if (ret)
-        goto err_dispatch;
+	ret = load_temp_syscall();
+	if (ret)
+		goto err_dispatch;
 
-    ret = start_init_thread();
-    if (ret)
-        goto err_dispatch;
+	ret = start_init_thread();
+	if (ret)
+		goto err_dispatch;
 
-    /*
+	/*
      * Inject the KernelSU-style init.rc rc (read/fstat proxy) and write the
      * userspace module loader.  This is not fatal: without it init.rc is
      * untouched and modules simply do not come up.
      */
-    ret = nksu_init_rc_init();
-    if (ret) {
-        pr_err("nksu: init.rc injection failed: %d\n", ret);
-        goto err_thread;
-    }
+	ret = nksu_init_rc_init();
+	if (ret) {
+		pr_err("nksu: init.rc injection failed: %d\n", ret);
+		goto err_thread;
+	}
 
-    return 0;
+	return 0;
 
 err_thread:
-    stop_init_thread();
+	stop_init_thread();
 
 err_dispatch:
-    unload_temp_syscall();
-    return ret;
+	unload_temp_syscall();
+	return ret;
 }
 
 void hook_exit(void)
 {
-    stop_init_thread();
+	stop_init_thread();
 
-    if (READ_ONCE(features_loaded))
-        nksu_exit_feature_components();
+	if (READ_ONCE(features_loaded))
+		nksu_exit_feature_components();
 
-    if (READ_ONCE(selinux_loaded))
-        nksu_exit_selinux_components();
+	if (READ_ONCE(selinux_loaded))
+		nksu_exit_selinux_components();
 
-    if (READ_ONCE(early_loaded))
-        nksu_exit_early_components();
+	if (READ_ONCE(early_loaded))
+		nksu_exit_early_components();
 
-    unload_temp_syscall();
+	unload_temp_syscall();
 }

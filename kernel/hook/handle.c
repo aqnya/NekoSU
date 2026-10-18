@@ -24,27 +24,27 @@
 long handle_prctl_hooks(struct pt_regs *regs)
 {
 #if defined(__aarch64__)
-    unsigned long option = regs->regs[0];
+	unsigned long option = regs->regs[0];
 #elif defined(__x86_64__)
-    unsigned long option = regs->di;
+	unsigned long option = regs->di;
 #endif
 
-    if (likely(!is_manager())) {
-        return 0;
-    }
+	if (likely(!is_manager())) {
+		return 0;
+	}
 
-    switch (option) {
-    case NKSU_PRCTL_GET_SHM_FD:
-        fmac_anonfd_get();
-        return 1;
+	switch (option) {
+	case NKSU_PRCTL_GET_SHM_FD:
+		fmac_anonfd_get();
+		return 1;
 
-    case NKSU_PRCTL_GET_CTL_FD:
-        fmac_ctlfd_get();
-        return 1;
+	case NKSU_PRCTL_GET_CTL_FD:
+		fmac_ctlfd_get();
+		return 1;
 
-    default:
-        return 0;
-    }
+	default:
+		return 0;
+	}
 }
 
 /*
@@ -73,49 +73,49 @@ long handle_prctl_hooks(struct pt_regs *regs)
  */
 static unsigned long push_str(unsigned long sp, const char *str, size_t len)
 {
-    unsigned long size, addr;
+	unsigned long size, addr;
 
-    if (unlikely(!len || len > PAGE_SIZE))
-        return 0;
+	if (unlikely(!len || len > PAGE_SIZE))
+		return 0;
 
-    size = ALIGN(len, 16);
-    if (unlikely(sp < NKSU_STACK_REDZONE + size))
-        return 0;
+	size = ALIGN(len, 16);
+	if (unlikely(sp < NKSU_STACK_REDZONE + size))
+		return 0;
 
-    addr = sp - NKSU_STACK_REDZONE - size;
-    if (unlikely(copy_to_user((void __user *)addr, str, len)))
-        return 0;
+	addr = sp - NKSU_STACK_REDZONE - size;
+	if (unlikely(copy_to_user((void __user *)addr, str, len)))
+		return 0;
 
-    return addr;
+	return addr;
 }
 
-static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_index, const char *target,
-                                       size_t target_len, bool require_target)
+static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_index,
+				       const char *target, size_t target_len, bool require_target)
 {
-    char buf[SU_PATH_LEN];
-    const char __user *upath;
-    unsigned long sp;
-    ssize_t ulen;
+	char buf[SU_PATH_LEN];
+	const char __user *upath;
+	unsigned long sp;
+	ssize_t ulen;
 
-    if (unlikely(!current->mm))
-        return 0;
+	if (unlikely(!current->mm))
+		return 0;
 
 #if defined(__aarch64__)
-    if (unlikely(arg_index > 5))
-        return 0;
+	if (unlikely(arg_index > 5))
+		return 0;
 #else
-    if (unlikely(arg_index > 7))
-        return 0;
+	if (unlikely(arg_index > 7))
+		return 0;
 #endif
 
-    if (unlikely(!target || !target_len || target_len > PAGE_SIZE))
-        return 0;
+	if (unlikely(!target || !target_len || target_len > PAGE_SIZE))
+		return 0;
 
-    upath = (const char __user *)regs->regs[arg_index];
-    if (unlikely(!upath))
-        return 0;
+	upath = (const char __user *)regs->regs[arg_index];
+	if (unlikely(!upath))
+		return 0;
 
-    /*
+	/*
      * Only an exact match matters, so copy at most SU_PATH_LEN bytes: the
      * overwhelmingly common case is a completely different path (every
      * stat/access/exec a managed UID performs), and it must not pay for a
@@ -124,53 +124,55 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
      * strncpy_from_user() returns the length without the trailing NUL, while
      * SU_PATH_LEN is sizeof(SU_PATH) (NUL included).
      */
-    ulen = strncpy_from_user(buf, upath, sizeof(buf));
-    if (unlikely(ulen != SU_PATH_LEN - 1) || !path_is_su(buf))
-        return 0;
+	ulen = strncpy_from_user(buf, upath, sizeof(buf));
+	if (unlikely(ulen != SU_PATH_LEN - 1) || !path_is_su(buf))
+		return 0;
 
-    /*
+	/*
      * KernelSU gates the su→daemon redirect on the daemon existing; without a target
      * there is nothing to exec, so run the real su instead of escalating into
      * a failed exec.  This must not sleep (the tracepoint path runs with
      * preemption disabled), so use the flag the manager scan publishes.
      */
-    if (require_target && !is_daemon_ready())
-        return 0;
+	if (require_target && !is_daemon_ready())
+		return 0;
 
-    sp = user_stack_pointer(regs);
-    if (unlikely(!sp))
-        return 0;
+	sp = user_stack_pointer(regs);
+	if (unlikely(!sp))
+		return 0;
 
-    return push_str(sp, target, target_len);
+	return push_str(sp, target, target_len);
 }
 
 long hook_path_at(struct pt_regs *regs)
 {
-    unsigned long new_uaddr = try_redirect_path(regs, 1, SH_PATH, SH_PATH_LEN, false);
-    if (new_uaddr > 0) {
-        regs->regs[1] = new_uaddr;
-    }
-    return 0;
+	unsigned long new_uaddr = try_redirect_path(regs, 1, SH_PATH, SH_PATH_LEN, false);
+	if (new_uaddr > 0) {
+		regs->regs[1] = new_uaddr;
+	}
+	return 0;
 }
 
 long hook__NR_execve(struct pt_regs *regs)
 {
-    unsigned long new_uaddr = try_redirect_path(regs, 0, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
-    if (new_uaddr > 0) {
-        regs->regs[0] = new_uaddr;
-        privilege_escalate_from_profile(NULL);
-    }
-    return 0;
+	unsigned long new_uaddr =
+		try_redirect_path(regs, 0, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
+	if (new_uaddr > 0) {
+		regs->regs[0] = new_uaddr;
+		privilege_escalate_from_profile(NULL);
+	}
+	return 0;
 }
 
 long hook__NR_execveat(struct pt_regs *regs)
 {
-    unsigned long new_uaddr = try_redirect_path(regs, 1, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
-    if (new_uaddr > 0) {
-        regs->regs[1] = new_uaddr;
-        privilege_escalate_from_profile(NULL);
-    }
-    return 0;
+	unsigned long new_uaddr =
+		try_redirect_path(regs, 1, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
+	if (new_uaddr > 0) {
+		regs->regs[1] = new_uaddr;
+		privilege_escalate_from_profile(NULL);
+	}
+	return 0;
 }
 
 /*
@@ -192,24 +194,24 @@ long hook__NR_execveat(struct pt_regs *regs)
  */
 long hook__NR_setresuid(struct pt_regs *regs)
 {
-    uid_t root_uid;
+	uid_t root_uid;
 
-    /* setresuid(ruid, euid, suid): only euid == 0 actually grants privilege. */
-    if (regs->regs[1] != 0)
-        return 0;
+	/* setresuid(ruid, euid, suid): only euid == 0 actually grants privilege. */
+	if (regs->regs[1] != 0)
+		return 0;
 
-    if (privilege_escalate_from_profile(&root_uid) == 0) {
-        /*
+	if (privilege_escalate_from_profile(&root_uid) == 0) {
+		/*
          * The profile decides the resulting uid.  Point the real syscall at
          * that uid as well; otherwise a profile whose root uid is non-zero
          * would be undone the moment the original setresuid(..., 0, ...) runs
          * (the raised capabilities would let it succeed).
          */
-        regs->regs[0] = root_uid;
-        regs->regs[1] = root_uid;
-        regs->regs[2] = root_uid;
-    }
-    return 0;
+		regs->regs[0] = root_uid;
+		regs->regs[1] = root_uid;
+		regs->regs[2] = root_uid;
+	}
+	return 0;
 }
 
 /*
@@ -217,19 +219,17 @@ long hook__NR_setresuid(struct pt_regs *regs)
  * dispatcher (probe_sys_enter) expands it into a switch; the syscall-table
  * build (init_syscall_hook) expands it into the table below.
  */
-#define NKSU_SYSCALL_HANDLERS(X)                                            \
-	X(__NR_prctl, handle_prctl_hooks)                                   \
-	X(__NR_execve, hook__NR_execve)                                     \
-	X(__NR_execveat, hook__NR_execveat)                                 \
-	X(__NR_setresuid, hook__NR_setresuid)                               \
-	X(__NR_faccessat, hook_path_at)                                     \
+#define NKSU_SYSCALL_HANDLERS(X)              \
+	X(__NR_prctl, handle_prctl_hooks)     \
+	X(__NR_execve, hook__NR_execve)       \
+	X(__NR_execveat, hook__NR_execveat)   \
+	X(__NR_setresuid, hook__NR_setresuid) \
+	X(__NR_faccessat, hook_path_at)       \
 	X(__NR_newfstatat, hook_path_at)
 
 #define NKSU_HOOK_TABLE(nr, fn) { nr, fn },
 
-static const struct syscall_hook syscall_hooks[] = {
-	NKSU_SYSCALL_HANDLERS(NKSU_HOOK_TABLE)
-};
+static const struct syscall_hook syscall_hooks[] = { NKSU_SYSCALL_HANDLERS(NKSU_HOOK_TABLE) };
 
 #ifdef CONFIG_NKSU_SYSCALL
 
@@ -244,15 +244,13 @@ int init_syscall_hook(void)
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++) {
 		ret = nksu_redirect_syscall(syscall_hooks[i].nr);
 		if (ret) {
-			pr_err("[hook]: can't redirect syscall %d: %d\n",
-			       syscall_hooks[i].nr, ret);
+			pr_err("[hook]: can't redirect syscall %d: %d\n", syscall_hooks[i].nr, ret);
 			goto err;
 		}
 	}
 
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++) {
-		ret = nksu_register_handler(syscall_hooks[i].nr,
-					    syscall_hooks[i].handler);
+		ret = nksu_register_handler(syscall_hooks[i].nr, syscall_hooks[i].handler);
 		if (ret) {
 			pr_err("[hook]: can't register handler for syscall %d: %d\n",
 			       syscall_hooks[i].nr, ret);
@@ -309,8 +307,7 @@ static void probe_sys_enter(void *data, struct pt_regs *regs, long id)
 /* fork callback: ensure the child of a managed UID also gets traced.  Only the
  * new task needs flagging -- the parent's threads already carry the flag -- so
  * this is O(1) instead of scanning every thread on every fork. */
-static void probe_sched_fork(void *data, struct task_struct *parent,
-			     struct task_struct *child)
+static void probe_sched_fork(void *data, struct task_struct *parent, struct task_struct *child)
 {
 	if (!nksu_profile_has_uid(__kuid_val(task_uid(child))))
 		return;

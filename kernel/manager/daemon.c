@@ -39,7 +39,7 @@
  * disable CFI for this file (same as manager.c / symbol_compat.c).
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 static struct tracepoint *tp_sched_exec;
@@ -84,8 +84,7 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 
 	set_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT);
 	set_tsk_thread_flag(p, NKSU_TIF_NCORE);
-	pr_info("[daemon] marked %s (pid %d) as ncore\n",
-		bprm ? bprm->filename : "?", p->pid);
+	pr_info("[daemon] marked %s (pid %d) as ncore\n", bprm ? bprm->filename : "?", p->pid);
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
 	if (!work)
@@ -95,8 +94,7 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 		kfree(work);
 }
 
-static void nksu_daemon_fork(void *data, struct task_struct *parent,
-			     struct task_struct *child)
+static void nksu_daemon_fork(void *data, struct task_struct *parent, struct task_struct *child)
 {
 	if (test_tsk_thread_flag(parent, TIF_SYSCALL_TRACEPOINT))
 		set_tsk_thread_flag(child, TIF_SYSCALL_TRACEPOINT);

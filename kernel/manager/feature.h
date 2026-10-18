@@ -18,10 +18,10 @@
 #define NKSU_FEATURE_UMOUNT 2
 
 struct nksu_feature {
-    u32 id;
-    const char *name;
-    int (*get)(u64 *value);
-    int (*set)(u64 value);
+	u32 id;
+	const char *name;
+	int (*get)(u64 *value);
+	int (*set)(u64 value);
 };
 
 int nksu_feature_register(const struct nksu_feature *feature);

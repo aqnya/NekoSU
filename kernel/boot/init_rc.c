@@ -57,19 +57,19 @@
 
 /* The rc that init parses; it just reaches ncore at each stage. */
 static const char nksu_rc[] =
-    "\n"
-    "on post-fs-data\n"
-    "    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " post-fs-data\n"
-    "\n"
-    "on nonencrypted\n"
-    "    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " services\n"
-    "\n"
-    "on property:vold.decrypt=trigger_restart_framework\n"
-    "    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " services\n"
-    "\n"
-    "on property:sys.boot_completed=1\n"
-    "    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " boot-completed\n"
-    "\n";
+	"\n"
+	"on post-fs-data\n"
+	"    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " post-fs-data\n"
+	"\n"
+	"on nonencrypted\n"
+	"    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " services\n"
+	"\n"
+	"on property:vold.decrypt=trigger_restart_framework\n"
+	"    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " services\n"
+	"\n"
+	"on property:sys.boot_completed=1\n"
+	"    exec " NKSU_RC_CONTEXT " root -- " NKSU_DAEMON_PATH " boot-completed\n"
+	"\n";
 
 static const size_t nksu_rc_len = sizeof(nksu_rc) - 1;
 static ssize_t nksu_rc_pos;
@@ -89,168 +89,167 @@ static bool nksu_rc_sys_hooked;
 /* Same match as KernelSU's is_init_rc(): only init, only the hw init.rc. */
 static bool nksu_rc_is_init_rc(struct file *file)
 {
-    char buf[256];
-    char *dpath;
-    const char *short_name;
+	char buf[256];
+	char *dpath;
+	const char *short_name;
 
-    if (strcmp(current->comm, "init"))
-        return false;
+	if (strcmp(current->comm, "init"))
+		return false;
 
-    if (!file->f_path.dentry || !d_is_reg(file->f_path.dentry))
-        return false;
+	if (!file->f_path.dentry || !d_is_reg(file->f_path.dentry))
+		return false;
 
-    short_name = file->f_path.dentry->d_name.name;
-    if (!short_name || strcmp(short_name, "init.rc"))
-        return false;
+	short_name = file->f_path.dentry->d_name.name;
+	if (!short_name || strcmp(short_name, "init.rc"))
+		return false;
 
-    dpath = d_path(&file->f_path, buf, sizeof(buf));
-    if (IS_ERR(dpath))
-        return false;
+	dpath = d_path(&file->f_path, buf, sizeof(buf));
+	if (IS_ERR(dpath))
+		return false;
 
-    return !strcmp(dpath, NKSU_RC_INIT_PATH) ||
-           !strcmp(dpath, NKSU_RC_INIT_PATH_LEGACY);
+	return !strcmp(dpath, NKSU_RC_INIT_PATH) || !strcmp(dpath, NKSU_RC_INIT_PATH_LEGACY);
 }
 
 /* append the rc once the original read has reached EOF (KernelSU read_proxy) */
 static ssize_t nksu_rc_read_proxy(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
-    ssize_t ret = 0;
-    size_t append_count;
+	ssize_t ret = 0;
+	size_t append_count;
 
-    if (nksu_rc_pos && nksu_rc_pos < (ssize_t)nksu_rc_len)
-        goto append_rc;
+	if (nksu_rc_pos && nksu_rc_pos < (ssize_t)nksu_rc_len)
+		goto append_rc;
 
-    ret = nksu_orig_read(file, buf, count, pos);
-    if (ret != 0)
-        return ret;
-    if (nksu_rc_pos >= (ssize_t)nksu_rc_len)
-        return ret;
+	ret = nksu_orig_read(file, buf, count, pos);
+	if (ret != 0)
+		return ret;
+	if (nksu_rc_pos >= (ssize_t)nksu_rc_len)
+		return ret;
 
 append_rc:
-    if (nksu_rc_pos < (ssize_t)nksu_rc_len) {
-        append_count = nksu_rc_len - (size_t)nksu_rc_pos;
-        if (append_count > count - (size_t)ret)
-            append_count = count - (size_t)ret;
-        if (copy_to_user(buf + ret, nksu_rc + nksu_rc_pos, append_count))
-            return ret;
-        nksu_rc_pos += append_count;
-        ret += append_count;
-    }
+	if (nksu_rc_pos < (ssize_t)nksu_rc_len) {
+		append_count = nksu_rc_len - (size_t)nksu_rc_pos;
+		if (append_count > count - (size_t)ret)
+			append_count = count - (size_t)ret;
+		if (copy_to_user(buf + ret, nksu_rc + nksu_rc_pos, append_count))
+			return ret;
+		nksu_rc_pos += append_count;
+		ret += append_count;
+	}
 
-    return ret;
+	return ret;
 }
 
 static ssize_t nksu_rc_read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 {
-    ssize_t ret = 0;
-    size_t append_count;
+	ssize_t ret = 0;
+	size_t append_count;
 
-    if (nksu_rc_pos && nksu_rc_pos < (ssize_t)nksu_rc_len)
-        goto append_rc;
+	if (nksu_rc_pos && nksu_rc_pos < (ssize_t)nksu_rc_len)
+		goto append_rc;
 
-    ret = nksu_orig_read_iter(iocb, to);
-    if (ret != 0)
-        return ret;
-    if (nksu_rc_pos >= (ssize_t)nksu_rc_len)
-        return ret;
+	ret = nksu_orig_read_iter(iocb, to);
+	if (ret != 0)
+		return ret;
+	if (nksu_rc_pos >= (ssize_t)nksu_rc_len)
+		return ret;
 
 append_rc:
-    if (nksu_rc_pos < (ssize_t)nksu_rc_len) {
-        append_count = copy_to_iter(nksu_rc + nksu_rc_pos,
-                                    nksu_rc_len - (size_t)nksu_rc_pos, to);
-        if (!append_count)
-            return ret;
-        nksu_rc_pos += append_count;
-        ret += append_count;
-    }
+	if (nksu_rc_pos < (ssize_t)nksu_rc_len) {
+		append_count =
+			copy_to_iter(nksu_rc + nksu_rc_pos, nksu_rc_len - (size_t)nksu_rc_pos, to);
+		if (!append_count)
+			return ret;
+		nksu_rc_pos += append_count;
+		ret += append_count;
+	}
 
-    return ret;
+	return ret;
 }
 
 /* install the read proxy on the first init.rc read (KernelSU ksu_install_rc_hook) */
 static void nksu_rc_install(struct file *file)
 {
-    if (!nksu_rc_is_init_rc(file))
-        return;
+	if (!nksu_rc_is_init_rc(file))
+		return;
 
-    if (nksu_rc_hooked)
-        return;
-    nksu_rc_hooked = true;
+	if (nksu_rc_hooked)
+		return;
+	nksu_rc_hooked = true;
 
-    memcpy(&nksu_fops_proxy, file->f_op, sizeof(struct file_operations));
+	memcpy(&nksu_fops_proxy, file->f_op, sizeof(struct file_operations));
 
-    nksu_orig_read = file->f_op->read;
-    if (nksu_orig_read)
-        nksu_fops_proxy.read = nksu_rc_read_proxy;
+	nksu_orig_read = file->f_op->read;
+	if (nksu_orig_read)
+		nksu_fops_proxy.read = nksu_rc_read_proxy;
 
-    nksu_orig_read_iter = file->f_op->read_iter;
-    if (nksu_orig_read_iter)
-        nksu_fops_proxy.read_iter = nksu_rc_read_iter_proxy;
+	nksu_orig_read_iter = file->f_op->read_iter;
+	if (nksu_orig_read_iter)
+		nksu_fops_proxy.read_iter = nksu_rc_read_iter_proxy;
 
-    file->f_op = &nksu_fops_proxy;
+	file->f_op = &nksu_fops_proxy;
 
-    pr_info("nksu: init.rc hooked, appending %zu bytes\n", nksu_rc_len);
+	pr_info("nksu: init.rc hooked, appending %zu bytes\n", nksu_rc_len);
 }
 
 /* __NR_read: detect init reading init.rc before the real read runs */
 static long nksu_sys_read(const struct pt_regs *regs)
 {
-    unsigned int fd = (unsigned int)regs->regs[0];
-    struct file *file __free(nksu_fput) = fget(fd);
+	unsigned int fd = (unsigned int)regs->regs[0];
+	struct file *file __free(nksu_fput) = fget(fd);
 
-    if (file)
-        nksu_rc_install(file);
+	if (file)
+		nksu_rc_install(file);
 
-    return nksu_orig_read_sys(regs);
+	return nksu_orig_read_sys(regs);
 }
 
 /* __NR_fstat: report the appended size (KernelSU ksu_sys_fstat) */
 static long nksu_sys_fstat(const struct pt_regs *regs)
 {
-    unsigned int fd = (unsigned int)regs->regs[0];
-    void __user *statbuf = (void __user *)regs->regs[1];
-    bool is_rc = false;
-    struct file *file __free(nksu_fput) = fget(fd);
-    long ret;
+	unsigned int fd = (unsigned int)regs->regs[0];
+	void __user *statbuf = (void __user *)regs->regs[1];
+	bool is_rc = false;
+	struct file *file __free(nksu_fput) = fget(fd);
+	long ret;
 
-    if (file)
-        is_rc = nksu_rc_is_init_rc(file);
+	if (file)
+		is_rc = nksu_rc_is_init_rc(file);
 
-    ret = nksu_orig_fstat_sys(regs);
+	ret = nksu_orig_fstat_sys(regs);
 
-    if (is_rc && ret == 0) {
-        void __user *st_size_ptr = statbuf + offsetof(struct stat, st_size);
-        long size, new_size;
+	if (is_rc && ret == 0) {
+		void __user *st_size_ptr = statbuf + offsetof(struct stat, st_size);
+		long size, new_size;
 
-        if (!copy_from_user(&size, st_size_ptr, sizeof(long))) {
-            new_size = size + (long)nksu_rc_len;
-            if (copy_to_user(st_size_ptr, &new_size, sizeof(long)))
-                pr_warn("nksu: cannot patch init.rc size\n");
-        }
-    }
+		if (!copy_from_user(&size, st_size_ptr, sizeof(long))) {
+			new_size = size + (long)nksu_rc_len;
+			if (copy_to_user(st_size_ptr, &new_size, sizeof(long)))
+				pr_warn("nksu: cannot patch init.rc size\n");
+		}
+	}
 
-    return ret;
+	return ret;
 }
 
 int nksu_init_rc_init(void)
 {
-    int ret;
+	int ret;
 
-    ret = syscall_slot_hook(__NR_read, nksu_sys_read, &nksu_orig_read_sys, "nksu_rc_read");
-    if (ret) {
-        pr_err("nksu: cannot hook __NR_read: %d\n", ret);
-        return ret;
-    }
+	ret = syscall_slot_hook(__NR_read, nksu_sys_read, &nksu_orig_read_sys, "nksu_rc_read");
+	if (ret) {
+		pr_err("nksu: cannot hook __NR_read: %d\n", ret);
+		return ret;
+	}
 
-    ret = syscall_slot_hook(__NR_fstat, nksu_sys_fstat, &nksu_orig_fstat_sys, "nksu_rc_fstat");
-    if (ret) {
-        pr_err("nksu: cannot hook __NR_fstat: %d\n", ret);
-        syscall_slot_unhook(__NR_read);
-        return ret;
-    }
+	ret = syscall_slot_hook(__NR_fstat, nksu_sys_fstat, &nksu_orig_fstat_sys, "nksu_rc_fstat");
+	if (ret) {
+		pr_err("nksu: cannot hook __NR_fstat: %d\n", ret);
+		syscall_slot_unhook(__NR_read);
+		return ret;
+	}
 
-    nksu_rc_sys_hooked = true;
-    return 0;
+	nksu_rc_sys_hooked = true;
+	return 0;
 }
 
 /*
@@ -260,10 +259,10 @@ int nksu_init_rc_init(void)
  */
 void nksu_init_rc_exit(void)
 {
-    if (!nksu_rc_sys_hooked)
-        return;
+	if (!nksu_rc_sys_hooked)
+		return;
 
-    nksu_rc_sys_hooked = false;
-    syscall_slot_unhook(__NR_read);
-    syscall_slot_unhook(__NR_fstat);
+	nksu_rc_sys_hooked = false;
+	syscall_slot_unhook(__NR_read);
+	syscall_slot_unhook(__NR_fstat);
 }

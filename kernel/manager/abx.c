@@ -141,8 +141,7 @@ static void copy_path_attr(char *dst, size_t cap, const u8 *src, size_t len)
 	dst[n] = '\0';
 }
 
-bool abx_find_package_by_cert(const u8 *buf, size_t len,
-			      abx_cert_match match, void *ctx,
+bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
 			      struct abx_package *out)
 {
 	struct abx_reader r = { .buf = buf, .len = len, .pos = ABX_MAGIC_LEN };
@@ -160,14 +159,12 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 
 	memset(out, 0, sizeof(*out));
 
-	if (!match || len < ABX_MAGIC_LEN ||
-	    memcmp(buf, ABX_MAGIC, ABX_MAGIC_LEN) != 0)
+	if (!match || len < ABX_MAGIC_LEN || memcmp(buf, ABX_MAGIC, ABX_MAGIC_LEN) != 0)
 		return false;
 
-	r.interned = kvmalloc_array(ABX_MAX_INTERNED_STRINGS,
-				    sizeof(*r.interned), GFP_KERNEL);
-	r.interned_len = kvmalloc_array(ABX_MAX_INTERNED_STRINGS,
-					sizeof(*r.interned_len), GFP_KERNEL);
+	r.interned = kvmalloc_array(ABX_MAX_INTERNED_STRINGS, sizeof(*r.interned), GFP_KERNEL);
+	r.interned_len =
+		kvmalloc_array(ABX_MAX_INTERNED_STRINGS, sizeof(*r.interned_len), GFP_KERNEL);
 	if (!r.interned || !r.interned_len)
 		goto out_free;
 
@@ -198,8 +195,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 				goto out_free;
 			depth++;
 
-			is_sigs = (pkg_depth > 0 && sigs_depth < 0) &&
-				  depth == pkg_depth + 1 &&
+			is_sigs = (pkg_depth > 0 && sigs_depth < 0) && depth == pkg_depth + 1 &&
 				  abx_str_eq(name, nlen, "sigs");
 			is_cert = (sigs_depth > 0) && depth == sigs_depth + 1 &&
 				  abx_str_eq(name, nlen, "cert");
@@ -223,12 +219,10 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 					goto out_free;
 
 				if (is_cert && abx_str_eq(aname, alen, "key") &&
-				    (typ2 == ABX_TYPE_BYTES_HEX ||
-				     typ2 == ABX_TYPE_BYTES_BASE64)) {
+				    (typ2 == ABX_TYPE_BYTES_HEX || typ2 == ABX_TYPE_BYTES_BASE64)) {
 					u16 blen;
 
-					if (abx_read_u16(&r, &blen) < 0 ||
-					    r.pos + blen > r.len)
+					if (abx_read_u16(&r, &blen) < 0 || r.pos + blen > r.len)
 						goto out_free;
 					cert = r.buf + r.pos;
 					cert_len = blen;
@@ -236,8 +230,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 				} else if (typ2 == ABX_TYPE_STRING) {
 					u16 slen;
 
-					if (abx_read_u16(&r, &slen) < 0 ||
-					    r.pos + slen > r.len)
+					if (abx_read_u16(&r, &slen) < 0 || r.pos + slen > r.len)
 						goto out_free;
 					if (abx_str_eq(aname, alen, "name")) {
 						name_attr = r.buf + r.pos;
@@ -245,8 +238,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 					} else if (abx_str_eq(aname, alen, "codePath")) {
 						code_attr = r.buf + r.pos;
 						code_attr_len = slen;
-					} else if (abx_str_eq(aname, alen,
-							      "nativeLibraryPath")) {
+					} else if (abx_str_eq(aname, alen, "nativeLibraryPath")) {
 						nlib_attr = r.buf + r.pos;
 						nlib_attr_len = slen;
 					}
@@ -263,28 +255,23 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 					} else if (abx_str_eq(aname, alen, "codePath")) {
 						code_attr = sv;
 						code_attr_len = svlen;
-					} else if (abx_str_eq(aname, alen,
-							      "nativeLibraryPath")) {
+					} else if (abx_str_eq(aname, alen, "nativeLibraryPath")) {
 						nlib_attr = sv;
 						nlib_attr_len = svlen;
 					}
-				} else if (typ2 == ABX_TYPE_INT ||
-					   typ2 == ABX_TYPE_INT_HEX) {
+				} else if (typ2 == ABX_TYPE_INT || typ2 == ABX_TYPE_INT_HEX) {
 					u32 v;
 
 					if (r.pos + 4 > r.len)
 						goto out_free;
 					v = ((u32)r.buf[r.pos] << 24) |
 					    ((u32)r.buf[r.pos + 1] << 16) |
-					    ((u32)r.buf[r.pos + 2] << 8) |
-					    (u32)r.buf[r.pos + 3];
+					    ((u32)r.buf[r.pos + 2] << 8) | (u32)r.buf[r.pos + 3];
 					r.pos += 4;
-					if (abx_str_eq(aname, alen,
-						       "sharedUserId")) {
+					if (abx_str_eq(aname, alen, "sharedUserId")) {
 						shared_uid = v;
 						shared_seen = true;
-					} else if (abx_str_eq(aname, alen,
-							      "userId")) {
+					} else if (abx_str_eq(aname, alen, "userId")) {
 						own_uid = v;
 						own_seen = true;
 					}
@@ -292,16 +279,14 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 					   typ2 == ABX_TYPE_BYTES_BASE64) {
 					u16 blen;
 
-					if (abx_read_u16(&r, &blen) < 0 ||
-					    r.pos + blen > r.len)
+					if (abx_read_u16(&r, &blen) < 0 || r.pos + blen > r.len)
 						goto out_free;
 					r.pos += blen;
 				} else if (typ2 == ABX_TYPE_FLOAT) {
 					if (r.pos + 4 > r.len)
 						goto out_free;
 					r.pos += 4;
-				} else if (typ2 == ABX_TYPE_LONG ||
-					   typ2 == ABX_TYPE_LONG_HEX ||
+				} else if (typ2 == ABX_TYPE_LONG || typ2 == ABX_TYPE_LONG_HEX ||
 					   typ2 == ABX_TYPE_DOUBLE) {
 					u64 lv;
 
@@ -318,21 +303,18 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 
 			/* Every top-level <package> is a candidate; the caller's
 			 * match() decides which one is the manager. */
-			is_pkg = (pkg_depth < 0) &&
-				 abx_str_eq(name, nlen, "package");
+			is_pkg = (pkg_depth < 0) && abx_str_eq(name, nlen, "package");
 
 			if (is_pkg) {
 				pkg_depth = depth;
 				cert = NULL;
 				cert_len = 0;
 				cert_checked = false;
-				copy_path_attr(out->name, sizeof(out->name),
-					       name_attr, name_attr_len);
-				copy_path_attr(out->code_path,
-					       sizeof(out->code_path),
-					       code_attr, code_attr_len);
-				copy_path_attr(out->native_lib_path,
-					       sizeof(out->native_lib_path),
+				copy_path_attr(out->name, sizeof(out->name), name_attr,
+					       name_attr_len);
+				copy_path_attr(out->code_path, sizeof(out->code_path), code_attr,
+					       code_attr_len);
+				copy_path_attr(out->native_lib_path, sizeof(out->native_lib_path),
 					       nlib_attr, nlib_attr_len);
 				out->uid = shared_seen ? shared_uid : own_uid;
 				out->has_uid = shared_seen || own_seen;
@@ -364,15 +346,14 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len,
 			depth--;
 			if (depth < 0)
 				goto out_free;
-		} else if (tok == ABX_TOKEN_TEXT || tok == 5 || tok == 6 ||
-			   tok == 7 || tok == 8 || tok == 9 || tok == 10) {
+		} else if (tok == ABX_TOKEN_TEXT || tok == 5 || tok == 6 || tok == 7 || tok == 8 ||
+			   tok == 9 || tok == 10) {
 			/* TEXT(4) CDSECT(5) ENTITY_REF(6) IGNORABLE_WHITESPACE(7)
 			 * PROCESSING_INSTRUCTION(8) COMMENT(9) DOCDECL(10) */
 			if (typ == ABX_TYPE_STRING) {
 				u16 slen;
 
-				if (abx_read_u16(&r, &slen) < 0 ||
-				    r.pos + slen > r.len)
+				if (abx_read_u16(&r, &slen) < 0 || r.pos + slen > r.len)
 					goto out_free;
 				r.pos += slen;
 			} else if (typ == ABX_TYPE_STRING_INTERNED) {

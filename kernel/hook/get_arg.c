@@ -5,82 +5,87 @@
 #include <asm/ptrace.h>
 #include "klog.h"
 
-#define MAX_ARG_CNT   64
-#define MAX_ARG_LEN   256
+#define MAX_ARG_CNT 64
+#define MAX_ARG_LEN 256
 
 static inline unsigned long regs_arg(struct pt_regs *regs, unsigned int argno)
 {
 #if defined(__aarch64__)
-    if (unlikely(argno > 5))
-        return 0;
-    return regs->regs[argno];
+	if (unlikely(argno > 5))
+		return 0;
+	return regs->regs[argno];
 #elif defined(__x86_64__)
-    switch (argno) {
-    case 0: return regs->di;
-    case 1: return regs->si;
-    case 2: return regs->dx;
-    case 3: return regs->r10;
-    case 4: return regs->r8;
-    case 5: return regs->r9;
-    default: return 0;
-    }
+	switch (argno) {
+	case 0:
+		return regs->di;
+	case 1:
+		return regs->si;
+	case 2:
+		return regs->dx;
+	case 3:
+		return regs->r10;
+	case 4:
+		return regs->r8;
+	case 5:
+		return regs->r9;
+	default:
+		return 0;
+	}
 #else
-# error "unsupported arch"
+#error "unsupported arch"
 #endif
 }
 
-static inline const char __user *const __user *
-regs_uargv(struct pt_regs *regs, unsigned int argno)
+static inline const char __user *const __user *regs_uargv(struct pt_regs *regs, unsigned int argno)
 {
-    return (const char __user *const __user *)regs_arg(regs, argno);
+	return (const char __user *const __user *)regs_arg(regs, argno);
 }
 
-static int get_argvx_at(const char __user *const __user *uargv,
-                        unsigned int idx, char *buf, size_t len)
+static int get_argvx_at(const char __user *const __user *uargv, unsigned int idx, char *buf,
+			size_t len)
 {
-    const char __user *uarg;
-    long n;
+	const char __user *uarg;
+	long n;
 
-    if (unlikely(!uargv || !buf || len < 2))
-        return -EINVAL;
+	if (unlikely(!uargv || !buf || len < 2))
+		return -EINVAL;
 
-    if (unlikely(get_user(uarg, &uargv[idx])))
-        return -EFAULT;
+	if (unlikely(get_user(uarg, &uargv[idx])))
+		return -EFAULT;
 
-    if (!uarg)
-        return 0;
+	if (!uarg)
+		return 0;
 
-    n = strncpy_from_user(buf, uarg, len);
-    if (unlikely(n < 0))
-        return -EFAULT;
+	n = strncpy_from_user(buf, uarg, len);
+	if (unlikely(n < 0))
+		return -EFAULT;
 
-    return (int)n;
+	return (int)n;
 }
 
 static int get_argc_at(const char __user *const __user *uargv)
 {
-    int i;
+	int i;
 
-    if (unlikely(!uargv))
-        return -EINVAL;
+	if (unlikely(!uargv))
+		return -EINVAL;
 
-    for (i = 0; i < MAX_ARG_CNT; i++) {
-        const char __user *uarg;
-        if (unlikely(get_user(uarg, &uargv[i])))
-            return -EFAULT;
-        if (!uarg)
-            return i;
-    }
-    return MAX_ARG_CNT;
+	for (i = 0; i < MAX_ARG_CNT; i++) {
+		const char __user *uarg;
+		if (unlikely(get_user(uarg, &uargv[i])))
+			return -EFAULT;
+		if (!uarg)
+			return i;
+	}
+	return MAX_ARG_CNT;
 }
 
- int get_argvx(struct pt_regs *regs, unsigned int argno,
-                     unsigned int idx, char *buf, size_t len)
+int get_argvx(struct pt_regs *regs, unsigned int argno, unsigned int idx, char *buf, size_t len)
 {
-    if (unlikely(!current->mm || idx >= MAX_ARG_CNT))
-        return -EINVAL;
+	if (unlikely(!current->mm || idx >= MAX_ARG_CNT))
+		return -EINVAL;
 
-    return get_argvx_at(regs_uargv(regs, argno), idx, buf, len);
+	return get_argvx_at(regs_uargv(regs, argno), idx, buf, len);
 }
 
 /*
@@ -88,31 +93,30 @@ static int get_argc_at(const char __user *const __user *uargv)
  * filename: execve arg0, execveat arg1.  One bounded copy_from_user, and the
  * buffer is always NUL-terminated on success.
  */
- int get_path_arg(struct pt_regs *regs, unsigned int argno,
-                         char *buf, size_t len)
+int get_path_arg(struct pt_regs *regs, unsigned int argno, char *buf, size_t len)
 {
-    const char __user *upath;
-    long n;
+	const char __user *upath;
+	long n;
 
-    if (unlikely(!current->mm || !buf || len < 2))
-        return -EINVAL;
+	if (unlikely(!current->mm || !buf || len < 2))
+		return -EINVAL;
 
-    upath = (const char __user *)regs_arg(regs, argno);
-    if (unlikely(!upath))
-        return -EINVAL;
+	upath = (const char __user *)regs_arg(regs, argno);
+	if (unlikely(!upath))
+		return -EINVAL;
 
-    n = strncpy_from_user(buf, upath, len);
-    if (unlikely(n < 0))
-        return -EFAULT;
+	n = strncpy_from_user(buf, upath, len);
+	if (unlikely(n < 0))
+		return -EFAULT;
 
-    buf[len - 1] = '\0';
-    return (int)n;
+	buf[len - 1] = '\0';
+	return (int)n;
 }
 
- int get_argc(struct pt_regs *regs, unsigned int argno)
+int get_argc(struct pt_regs *regs, unsigned int argno)
 {
-    if (unlikely(!current->mm))
-        return -EINVAL;
+	if (unlikely(!current->mm))
+		return -EINVAL;
 
-    return get_argc_at(regs_uargv(regs, argno));
+	return get_argc_at(regs_uargv(regs, argno));
 }

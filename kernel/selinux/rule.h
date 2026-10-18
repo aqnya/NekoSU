@@ -34,18 +34,18 @@ void avc_reset(void);
 void sepolicy_batch_begin(void);
 void sepolicy_batch_end(void);
 
-int sepolicy_add_rule(const char *sname, const char *tname, const char *cname,
-		      const char *pname, int effect, bool invert);
-int sepolicy_add_xperm(const char *s, const char *t, const char *c,
-		       const char *range, int effect, bool invert);
+int sepolicy_add_rule(const char *sname, const char *tname, const char *cname, const char *pname,
+		      int effect, bool invert);
+int sepolicy_add_xperm(const char *s, const char *t, const char *c, const char *range, int effect,
+		       bool invert);
 int sepolicy_add_type(const char *name);
 int sepolicy_add_attribute(const char *name);
 int sepolicy_add_typeattribute(const char *type_name, const char *attr_name);
 int sepolicy_set_permissive(const char *type_name);
 int sepolicy_set_enforce(const char *type_name);
 int sepolicy_type_exists(const char *type_name);
-int sepolicy_add_type_transition(const char *s, const char *t, const char *c,
-				 const char *d, const char *obj);
+int sepolicy_add_type_transition(const char *s, const char *t, const char *c, const char *d,
+				 const char *obj);
 int sepolicy_add_type_change(const char *s, const char *t, const char *c, const char *d);
 int sepolicy_add_type_member(const char *s, const char *t, const char *c, const char *d);
 int sepolicy_add_genfscon(const char *fs_name, const char *path, const char *ctx);

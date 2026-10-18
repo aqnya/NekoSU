@@ -43,7 +43,7 @@
  * kernel). Functions the kernel calls back live in other files.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 /* the pre-hook policy, restored on unload */
@@ -70,8 +70,8 @@ static struct selinux_policy *nksu_policy_dup(struct selinux_policy *old_pol)
 
 	// policydb_read() adds each type to its own attribute map; keep one
 	// spare ebitmap entry per type so the round-trip never returns -EINVAL.
-	len = old_pol->policydb.len + (size_t)old_pol->policydb.p_types.nprim *
-					      (sizeof(u32) + sizeof(u64));
+	len = old_pol->policydb.len +
+	      (size_t)old_pol->policydb.p_types.nprim * (sizeof(u32) + sizeof(u64));
 
 	data = vmalloc(len);
 	if (!data)
@@ -145,7 +145,8 @@ int sepolicy_dup_and_apply(void)
 		return -EBUSY;
 	}
 
-	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex)
+	{
 		orig = rcu_dereference_protected(selinux_state.policy,
 						 lockdep_is_held(&selinux_state.policy_mutex));
 		if (!orig) {
@@ -179,7 +180,8 @@ void sepolicy_restore(void)
 		return;
 	}
 
-	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex)
+	{
 		live = rcu_dereference_protected(selinux_state.policy,
 						 lockdep_is_held(&selinux_state.policy_mutex));
 		if (live == nksu_work_policy)
@@ -219,8 +221,7 @@ void sepolicy_restore(void)
 
 #define ALL NULL
 
-static void apply(const char *src, const char *tgt, const char *cls,
-		  const char *perm)
+static void apply(const char *src, const char *tgt, const char *cls, const char *perm)
 {
 	sepolicy_add_rule(src, tgt, cls, perm, AVTAB_ALLOWED, false);
 }
@@ -279,14 +280,11 @@ int load_policy(void)
 			"devpts",
 		};
 		size_t i;
-		size_t n = sizeof(app_devpts_types) /
-			   sizeof(app_devpts_types[0]);
+		size_t n = sizeof(app_devpts_types) / sizeof(app_devpts_types[0]);
 
 		for (i = 0; i < n; i++) {
-			apply("system_server", app_devpts_types[i], "chr_file",
-			      ALL);
-			sepolicy_add_typeattribute(app_devpts_types[i],
-						   "mlstrustedobject");
+			apply("system_server", app_devpts_types[i], "chr_file", ALL);
+			sepolicy_add_typeattribute(app_devpts_types[i], "mlstrustedobject");
 		}
 	}
 

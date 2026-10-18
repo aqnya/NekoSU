@@ -42,272 +42,274 @@ static DEFINE_MUTEX(nksu_lsm_hook_lock);
 
 static int nksu_lsm_patch_slot(void **slot, void *value)
 {
-    void *patched = value;
-    int ret;
+	void *patched = value;
+	int ret;
 
-    ret = nksu_patch_text(slot, &patched, sizeof(patched));
-    if (!ret)
-        smp_wmb();
-    return ret;
+	ret = nksu_patch_text(slot, &patched, sizeof(patched));
+	if (!ret)
+		smp_wmb();
+	return ret;
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 static int nksu_lsm_update_scall(struct lsm_static_call *scall, void *value)
 {
-    __static_call_update(scall->key, scall->trampoline, value);
-    smp_wmb();
-    return 0;
+	__static_call_update(scall->key, scall->trampoline, value);
+	smp_wmb();
+	return 0;
 }
 #endif
 
 int nksu_lsm_hook(struct nksu_lsm_hook *hook)
 {
-    int ret = 0;
-    struct security_hook_list *entry = NULL;
-    void *target, *target_alt = NULL;
-    const char *target_name;
+	int ret = 0;
+	struct security_hook_list *entry = NULL;
+	void *target, *target_alt = NULL;
+	const char *target_name;
 
-    if (!hook || !hook->replacement)
-        return -EINVAL;
+	if (!hook || !hook->replacement)
+		return -EINVAL;
 
-    mutex_lock(&nksu_lsm_hook_lock);
+	mutex_lock(&nksu_lsm_hook_lock);
 
-    if (hook->entry) {
-        ret = -EALREADY;
-        goto out_unlock;
-    }
+	if (hook->entry) {
+		ret = -EALREADY;
+		goto out_unlock;
+	}
 
-    target_name = hook->target_name;
-    if (!target_name) {
-        ret = -EINVAL;
-        goto out_unlock;
-    }
+	target_name = hook->target_name;
+	if (!target_name) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
-    target = hook->original;
-    if (!target) {
-        char buf[256];
+	target = hook->original;
+	if (!target) {
+		char buf[256];
 
-        /*
+		/*
          * Under CFI_CLANG (before KCFI, i.e. < 6.1) an address-taken
          * function is referenced through its .cfi_jt jump-table stub,
          * so the LSM hook table stores that stub, not the canonical
          * symbol.  Resolve both and match whichever the table holds
          * (mirrors KernelSU's ksu_resolve_symbol_for_functable_hook).
          */
-        target_alt = (void *)nksu_ksym_lookup(target_name);
-        snprintf(buf, sizeof(buf), "%s.cfi_jt", target_name);
-        target = (void *)nksu_ksym_lookup(buf);
-        if (!target)
-            target = target_alt;
-        if (!target) {
-            pr_err("[lsm_hook] cannot resolve %s\n", target_name);
-            ret = -ENOENT;
-            goto out_unlock;
-        }
-    }
-    pr_debug("[lsm_hook] %s target %px alt %px\n", target_name, target, target_alt);
+		target_alt = (void *)nksu_ksym_lookup(target_name);
+		snprintf(buf, sizeof(buf), "%s.cfi_jt", target_name);
+		target = (void *)nksu_ksym_lookup(buf);
+		if (!target)
+			target = target_alt;
+		if (!target) {
+			pr_err("[lsm_hook] cannot resolve %s\n", target_name);
+			ret = -ENOENT;
+			goto out_unlock;
+		}
+	}
+	pr_debug("[lsm_hook] %s target %px alt %px\n", target_name, target, target_alt);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-    {
-        unsigned long scalls_addr, active_addr, sym_size;
-        u32 lsm_active_cnt = 5;
-        size_t scalls_count, i;
-        struct lsm_static_call *scalls;
-        struct security_hook_list *selected_entry = NULL;
-        struct lsm_static_call *selected_scall = NULL;
-        void **selected_slot = NULL;
-        void *selected_origin = NULL;
-        int (*lookup_size)(unsigned long, unsigned long *, unsigned long *) = NULL;
+	{
+		unsigned long scalls_addr, active_addr, sym_size;
+		u32 lsm_active_cnt = 5;
+		size_t scalls_count, i;
+		struct lsm_static_call *scalls;
+		struct security_hook_list *selected_entry = NULL;
+		struct lsm_static_call *selected_scall = NULL;
+		void **selected_slot = NULL;
+		void *selected_origin = NULL;
+		int (*lookup_size)(unsigned long, unsigned long *, unsigned long *) = NULL;
 
-        lookup_size = (typeof(lookup_size))nksu_ksym_lookup("kallsyms_lookup_size_offset");
+		lookup_size = (typeof(lookup_size))nksu_ksym_lookup("kallsyms_lookup_size_offset");
 
-        scalls_addr = nksu_ksym_lookup("static_calls_table");
-        if (!scalls_addr) {
-            pr_err("[lsm_hook] no static_calls_table\n");
-            ret = -ENOSYS;
-            goto out_unlock;
-        }
+		scalls_addr = nksu_ksym_lookup("static_calls_table");
+		if (!scalls_addr) {
+			pr_err("[lsm_hook] no static_calls_table\n");
+			ret = -ENOSYS;
+			goto out_unlock;
+		}
 
-        sym_size = sizeof(struct lsm_static_calls_table);
-        if (lookup_size)
-            lookup_size(scalls_addr, &sym_size, NULL);
-        else
-            pr_warn("[lsm_hook] no kallsyms_lookup_size_offset\n");
+		sym_size = sizeof(struct lsm_static_calls_table);
+		if (lookup_size)
+			lookup_size(scalls_addr, &sym_size, NULL);
+		else
+			pr_warn("[lsm_hook] no kallsyms_lookup_size_offset\n");
 
-        active_addr = nksu_ksym_lookup("lsm_active_cnt");
-        if (active_addr)
-            lsm_active_cnt = *(u32 *)active_addr;
-        if (lsm_active_cnt == 0 || lsm_active_cnt > 20) {
-            pr_err("[lsm_hook] bad lsm_active_cnt %u\n", lsm_active_cnt);
-            ret = -EINVAL;
-            goto out_unlock;
-        }
-        if (sym_size % (lsm_active_cnt * sizeof(struct lsm_static_call)))
-            pr_warn("[lsm_hook] odd static_calls_table size\n");
-        scalls_count = sym_size / sizeof(struct lsm_static_call);
-        if (!scalls_count) {
-            ret = -ENOSYS;
-            goto out_unlock;
-        }
+		active_addr = nksu_ksym_lookup("lsm_active_cnt");
+		if (active_addr)
+			lsm_active_cnt = *(u32 *)active_addr;
+		if (lsm_active_cnt == 0 || lsm_active_cnt > 20) {
+			pr_err("[lsm_hook] bad lsm_active_cnt %u\n", lsm_active_cnt);
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		if (sym_size % (lsm_active_cnt * sizeof(struct lsm_static_call)))
+			pr_warn("[lsm_hook] odd static_calls_table size\n");
+		scalls_count = sym_size / sizeof(struct lsm_static_call);
+		if (!scalls_count) {
+			ret = -ENOSYS;
+			goto out_unlock;
+		}
 
-        scalls = (struct lsm_static_call *)scalls_addr;
-        pr_debug("[lsm_hook] static_calls_table %lu size=%lu count=%zu active=%u\n", scalls_addr, sym_size,
-                 scalls_count, lsm_active_cnt);
-        for (i = 0; i < scalls_count; i++) {
-            struct lsm_static_call *scall = &scalls[i];
-            void **slot;
-            void *cur;
+		scalls = (struct lsm_static_call *)scalls_addr;
+		pr_debug("[lsm_hook] static_calls_table %lu size=%lu count=%zu active=%u\n",
+			 scalls_addr, sym_size, scalls_count, lsm_active_cnt);
+		for (i = 0; i < scalls_count; i++) {
+			struct lsm_static_call *scall = &scalls[i];
+			void **slot;
+			void *cur;
 
-            entry = READ_ONCE(scall->hl);
-            if (!entry)
-                continue;
-            slot = (void **)((char *)entry + hook->hook_offset);
-            cur = READ_ONCE(*slot);
-            if (cur == hook->replacement) {
-                ret = -EALREADY;
-                goto out_unlock;
-            }
-            if (cur != target && (!target_alt || cur != target_alt))
-                continue;
-            selected_entry = entry;
-            selected_scall = scall;
-            selected_slot = slot;
-            selected_origin = cur;
-            break;
-        }
+			entry = READ_ONCE(scall->hl);
+			if (!entry)
+				continue;
+			slot = (void **)((char *)entry + hook->hook_offset);
+			cur = READ_ONCE(*slot);
+			if (cur == hook->replacement) {
+				ret = -EALREADY;
+				goto out_unlock;
+			}
+			if (cur != target && (!target_alt || cur != target_alt))
+				continue;
+			selected_entry = entry;
+			selected_scall = scall;
+			selected_slot = slot;
+			selected_origin = cur;
+			break;
+		}
 
-        if (!selected_scall) {
-            pr_err("[lsm_hook] %s not found: target %s, table=%lu count=%zu hook_off=%zu\n", hook->head_name,
-                   target_name, scalls_addr, scalls_count, hook->hook_offset);
-            ret = -ENOENT;
-            goto out_unlock;
-        }
+		if (!selected_scall) {
+			pr_err("[lsm_hook] %s not found: target %s, table=%lu count=%zu hook_off=%zu\n",
+			       hook->head_name, target_name, scalls_addr, scalls_count,
+			       hook->hook_offset);
+			ret = -ENOENT;
+			goto out_unlock;
+		}
 
-        hook->original = selected_origin;
+		hook->original = selected_origin;
 
-        ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
-        if (ret) {
-            pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
-            goto out_unlock;
-        }
-        if (nksu_lsm_update_scall(selected_scall, hook->replacement)) {
-            nksu_lsm_patch_slot(selected_slot, selected_origin);
-            ret = -EFAULT;
-            goto out_unlock;
-        }
-        if (!selected_origin)
-            static_branch_enable(selected_scall->active);
+		ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
+		if (ret) {
+			pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
+			goto out_unlock;
+		}
+		if (nksu_lsm_update_scall(selected_scall, hook->replacement)) {
+			nksu_lsm_patch_slot(selected_slot, selected_origin);
+			ret = -EFAULT;
+			goto out_unlock;
+		}
+		if (!selected_origin)
+			static_branch_enable(selected_scall->active);
 
-        hook->entry = selected_entry;
-        hook->scall = selected_scall;
-        pr_info("[lsm_hook] hooked %s\n", target_name);
-    }
+		hook->entry = selected_entry;
+		hook->scall = selected_scall;
+		pr_info("[lsm_hook] hooked %s\n", target_name);
+	}
 #else
-    {
-        unsigned long heads_addr, heads_size;
-        unsigned int heads_count, scanned = 0;
-        struct hlist_head *head, *head_end;
-        struct security_hook_list *selected_entry = NULL;
-        void **selected_slot = NULL;
-        void *selected_origin = NULL;
+	{
+		unsigned long heads_addr, heads_size;
+		unsigned int heads_count, scanned = 0;
+		struct hlist_head *head, *head_end;
+		struct security_hook_list *selected_entry = NULL;
+		void **selected_slot = NULL;
+		void *selected_origin = NULL;
 
-        heads_addr = nksu_ksym_lookup("security_hook_heads");
-        if (!heads_addr) {
-            pr_err("[lsm_hook] no security_hook_heads\n");
-            ret = -ENOENT;
-            goto out_unlock;
-        }
+		heads_addr = nksu_ksym_lookup("security_hook_heads");
+		if (!heads_addr) {
+			pr_err("[lsm_hook] no security_hook_heads\n");
+			ret = -ENOENT;
+			goto out_unlock;
+		}
 
-        /*
+		/*
          * The number of heads is fixed by lsm_hook_defs.h, so sizeof()
          * is exact and independent of the (possibly randomized) field
          * order; no need for the kallsyms symbol size here.
          */
-        heads_size = sizeof(struct security_hook_heads);
-        heads_count = heads_size / sizeof(struct hlist_head);
+		heads_size = sizeof(struct security_hook_heads);
+		heads_count = heads_size / sizeof(struct hlist_head);
 
-        head = (struct hlist_head *)heads_addr;
-        head_end = head + heads_count;
-        for (; head < head_end; head++) {
-            hlist_for_each_entry (entry, head, list) {
-                void **slot = (void **)((char *)entry + hook->hook_offset);
-                void *cur = READ_ONCE(*slot);
+		head = (struct hlist_head *)heads_addr;
+		head_end = head + heads_count;
+		for (; head < head_end; head++) {
+			hlist_for_each_entry(entry, head, list) {
+				void **slot = (void **)((char *)entry + hook->hook_offset);
+				void *cur = READ_ONCE(*slot);
 
-                scanned++;
-                if (cur == hook->replacement) {
-                    ret = -EALREADY;
-                    goto out_unlock;
-                }
-                if (cur == target || (target_alt && cur == target_alt)) {
-                    selected_entry = entry;
-                    selected_slot = slot;
-                    selected_origin = cur;
-                    break;
-                }
-            }
-            if (selected_entry)
-                break;
-        }
+				scanned++;
+				if (cur == hook->replacement) {
+					ret = -EALREADY;
+					goto out_unlock;
+				}
+				if (cur == target || (target_alt && cur == target_alt)) {
+					selected_entry = entry;
+					selected_slot = slot;
+					selected_origin = cur;
+					break;
+				}
+			}
+			if (selected_entry)
+				break;
+		}
 
-        if (!selected_entry) {
-            pr_err("[lsm_hook] %s not found: target %s, heads=%lu count=%u scanned=%u hook_off=%zu\n", hook->head_name,
-                   target_name, heads_addr, heads_count, scanned, hook->hook_offset);
-            ret = -ENOENT;
-            goto out_unlock;
-        }
+		if (!selected_entry) {
+			pr_err("[lsm_hook] %s not found: target %s, heads=%lu count=%u scanned=%u hook_off=%zu\n",
+			       hook->head_name, target_name, heads_addr, heads_count, scanned,
+			       hook->hook_offset);
+			ret = -ENOENT;
+			goto out_unlock;
+		}
 
-        hook->original = selected_origin;
+		hook->original = selected_origin;
 
-        ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
-        if (ret) {
-            pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
-            goto out_unlock;
-        }
+		ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
+		if (ret) {
+			pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
+			goto out_unlock;
+		}
 
-        hook->entry = selected_entry;
-        pr_info("[lsm_hook] hooked %s\n", target_name);
-    }
+		hook->entry = selected_entry;
+		pr_info("[lsm_hook] hooked %s\n", target_name);
+	}
 #endif
 
 out_unlock:
-    mutex_unlock(&nksu_lsm_hook_lock);
-    return ret;
+	mutex_unlock(&nksu_lsm_hook_lock);
+	return ret;
 }
 
 void nksu_lsm_unhook(struct nksu_lsm_hook *hook)
 {
-    void **slot;
+	void **slot;
 
-    if (!hook)
-        return;
+	if (!hook)
+		return;
 
-    mutex_lock(&nksu_lsm_hook_lock);
+	mutex_lock(&nksu_lsm_hook_lock);
 
-    if (!hook->entry) {
-        mutex_unlock(&nksu_lsm_hook_lock);
-        return;
-    }
+	if (!hook->entry) {
+		mutex_unlock(&nksu_lsm_hook_lock);
+		return;
+	}
 
-    slot = (void **)((char *)hook->entry + hook->hook_offset);
-    if (nksu_lsm_patch_slot(slot, hook->original)) {
-        pr_err("[lsm_hook] restore %s failed\n", hook->target_name);
-        mutex_unlock(&nksu_lsm_hook_lock);
-        return;
-    }
+	slot = (void **)((char *)hook->entry + hook->hook_offset);
+	if (nksu_lsm_patch_slot(slot, hook->original)) {
+		pr_err("[lsm_hook] restore %s failed\n", hook->target_name);
+		mutex_unlock(&nksu_lsm_hook_lock);
+		return;
+	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-    if (hook->scall && nksu_lsm_update_scall(hook->scall, hook->original)) {
-        nksu_lsm_patch_slot(slot, hook->replacement);
-        mutex_unlock(&nksu_lsm_hook_lock);
-        return;
-    }
-    hook->scall = NULL;
+	if (hook->scall && nksu_lsm_update_scall(hook->scall, hook->original)) {
+		nksu_lsm_patch_slot(slot, hook->replacement);
+		mutex_unlock(&nksu_lsm_hook_lock);
+		return;
+	}
+	hook->scall = NULL;
 #endif
 
-    synchronize_rcu();
-    hook->entry = NULL;
-    pr_info("[lsm_hook] restored %s\n", hook->target_name);
-    mutex_unlock(&nksu_lsm_hook_lock);
+	synchronize_rcu();
+	hook->entry = NULL;
+	pr_info("[lsm_hook] restored %s\n", hook->target_name);
+	mutex_unlock(&nksu_lsm_hook_lock);
 }
 
 #if defined(__clang__)

@@ -25,7 +25,7 @@
  * kernel). Functions the kernel calls back live in other files.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 int privilege_validate(const struct privilege_desc *desc)
@@ -68,13 +68,13 @@ static int cred_set_uidgid(struct cred *new_cred, uid_t uid, gid_t gid)
 	if (!uid_valid(kuid) || !gid_valid(kgid))
 		return -EINVAL;
 
-	new_cred->uid   = kuid;
-	new_cred->euid  = kuid;
-	new_cred->suid  = kuid;
+	new_cred->uid = kuid;
+	new_cred->euid = kuid;
+	new_cred->suid = kuid;
 	new_cred->fsuid = kuid;
-	new_cred->gid   = kgid;
-	new_cred->egid  = kgid;
-	new_cred->sgid  = kgid;
+	new_cred->gid = kgid;
+	new_cred->egid = kgid;
+	new_cred->sgid = kgid;
 	new_cred->fsgid = kgid;
 	new_cred->securebits = 0;
 
@@ -109,7 +109,7 @@ static void cred_raise_caps(struct cred *new_cred, kernel_cap_t caps)
 {
 	new_cred->cap_effective = cap_combine(new_cred->cap_effective, caps);
 	new_cred->cap_permitted = cap_combine(new_cred->cap_permitted, caps);
-	new_cred->cap_bset      = cap_combine(new_cred->cap_bset, caps);
+	new_cred->cap_bset = cap_combine(new_cred->cap_bset, caps);
 }
 
 /*
@@ -117,8 +117,7 @@ static void cred_raise_caps(struct cred *new_cred, kernel_cap_t caps)
  */
 static bool privilege_needs_cred(const struct privilege_desc *desc)
 {
-	return desc->set_uidgid ||
-	       !cap_isclear(desc->caps_to_raise) ||
+	return desc->set_uidgid || !cap_isclear(desc->caps_to_raise) ||
 	       (desc->selinux_domain != NULL);
 }
 
@@ -192,8 +191,7 @@ int privilege_escalate_from_profile(uid_t *root_uid_out)
 	uid_t caller_uid;
 
 	caller_uid = from_kuid(current_user_ns(), current_uid());
-	if (nksu_profile_get(caller_uid, &root_uid, &caps, &ns, domain,
-			     sizeof(domain)) < 0) {
+	if (nksu_profile_get(caller_uid, &root_uid, &caps, &ns, domain, sizeof(domain)) < 0) {
 		pr_err("no profile found for UID %u\n", caller_uid);
 		return -ENOENT;
 	}
@@ -204,8 +202,8 @@ int privilege_escalate_from_profile(uid_t *root_uid_out)
 	desc.set_uidgid = true;
 	desc.uid = root_uid;
 	desc.gid = root_uid;
-	desc.caps_to_raise   = caps;
-	desc.selinux_domain  = domain[0] ? domain : NULL;
+	desc.caps_to_raise = caps;
+	desc.selinux_domain = domain[0] ? domain : NULL;
 	desc.disable_seccomp = true;
 	desc.switch_to_init_ns = (ns == NKSU_NS_GLOBAL);
 

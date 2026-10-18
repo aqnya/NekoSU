@@ -18,9 +18,11 @@ struct av_decision;
  * fallbacks.  Idempotent. */
 int nksu_engine_init(void);
 
-int nksu_engine_context_to_sid(struct selinux_policy *policy, const char *scontext, u32 scontext_len, u32 *sid,
-                               u32 def_sid, gfp_t gfp_flags);
-int nksu_engine_sid_to_context(struct selinux_policy *policy, u32 sid, char **scontext, u32 *scontext_len);
-void nksu_engine_compute_av(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass, struct av_decision *avd);
+int nksu_engine_context_to_sid(struct selinux_policy *policy, const char *scontext,
+			       u32 scontext_len, u32 *sid, u32 def_sid, gfp_t gfp_flags);
+int nksu_engine_sid_to_context(struct selinux_policy *policy, u32 sid, char **scontext,
+			       u32 *scontext_len);
+void nksu_engine_compute_av(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,
+			    struct av_decision *avd);
 
 #endif /* _NKSU_SELINUX_ENGINE_H */

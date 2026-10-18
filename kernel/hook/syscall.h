@@ -18,8 +18,7 @@ extern syscall_fn_t *syscall_table;
 
 int syscall_table_resolve(void);
 
-int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous,
-                      const char *tag);
+int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous, const char *tag);
 
 /* Put a single previously hooked slot back and drop its record. */
 int syscall_slot_unhook(int nr);

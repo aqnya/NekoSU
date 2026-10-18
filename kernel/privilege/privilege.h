@@ -14,13 +14,13 @@
  * builds a descriptor from it.
  */
 struct privilege_desc {
-	bool set_uidgid;            /* set the UID/GID set below */
-	uid_t uid;                  /* target uid (0 = root) */
-	gid_t gid;                  /* target gid */
+	bool set_uidgid; /* set the UID/GID set below */
+	uid_t uid; /* target uid (0 = root) */
+	gid_t gid; /* target gid */
 	kernel_cap_t caps_to_raise; /* capabilities to add to effective/permitted/bset */
 	const char *selinux_domain; /* target SELinux domain (NULL = no change) */
-	bool disable_seccomp;       /* reset seccomp to DISABLED */
-	bool switch_to_init_ns;     /* switch to init namespace */
+	bool disable_seccomp; /* reset seccomp to DISABLED */
+	bool switch_to_init_ns; /* switch to init namespace */
 };
 
 /*

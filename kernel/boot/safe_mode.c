@@ -31,7 +31,7 @@
 #include "klog.h"
 #include "boot/safe_mode.h"
 
-#define NKSU_SAFE_PRESSES   3
+#define NKSU_SAFE_PRESSES 3
 
 static atomic_t nksu_safe_presses = ATOMIC_INIT(0);
 /* Latched once the press threshold is reached. */
@@ -52,8 +52,8 @@ bool nksu_safe_mode_requested(void)
  * 6.12, while input_handler->events() gained a return value and dropped the
  * const on its value array in newer kernels.
  */
-static void nksu_safe_event(struct input_handle *handle, unsigned int type,
-			    unsigned int code, int value)
+static void nksu_safe_event(struct input_handle *handle, unsigned int type, unsigned int code,
+			    int value)
 {
 	if (READ_ONCE(nksu_safe_disarmed) || READ_ONCE(nksu_safe_requested))
 		return;
@@ -68,8 +68,7 @@ static void nksu_safe_event(struct input_handle *handle, unsigned int type,
 	}
 }
 
-static int nksu_safe_connect(struct input_handler *handler,
-			     struct input_dev *dev,
+static int nksu_safe_connect(struct input_handler *handler, struct input_dev *dev,
 			     const struct input_device_id *id)
 {
 	struct input_handle *handle;
@@ -110,12 +109,11 @@ static void nksu_safe_disconnect(struct input_handle *handle)
 /* Only attach to devices that actually expose a volume-up key. */
 static const struct input_device_id nksu_safe_ids[] = {
 	{
-		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
-			 INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_KEYBIT,
 		.evbit = { BIT_MASK(EV_KEY) },
 		.keybit = { [BIT_WORD(KEY_VOLUMEUP)] = BIT_MASK(KEY_VOLUMEUP) },
 	},
-	{ },
+	{},
 };
 
 static struct input_handler nksu_safe_handler = {
@@ -157,8 +155,7 @@ int nksu_safe_mode_init(void)
 	 */
 	ret = input_register_handler(&nksu_safe_handler);
 	if (ret) {
-		pr_err("[safe_mode] input handler registration failed: %d\n",
-		       ret);
+		pr_err("[safe_mode] input handler registration failed: %d\n", ret);
 		return 0;
 	}
 	nksu_safe_input_registered = true;

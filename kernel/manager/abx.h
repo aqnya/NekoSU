@@ -44,8 +44,7 @@ typedef bool (*abx_cert_match)(const u8 *cert, size_t cert_len, void *ctx);
  * under, and lets the caller read the shared uid straight from the entry.
  * Returns true when such a package and a certificate were found.
  */
-bool abx_find_package_by_cert(const u8 *buf, size_t len,
-			      abx_cert_match match, void *ctx,
+bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
 			      struct abx_package *out);
 
 #endif /* NKSU_MANAGER_ABX_H */

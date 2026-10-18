@@ -125,11 +125,14 @@ static int apply_one(const struct nksu_sepol_cmd *h, const char *const *a)
 			return -EINVAL;
 		switch (h->subcmd) {
 		case NKSU_SEPOLICY_SUBCMD_XPERM_ALLOW:
-			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_ALLOWED, false);
+			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_ALLOWED,
+						  false);
 		case NKSU_SEPOLICY_SUBCMD_XPERM_AUDITALLOW:
-			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_AUDITALLOW, false);
+			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_AUDITALLOW,
+						  false);
 		case NKSU_SEPOLICY_SUBCMD_XPERM_DONTAUDIT:
-			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_DONTAUDIT, false);
+			return sepolicy_add_xperm(a[0], a[1], a[2], a[4], AVTAB_XPERMS_DONTAUDIT,
+						  false);
 		}
 		return -EINVAL;
 

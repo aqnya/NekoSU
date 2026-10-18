@@ -18,10 +18,10 @@
 #include <linux/string.h>
 #include <linux/types.h>
 
-#define NKSU_PROFILE_MAGIC	0x4b4e5355 /* "NKSU" */
+#define NKSU_PROFILE_MAGIC 0x4b4e5355 /* "NKSU" */
 
-#define NKSU_PROFILE_INIT_CAP	16	/* initial entry slots */
-#define NKSU_PROFILE_INIT_ARENA	256	/* initial string arena size */
+#define NKSU_PROFILE_INIT_CAP 16 /* initial entry slots */
+#define NKSU_PROFILE_INIT_ARENA 256 /* initial string arena size */
 /*
  * The presence bitmap is a fast path for the common (low) uid range only.
  * UIDs at or above it are served by the sorted entry array (binary search), so
@@ -29,13 +29,13 @@
  * (user * 100000 + app) are far above this.  Must be a multiple of
  * BITS_PER_LONG (see the static_assert below).
  */
-#define NKSU_BITMAP_MAX_UID	32768
+#define NKSU_BITMAP_MAX_UID 32768
 
 /* Upper bound on a stored SELinux domain; callers pass much shorter ones. */
-#define NKSU_PROFILE_DOMAIN_MAX	256
+#define NKSU_PROFILE_DOMAIN_MAX 256
 
 /* Sentinel stored in nksu_profile_entry.domain_off when there is no domain. */
-#define NKSU_DOMAIN_NONE	0xffffffffU
+#define NKSU_DOMAIN_NONE 0xffffffffU
 
 /* Capability storage: a fixed 64-bit blob whose layout is version-neutral. */
 struct nksu_profile_caps {
@@ -46,11 +46,11 @@ struct nksu_profile_caps {
 /* A single profile entry. */
 struct nksu_profile_entry {
 	u32 uid;
-	u32 root_uid;		/* uid the authorized process switches to (0 = root) */
+	u32 root_uid; /* uid the authorized process switches to (0 = root) */
 	struct nksu_profile_caps caps;
-	u32 domain_off;		/* offset into arena, NKSU_DOMAIN_NONE if none */
-	u32 domain_len;		/* bytes of domain at domain_off, 0 if none */
-	int ns;			/* NKSU_NS_* */
+	u32 domain_off; /* offset into arena, NKSU_DOMAIN_NONE if none */
+	u32 domain_len; /* bytes of domain at domain_off, 0 if none */
+	int ns; /* NKSU_NS_* */
 };
 
 /*
@@ -67,13 +67,13 @@ struct nksu_profile_entry {
 struct nksu_profile_blob {
 	struct rcu_head rcu;
 	u32 magic;
-	u32 version;		/* monotonic generation counter */
-	u32 count;		/* active entries */
-	u32 capacity;		/* total entry slots */
-	u32 arena_used;		/* bytes consumed in the arena */
-	u32 arena_cap;		/* total arena capacity */
-	DECLARE_BITMAP(bitmap, NKSU_BITMAP_MAX_UID);	/* fast UID presence bitmap */
-	char *arena;		/* domain string storage (may be NULL when empty) */
+	u32 version; /* monotonic generation counter */
+	u32 count; /* active entries */
+	u32 capacity; /* total entry slots */
+	u32 arena_used; /* bytes consumed in the arena */
+	u32 arena_cap; /* total arena capacity */
+	DECLARE_BITMAP(bitmap, NKSU_BITMAP_MAX_UID); /* fast UID presence bitmap */
+	char *arena; /* domain string storage (may be NULL when empty) */
 	struct nksu_profile_entry entries[];
 };
 
@@ -82,22 +82,18 @@ struct nksu_profile_blob {
  * bitmap must cover every addressable uid, so pin both at compile time
  * (C11 static_assert).
  */
-static_assert(sizeof(struct nksu_profile_entry) == 28,
-	      "nksu_profile_entry layout changed");
-static_assert(offsetof(struct nksu_profile_entry, caps) == 8,
-	      "nksu_profile_entry.caps moved");
+static_assert(sizeof(struct nksu_profile_entry) == 28, "nksu_profile_entry layout changed");
+static_assert(offsetof(struct nksu_profile_entry, caps) == 8, "nksu_profile_entry.caps moved");
 static_assert(offsetof(struct nksu_profile_entry, domain_off) == 16,
 	      "nksu_profile_entry.domain_off moved");
 static_assert(offsetof(struct nksu_profile_entry, domain_len) == 20,
 	      "nksu_profile_entry.domain_len moved");
-static_assert(offsetof(struct nksu_profile_entry, ns) == 24,
-	      "nksu_profile_entry.ns moved");
+static_assert(offsetof(struct nksu_profile_entry, ns) == 24, "nksu_profile_entry.ns moved");
 static_assert(sizeof(struct nksu_profile_caps) == sizeof(u64),
 	      "caps storage must hold a 64-bit capability set");
 static_assert(sizeof(kernel_cap_t) == sizeof(struct nksu_profile_caps),
 	      "kernel_cap_t size must match the caps storage slot");
-static_assert(BITS_TO_LONGS(NKSU_BITMAP_MAX_UID) * BITS_PER_LONG ==
-		      NKSU_BITMAP_MAX_UID,
+static_assert(BITS_TO_LONGS(NKSU_BITMAP_MAX_UID) * BITS_PER_LONG == NKSU_BITMAP_MAX_UID,
 	      "bitmap must cover NKSU_BITMAP_MAX_UID uids exactly");
 static_assert(sizeof(struct nksu_profile_blob) % _Alignof(struct nksu_profile_entry) == 0,
 	      "blob header must leave the entry array aligned");
@@ -118,11 +114,10 @@ bool nksu_profile_has_uid(uid_t uid);
  *
  * Returns 0 on success, -ENOENT if no profile exists for uid.
  */
-int nksu_profile_get(uid_t uid, uid_t *root_uid, kernel_cap_t *caps, int *ns,
-		     char *domain_buf, size_t domain_len);
+int nksu_profile_get(uid_t uid, uid_t *root_uid, kernel_cap_t *caps, int *ns, char *domain_buf,
+		     size_t domain_len);
 
-int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps,
-		     const char *domain, int ns);
+int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps, const char *domain, int ns);
 int nksu_profile_set_caps(uid_t uid, kernel_cap_t caps);
 int nksu_profile_set_domain(uid_t uid, const char *domain);
 int nksu_profile_set_ns(uid_t uid, int ns);
@@ -149,10 +144,8 @@ u32 nksu_profile_count(void);
  * the RCU read lock, so it must not sleep; `domain` is a non-terminated view
  * into the arena, valid only for the duration of the call.
  */
-typedef void (*nksu_profile_iter_fn)(uid_t uid, uid_t root_uid,
-				     kernel_cap_t caps, int ns,
-				     const char *domain, size_t domain_len,
-				     void *ctx);
+typedef void (*nksu_profile_iter_fn)(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns,
+				     const char *domain, size_t domain_len, void *ctx);
 void nksu_profile_foreach(nksu_profile_iter_fn fn, void *ctx);
 
 /*

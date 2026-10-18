@@ -80,7 +80,7 @@ typedef struct selinux_state nksu_fake_state_t;
  * indirect calls.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 /* Feature name in the registry, and the key in the persistent enabled set. */
@@ -95,27 +95,27 @@ typedef struct selinux_state nksu_fake_state_t;
 
 /* Index into selinuxfs's `write_op` table, mirroring sel_inos in selinuxfs.c. */
 enum sel_inos {
-    SEL_ROOT_INO = 2,
-    SEL_LOAD,
-    SEL_ENFORCE,
-    SEL_CONTEXT,
-    SEL_ACCESS,
-    SEL_CREATE,
-    SEL_RELABEL,
-    SEL_USER,
-    SEL_POLICYVERS,
-    SEL_COMMIT_BOOLS,
-    SEL_MLS,
-    SEL_DISABLE,
-    SEL_MEMBER,
-    SEL_CHECKREQPROT,
-    SEL_COMPAT_NET,
-    SEL_REJECT_UNKNOWN,
-    SEL_DENY_UNKNOWN,
-    SEL_STATUS,
-    SEL_POLICY,
-    SEL_VALIDATE_TRANS,
-    SEL_INO_NEXT,
+	SEL_ROOT_INO = 2,
+	SEL_LOAD,
+	SEL_ENFORCE,
+	SEL_CONTEXT,
+	SEL_ACCESS,
+	SEL_CREATE,
+	SEL_RELABEL,
+	SEL_USER,
+	SEL_POLICYVERS,
+	SEL_COMMIT_BOOLS,
+	SEL_MLS,
+	SEL_DISABLE,
+	SEL_MEMBER,
+	SEL_CHECKREQPROT,
+	SEL_COMPAT_NET,
+	SEL_REJECT_UNKNOWN,
+	SEL_DENY_UNKNOWN,
+	SEL_STATUS,
+	SEL_POLICY,
+	SEL_VALIDATE_TRANS,
+	SEL_INO_NEXT,
 };
 
 typedef ssize_t (*write_op_fn)(struct file *, char *, size_t);
@@ -155,83 +155,83 @@ extern bool late_load;
 
 static void nksu_fake_status_prepare(void)
 {
-    struct selinux_kernel_status *cur, *copy;
-    struct page *page;
+	struct selinux_kernel_status *cur, *copy;
+	struct page *page;
 
-    mutex_lock(&selinux_state.status_lock);
-    if (fake_status)
-        goto out;
-    if (!selinux_state.status_page) {
-        pr_warn("[selinux_hide] status page not ready\n");
-        goto out;
-    }
+	mutex_lock(&selinux_state.status_lock);
+	if (fake_status)
+		goto out;
+	if (!selinux_state.status_page) {
+		pr_warn("[selinux_hide] status page not ready\n");
+		goto out;
+	}
 
-    cur = page_address(selinux_state.status_page);
-    if (!cur->enforcing && !late_load) {
-        pr_warn("[selinux_hide] permissive, fake status skipped\n");
-        goto out;
-    }
+	cur = page_address(selinux_state.status_page);
+	if (!cur->enforcing && !late_load) {
+		pr_warn("[selinux_hide] permissive, fake status skipped\n");
+		goto out;
+	}
 
-    page = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    if (!page)
-        goto out;
+	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!page)
+		goto out;
 
-    copy = page_address(page);
-    memcpy(copy, cur, sizeof(*copy));
+	copy = page_address(page);
+	memcpy(copy, cur, sizeof(*copy));
 
-    if (late_load) {
-        /*
+	if (late_load) {
+		/*
          * A loader may have reloaded sepolicy before us, so the captured page
          * is not stock.  Serve what a stock boot ends with instead: the
          * creation sentinel below 6.10, one load plus one setenforce above.
          */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
-        copy->sequence = 4;
-        copy->policyload = 1;
+		copy->sequence = 4;
+		copy->policyload = 1;
 #else
-        copy->sequence = 0;
-        copy->policyload = 0;
+		copy->sequence = 0;
+		copy->policyload = 0;
 #endif
-        if (!copy->enforcing)
-            copy->enforcing = 1;
-    }
+		if (!copy->enforcing)
+			copy->enforcing = 1;
+	}
 
-    fake_status = page;
-    pr_info("[selinux_hide] fake status ready: sequence=%u policyload=%u enforcing=%u\n",
-            copy->sequence, copy->policyload, copy->enforcing);
+	fake_status = page;
+	pr_info("[selinux_hide] fake status ready: sequence=%u policyload=%u enforcing=%u\n",
+		copy->sequence, copy->policyload, copy->enforcing);
 out:
-    mutex_unlock(&selinux_state.status_lock);
+	mutex_unlock(&selinux_state.status_lock);
 }
 
 static int nksu_status_open(struct inode *inode, struct file *filp)
 {
-    if (likely(current_uid().val >= NKSU_APP_UID_MIN && nksu_hide_running)) {
-        void *page;
-        int ret;
+	if (likely(current_uid().val >= NKSU_APP_UID_MIN && nksu_hide_running)) {
+		void *page;
+		int ret;
 
-        mutex_lock(&selinux_state.status_lock);
-        page = fake_status;
-        mutex_unlock(&selinux_state.status_lock);
+		mutex_lock(&selinux_state.status_lock);
+		page = fake_status;
+		mutex_unlock(&selinux_state.status_lock);
 
-        if (page) {
-            filp->private_data = page;
-            return 0;
-        }
+		if (page) {
+			filp->private_data = page;
+			return 0;
+		}
 
-        /*
+		/*
          * The status page is allocated lazily by the stock handler on the
          * first open, which can happen after the feature is enabled.  Run the
          * original first so the page exists, then snapshot it for the next
          * call (mirrors KernelSU's fake_status_initialize_key).
          */
-        ret = orig_status_open(inode, filp);
-        if (!ret && static_branch_unlikely(&nksu_fake_status_init_key)) {
-            static_key_disable(&nksu_fake_status_init_key.key);
-            nksu_fake_status_prepare();
-        }
-        return ret;
-    }
-    return orig_status_open(inode, filp);
+		ret = orig_status_open(inode, filp);
+		if (!ret && static_branch_unlikely(&nksu_fake_status_init_key)) {
+			static_key_disable(&nksu_fake_status_init_key.key);
+			nksu_fake_status_prepare();
+		}
+		return ret;
+	}
+	return orig_status_open(inode, filp);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
@@ -247,27 +247,28 @@ static nksu_fake_state_t fake_state;
 static int nksu_clean_context_to_sid(const char *scontext, u32 scontext_len, u32 *sid)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-    return nksu_engine_context_to_sid(nksu_orig_policy_get(), scontext, scontext_len, sid, SECSID_NULL, GFP_KERNEL);
+	return nksu_engine_context_to_sid(nksu_orig_policy_get(), scontext, scontext_len, sid,
+					  SECSID_NULL, GFP_KERNEL);
 #else
-    return security_context_to_sid(&fake_state, scontext, scontext_len, sid, GFP_KERNEL);
+	return security_context_to_sid(&fake_state, scontext, scontext_len, sid, GFP_KERNEL);
 #endif
 }
 
 static int nksu_clean_sid_to_context(u32 sid, char **scontext, u32 *scontext_len)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-    return nksu_engine_sid_to_context(nksu_orig_policy_get(), sid, scontext, scontext_len);
+	return nksu_engine_sid_to_context(nksu_orig_policy_get(), sid, scontext, scontext_len);
 #else
-    return security_sid_to_context(&fake_state, sid, scontext, scontext_len);
+	return security_sid_to_context(&fake_state, sid, scontext, scontext_len);
 #endif
 }
 
 static void nksu_clean_compute_av(u32 ssid, u32 tsid, u16 tclass, struct av_decision *avd)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-    nksu_engine_compute_av(nksu_orig_policy_get(), ssid, tsid, tclass, avd);
+	nksu_engine_compute_av(nksu_orig_policy_get(), ssid, tsid, tclass, avd);
 #else
-    security_compute_av_user(&fake_state, ssid, tsid, tclass, avd);
+	security_compute_av_user(&fake_state, ssid, tsid, tclass, avd);
 #endif
 }
 
@@ -311,199 +312,198 @@ static bool (*nksu_current_is_single_threaded_fn)(void);
 
 static u32 nksu_cred_sid(const struct cred *cred)
 {
-    return nksu_cred_security(cred)->sid;
+	return nksu_cred_security(cred)->sid;
 }
 
 static u32 nksu_task_sid_obj(const struct task_struct *task)
 {
-    u32 sid;
+	u32 sid;
 
-    rcu_read_lock();
-    sid = nksu_cred_sid(__task_cred(task));
-    rcu_read_unlock();
-    return sid;
+	rcu_read_lock();
+	sid = nksu_cred_sid(__task_cred(task));
+	rcu_read_unlock();
+	return sid;
 }
 
 static u32 nksu_ptrace_parent_sid(void)
 {
-    u32 sid = 0;
-    struct task_struct *tracer;
+	u32 sid = 0;
+	struct task_struct *tracer;
 
-    rcu_read_lock();
-    tracer = ptrace_parent(current);
-    if (tracer)
-        sid = nksu_task_sid_obj(tracer);
-    rcu_read_unlock();
-    return sid;
+	rcu_read_lock();
+	tracer = ptrace_parent(current);
+	if (tracer)
+		sid = nksu_task_sid_obj(tracer);
+	rcu_read_unlock();
+	return sid;
 }
 
 static int __nocfi nksu_setprocattr(const char *name, void *value, size_t size);
 
 static struct nksu_lsm_hook nksu_setprocattr_hook =
-    NKSU_LSM_HOOK_INIT(setprocattr, "selinux_setprocattr", nksu_setprocattr);
+	NKSU_LSM_HOOK_INIT(setprocattr, "selinux_setprocattr", nksu_setprocattr);
 
 static int __nocfi nksu_setprocattr(const char *name, void *value, size_t size)
 {
-    struct task_security_struct *tsec;
-    struct cred *new;
-    u32 mysid, sid = 0, ptsid;
-    int error;
-    char *str = value;
+	struct task_security_struct *tsec;
+	struct cred *new;
+	u32 mysid, sid = 0, ptsid;
+	int error;
+	char *str = value;
 
-    if (likely(current_uid().val < NKSU_APP_UID_MIN))
-        goto call_orig;
+	if (likely(current_uid().val < NKSU_APP_UID_MIN))
+		goto call_orig;
 
-    if (strcmp(name, "current"))
-        goto call_orig;
+	if (strcmp(name, "current"))
+		goto call_orig;
 
-    mysid = nksu_current_sid();
-    error = NKSU_AVC_HAS_PERM(mysid, mysid, SECCLASS_PROCESS, PROCESS__SETCURRENT, NULL);
-    if (error)
-        return error;
+	mysid = nksu_current_sid();
+	error = NKSU_AVC_HAS_PERM(mysid, mysid, SECCLASS_PROCESS, PROCESS__SETCURRENT, NULL);
+	if (error)
+		return error;
 
-    /* Obtain a SID for the context, if one was specified. */
-    if (size && str[0] && str[0] != '\n') {
-        if (str[size - 1] == '\n') {
-            str[size - 1] = 0;
-            size--;
-        }
-        error = nksu_clean_context_to_sid(value, size, &sid);
-        if (error)
-            return error;
-    }
+	/* Obtain a SID for the context, if one was specified. */
+	if (size && str[0] && str[0] != '\n') {
+		if (str[size - 1] == '\n') {
+			str[size - 1] = 0;
+			size--;
+		}
+		error = nksu_clean_context_to_sid(value, size, &sid);
+		if (error)
+			return error;
+	}
 
-    new = prepare_creds();
-    if (!new)
-        return -ENOMEM;
+	new = prepare_creds();
+	if (!new)
+		return -ENOMEM;
 
-    /*
+	/*
      * Permission checking based on the specified context is performed
      * during the actual operation (execve, open/mkdir/...), when the full
      * context is known; see selinux_bprm_creds_for_exec and may_create.
      */
-    tsec = nksu_cred_security(new);
-    error = -EINVAL;
-    if (sid == 0)
-        goto abort_change;
+	tsec = nksu_cred_security(new);
+	error = -EINVAL;
+	if (sid == 0)
+		goto abort_change;
 
-    if (!nksu_current_is_single_threaded_fn || !nksu_current_is_single_threaded_fn()) {
-        /* Multi-threaded (or undetectable): enforce the bounded
+	if (!nksu_current_is_single_threaded_fn || !nksu_current_is_single_threaded_fn()) {
+		/* Multi-threaded (or undetectable): enforce the bounded
          * transition, as the stock handler does. */
-        if (nksu_bounded_transition_fn) {
-            error = NKSU_BOUNDED_TRANSITION(tsec->sid, sid);
-            if (error)
-                goto abort_change;
-        }
-    }
+		if (nksu_bounded_transition_fn) {
+			error = NKSU_BOUNDED_TRANSITION(tsec->sid, sid);
+			if (error)
+				goto abort_change;
+		}
+	}
 
-    /* Check permissions for the transition. */
-    error = NKSU_AVC_HAS_PERM(tsec->sid, sid, SECCLASS_PROCESS, PROCESS__DYNTRANSITION, NULL);
-    if (error)
-        goto abort_change;
+	/* Check permissions for the transition. */
+	error = NKSU_AVC_HAS_PERM(tsec->sid, sid, SECCLASS_PROCESS, PROCESS__DYNTRANSITION, NULL);
+	if (error)
+		goto abort_change;
 
-    /* Check for ptracing, and update the task SID if ok.  Otherwise leave
+	/* Check for ptracing, and update the task SID if ok.  Otherwise leave
      * the SID unchanged and fail. */
-    ptsid = nksu_ptrace_parent_sid();
-    if (ptsid != 0) {
-        error = NKSU_AVC_HAS_PERM(ptsid, sid, SECCLASS_PROCESS, PROCESS__PTRACE, NULL);
-        if (error)
-            goto abort_change;
-    }
+	ptsid = nksu_ptrace_parent_sid();
+	if (ptsid != 0) {
+		error = NKSU_AVC_HAS_PERM(ptsid, sid, SECCLASS_PROCESS, PROCESS__PTRACE, NULL);
+		if (error)
+			goto abort_change;
+	}
 
-    tsec->sid = sid;
-    commit_creds(new);
-    return size;
+	tsec->sid = sid;
+	commit_creds(new);
+	return size;
 
 abort_change:
-    abort_creds(new);
-    return error;
+	abort_creds(new);
+	return error;
 
 call_orig:
-    return ((nksu_setprocattr_fn)nksu_setprocattr_hook.original)(name, value, size);
+	return ((nksu_setprocattr_fn)nksu_setprocattr_hook.original)(name, value, size);
 }
 
 static ssize_t nksu_write_context(struct file *file, char *buf, size_t size)
 {
-    char *canon = NULL;
-    u32 sid, len;
-    ssize_t length;
+	char *canon = NULL;
+	u32 sid, len;
+	ssize_t length;
 
-    if (likely(current_uid().val < NKSU_APP_UID_MIN))
-        return orig_context_write(file, buf, size);
+	if (likely(current_uid().val < NKSU_APP_UID_MIN))
+		return orig_context_write(file, buf, size);
 
-    length = NKSU_AVC_HAS_PERM(nksu_current_sid(), SECINITSID_SECURITY,
-                               SECCLASS_SECURITY, SECURITY__CHECK_CONTEXT, NULL);
-    if (length)
-        goto out;
+	length = NKSU_AVC_HAS_PERM(nksu_current_sid(), SECINITSID_SECURITY, SECCLASS_SECURITY,
+				   SECURITY__CHECK_CONTEXT, NULL);
+	if (length)
+		goto out;
 
-    length = nksu_clean_context_to_sid(buf, size, &sid);
-    if (length)
-        goto out;
+	length = nksu_clean_context_to_sid(buf, size, &sid);
+	if (length)
+		goto out;
 
-    length = nksu_clean_sid_to_context(sid, &canon, &len);
-    if (length)
-        goto out;
+	length = nksu_clean_sid_to_context(sid, &canon, &len);
+	if (length)
+		goto out;
 
-    length = -ERANGE;
-    if (len > NKSU_SIMPLE_TRANSACTION_LIMIT)
-        goto out;
+	length = -ERANGE;
+	if (len > NKSU_SIMPLE_TRANSACTION_LIMIT)
+		goto out;
 
-    memcpy(buf, canon, len);
-    length = len;
+	memcpy(buf, canon, len);
+	length = len;
 out:
-    kfree(canon);
-    return length;
+	kfree(canon);
+	return length;
 }
 
 static ssize_t nksu_write_access(struct file *file, char *buf, size_t size)
 {
-    char *scon = NULL, *tcon = NULL;
-    u32 ssid, tsid;
-    u16 tclass;
-    struct av_decision avd;
-    ssize_t length;
+	char *scon = NULL, *tcon = NULL;
+	u32 ssid, tsid;
+	u16 tclass;
+	struct av_decision avd;
+	ssize_t length;
 
-    if (likely(current_uid().val < NKSU_APP_UID_MIN))
-        return orig_access_write(file, buf, size);
+	if (likely(current_uid().val < NKSU_APP_UID_MIN))
+		return orig_access_write(file, buf, size);
 
-    length = NKSU_AVC_HAS_PERM(nksu_current_sid(), SECINITSID_SECURITY,
-                               SECCLASS_SECURITY, SECURITY__COMPUTE_AV, NULL);
-    if (length)
-        goto out;
+	length = NKSU_AVC_HAS_PERM(nksu_current_sid(), SECINITSID_SECURITY, SECCLASS_SECURITY,
+				   SECURITY__COMPUTE_AV, NULL);
+	if (length)
+		goto out;
 
-    length = -ENOMEM;
-    scon = kzalloc(2 * (size + 1), GFP_KERNEL);
-    if (!scon)
-        goto out;
-    tcon = scon + size + 1;
+	length = -ENOMEM;
+	scon = kzalloc(2 * (size + 1), GFP_KERNEL);
+	if (!scon)
+		goto out;
+	tcon = scon + size + 1;
 
-    length = -EINVAL;
-    if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
-        goto out;
+	length = -EINVAL;
+	if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
+		goto out;
 
-    length = nksu_clean_context_to_sid(scon, strlen(scon), &ssid);
-    if (length)
-        goto out;
+	length = nksu_clean_context_to_sid(scon, strlen(scon), &ssid);
+	if (length)
+		goto out;
 
-    length = nksu_clean_context_to_sid(tcon, strlen(tcon), &tsid);
-    if (length)
-        goto out;
+	length = nksu_clean_context_to_sid(tcon, strlen(tcon), &tsid);
+	if (length)
+		goto out;
 
-    nksu_clean_compute_av(ssid, tsid, tclass, &avd);
+	nksu_clean_compute_av(ssid, tsid, tclass, &avd);
 
-    /*
+	/*
      * Stock reads 1 here (the policy's real load counter).  The status page
      * is deliberately left with the kernel's own values -- sequence and
      * policyload stay 0 below 6.10 (see avc_reset) -- so this is not a
      * cross-check that has to agree with it.
      */
-    avd.seqno = 1;
-    length = scnprintf(buf, NKSU_SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x",
-                       avd.allowed, 0xffffffff, avd.auditallow, avd.auditdeny,
-                       avd.seqno, avd.flags);
+	avd.seqno = 1;
+	length = scnprintf(buf, NKSU_SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x", avd.allowed,
+			   0xffffffff, avd.auditallow, avd.auditdeny, avd.seqno, avd.flags);
 out:
-    kfree(scon);
-    return length;
+	kfree(scon);
+	return length;
 }
 
 /*
@@ -513,221 +513,215 @@ out:
  */
 static int nksu_clean_policy_prepare(void)
 {
-    struct selinux_policy *pol = nksu_orig_policy_get();
-    struct policy_file fp;
-    size_t len;
-    void *data;
-    int ret;
+	struct selinux_policy *pol = nksu_orig_policy_get();
+	struct policy_file fp;
+	size_t len;
+	void *data;
+	int ret;
 
-    if (clean_policy_data)
-        return 0;
-    if (!pol)
-        return -EAGAIN;
+	if (clean_policy_data)
+		return 0;
+	if (!pol)
+		return -EAGAIN;
 
-    len = pol->policydb.len +
-          (size_t)pol->policydb.p_types.nprim * (sizeof(u32) + sizeof(u64));
-    if (!len || len > NKSU_POLICY_BLOB_MAX)
-        return -EINVAL;
+	len = pol->policydb.len + (size_t)pol->policydb.p_types.nprim * (sizeof(u32) + sizeof(u64));
+	if (!len || len > NKSU_POLICY_BLOB_MAX)
+		return -EINVAL;
 
-    data = vmalloc(len);
-    if (!data)
-        return -ENOMEM;
+	data = vmalloc(len);
+	if (!data)
+		return -ENOMEM;
 
-    fp.data = data;
-    fp.len = len;
+	fp.data = data;
+	fp.len = len;
 
-    ret = policydb_write(&pol->policydb, &fp);
-    if (ret) {
-        vfree(data);
-        return ret;
-    }
+	ret = policydb_write(&pol->policydb, &fp);
+	if (ret) {
+		vfree(data);
+		return ret;
+	}
 
-    clean_policy_len = len - fp.len;
-    clean_policy_data = data;
-    pr_info("[selinux_hide] captured %zu-byte clean policy\n", clean_policy_len);
-    return 0;
+	clean_policy_len = len - fp.len;
+	clean_policy_data = data;
+	pr_info("[selinux_hide] captured %zu-byte clean policy\n", clean_policy_len);
+	return 0;
 }
 
 static void nksu_clean_policy_release(void)
 {
-    if (clean_policy_data) {
-        vfree(clean_policy_data);
-        clean_policy_data = NULL;
-        clean_policy_len = 0;
-    }
+	if (clean_policy_data) {
+		vfree(clean_policy_data);
+		clean_policy_data = NULL;
+		clean_policy_len = 0;
+	}
 }
 
 /* /sys/fs/selinux/policy: hand apps the clean policy instead of the live one. */
-static ssize_t nksu_read_policy(struct file *filp, char __user *buf, size_t count,
-                                loff_t *ppos)
+static ssize_t nksu_read_policy(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
 {
-    if (likely(current_uid().val < NKSU_APP_UID_MIN) || !nksu_hide_running ||
-        !clean_policy_data)
-        return orig_policy_read(filp, buf, count, ppos);
+	if (likely(current_uid().val < NKSU_APP_UID_MIN) || !nksu_hide_running ||
+	    !clean_policy_data)
+		return orig_policy_read(filp, buf, count, ppos);
 
-    return simple_read_from_buffer(buf, count, ppos, clean_policy_data,
-                                   clean_policy_len);
+	return simple_read_from_buffer(buf, count, ppos, clean_policy_data, clean_policy_len);
 }
 
 static void nksu_hide_unhook(void)
 {
-    if (context_write_slot) {
-        nksu_patch_text(context_write_slot, &orig_context_write,
-                        sizeof(orig_context_write));
-        context_write_slot = NULL;
-        orig_context_write = NULL;
-    }
-    if (access_write_slot) {
-        nksu_patch_text(access_write_slot, &orig_access_write,
-                        sizeof(orig_access_write));
-        access_write_slot = NULL;
-        orig_access_write = NULL;
-    }
-    if (status_open_slot && orig_status_open) {
-        nksu_patch_text(status_open_slot, &orig_status_open,
-                        sizeof(orig_status_open));
-        status_open_slot = NULL;
-        orig_status_open = NULL;
-    }
-    if (policy_read_slot && orig_policy_read) {
-        nksu_patch_text(policy_read_slot, &orig_policy_read,
-                        sizeof(orig_policy_read));
-        policy_read_slot = NULL;
-        orig_policy_read = NULL;
-    }
+	if (context_write_slot) {
+		nksu_patch_text(context_write_slot, &orig_context_write,
+				sizeof(orig_context_write));
+		context_write_slot = NULL;
+		orig_context_write = NULL;
+	}
+	if (access_write_slot) {
+		nksu_patch_text(access_write_slot, &orig_access_write, sizeof(orig_access_write));
+		access_write_slot = NULL;
+		orig_access_write = NULL;
+	}
+	if (status_open_slot && orig_status_open) {
+		nksu_patch_text(status_open_slot, &orig_status_open, sizeof(orig_status_open));
+		status_open_slot = NULL;
+		orig_status_open = NULL;
+	}
+	if (policy_read_slot && orig_policy_read) {
+		nksu_patch_text(policy_read_slot, &orig_policy_read, sizeof(orig_policy_read));
+		policy_read_slot = NULL;
+		orig_policy_read = NULL;
+	}
 
-    nksu_lsm_unhook(&nksu_setprocattr_hook);
+	nksu_lsm_unhook(&nksu_setprocattr_hook);
 }
 
 static int nksu_hide_enable(void)
 {
-    struct file_operations *policy_ops, *status_ops;
-    write_op_fn *write_op, new_write;
-    int ret;
+	struct file_operations *policy_ops, *status_ops;
+	write_op_fn *write_op, new_write;
+	int ret;
 
-    if (!nksu_orig_policy_get()) {
-        pr_err("[selinux_hide] no original policy available\n");
-        return -EAGAIN;
-    }
+	if (!nksu_orig_policy_get()) {
+		pr_err("[selinux_hide] no original policy available\n");
+		return -EAGAIN;
+	}
 
-    write_op = (write_op_fn *)nksu_ksym_lookup("write_op");
-    if (!write_op) {
-        pr_err("[selinux_hide] symbol 'write_op' not found\n");
-        return -ENOSYS;
-    }
+	write_op = (write_op_fn *)nksu_ksym_lookup("write_op");
+	if (!write_op) {
+		pr_err("[selinux_hide] symbol 'write_op' not found\n");
+		return -ENOSYS;
+	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-    nksu_engine_init();
+	nksu_engine_init();
 #else
-    fake_state.initialized = true;
-    fake_state.policy = nksu_orig_policy_get();
+	fake_state.initialized = true;
+	fake_state.policy = nksu_orig_policy_get();
 #endif
 
-    nksu_bounded_transition_fn = (typeof(nksu_bounded_transition_fn))
-        nksu_ksym_lookup("security_bounded_transition");
-    if (!nksu_bounded_transition_fn)
-        pr_warn("[selinux_hide] security_bounded_transition not found\n");
+	nksu_bounded_transition_fn =
+		(typeof(nksu_bounded_transition_fn))nksu_ksym_lookup("security_bounded_transition");
+	if (!nksu_bounded_transition_fn)
+		pr_warn("[selinux_hide] security_bounded_transition not found\n");
 
-    nksu_current_is_single_threaded_fn =
-        (typeof(nksu_current_is_single_threaded_fn))
-            nksu_ksym_lookup("current_is_single_threaded");
-    if (!nksu_current_is_single_threaded_fn)
-        pr_warn("[selinux_hide] current_is_single_threaded not found\n");
+	nksu_current_is_single_threaded_fn =
+		(typeof(nksu_current_is_single_threaded_fn))nksu_ksym_lookup(
+			"current_is_single_threaded");
+	if (!nksu_current_is_single_threaded_fn)
+		pr_warn("[selinux_hide] current_is_single_threaded not found\n");
 
-    ret = nksu_clean_policy_prepare();
-    if (ret) {
-        pr_err("[selinux_hide] cannot prepare the clean policy: %d\n", ret);
-        return ret;
-    }
+	ret = nksu_clean_policy_prepare();
+	if (ret) {
+		pr_err("[selinux_hide] cannot prepare the clean policy: %d\n", ret);
+		return ret;
+	}
 
-    policy_ops = (struct file_operations *)nksu_ksym_lookup("sel_policy_ops");
-    if (policy_ops) {
-        ssize_t (*new_read)(struct file *, char __user *, size_t, loff_t *) =
-            nksu_read_policy;
+	policy_ops = (struct file_operations *)nksu_ksym_lookup("sel_policy_ops");
+	if (policy_ops) {
+		ssize_t (*new_read)(struct file *, char __user *, size_t, loff_t *) =
+			nksu_read_policy;
 
-        policy_read_slot = &policy_ops->read;
-        orig_policy_read = *policy_read_slot;
-        ret = nksu_patch_text(policy_read_slot, &new_read, sizeof(new_read));
-        if (ret) {
-            pr_err("[selinux_hide] patch policy read: %d\n", ret);
-            policy_read_slot = NULL;
-            orig_policy_read = NULL;
-        }
-    } else {
-        pr_warn("[selinux_hide] sel_policy_ops not found\n");
-    }
+		policy_read_slot = &policy_ops->read;
+		orig_policy_read = *policy_read_slot;
+		ret = nksu_patch_text(policy_read_slot, &new_read, sizeof(new_read));
+		if (ret) {
+			pr_err("[selinux_hide] patch policy read: %d\n", ret);
+			policy_read_slot = NULL;
+			orig_policy_read = NULL;
+		}
+	} else {
+		pr_warn("[selinux_hide] sel_policy_ops not found\n");
+	}
 
-    context_write_slot = &write_op[SEL_CONTEXT];
-    orig_context_write = *context_write_slot;
-    new_write = nksu_write_context;
-    ret = nksu_patch_text(context_write_slot, &new_write, sizeof(new_write));
-    if (ret) {
-        pr_err("[selinux_hide] patch context write: %d\n", ret);
-        context_write_slot = NULL;
-        goto fail;
-    }
+	context_write_slot = &write_op[SEL_CONTEXT];
+	orig_context_write = *context_write_slot;
+	new_write = nksu_write_context;
+	ret = nksu_patch_text(context_write_slot, &new_write, sizeof(new_write));
+	if (ret) {
+		pr_err("[selinux_hide] patch context write: %d\n", ret);
+		context_write_slot = NULL;
+		goto fail;
+	}
 
-    access_write_slot = &write_op[SEL_ACCESS];
-    orig_access_write = *access_write_slot;
-    new_write = nksu_write_access;
-    ret = nksu_patch_text(access_write_slot, &new_write, sizeof(new_write));
-    if (ret) {
-        pr_err("[selinux_hide] patch access write: %d\n", ret);
-        access_write_slot = NULL;
-        goto fail;
-    }
+	access_write_slot = &write_op[SEL_ACCESS];
+	orig_access_write = *access_write_slot;
+	new_write = nksu_write_access;
+	ret = nksu_patch_text(access_write_slot, &new_write, sizeof(new_write));
+	if (ret) {
+		pr_err("[selinux_hide] patch access write: %d\n", ret);
+		access_write_slot = NULL;
+		goto fail;
+	}
 
-    status_ops = (struct file_operations *)nksu_ksym_lookup("sel_handle_status_ops");
-    if (status_ops) {
-        int (*new_open)(struct inode *, struct file *) = nksu_status_open;
+	status_ops = (struct file_operations *)nksu_ksym_lookup("sel_handle_status_ops");
+	if (status_ops) {
+		int (*new_open)(struct inode *, struct file *) = nksu_status_open;
 
-        status_open_slot = &status_ops->open;
-        orig_status_open = *status_open_slot;
-        ret = nksu_patch_text(status_open_slot, &new_open, sizeof(new_open));
-        if (ret) {
-            pr_err("[selinux_hide] patch status open: %d\n", ret);
-            status_open_slot = NULL;
-            orig_status_open = NULL;
-        }
-    } else {
-        pr_warn("[selinux_hide] sel_handle_status_ops not found\n");
-    }
+		status_open_slot = &status_ops->open;
+		orig_status_open = *status_open_slot;
+		ret = nksu_patch_text(status_open_slot, &new_open, sizeof(new_open));
+		if (ret) {
+			pr_err("[selinux_hide] patch status open: %d\n", ret);
+			status_open_slot = NULL;
+			orig_status_open = NULL;
+		}
+	} else {
+		pr_warn("[selinux_hide] sel_handle_status_ops not found\n");
+	}
 
-    static_key_enable(&nksu_fake_status_init_key.key);
-    nksu_fake_status_prepare();
-    if (fake_status)
-        static_key_disable(&nksu_fake_status_init_key.key);
+	static_key_enable(&nksu_fake_status_init_key.key);
+	nksu_fake_status_prepare();
+	if (fake_status)
+		static_key_disable(&nksu_fake_status_init_key.key);
 
-    /*
+	/*
      * The setprocattr hook is best-effort: the context/access/status/policy
      * hiding above is what makes the feature work, so do not fail the whole
      * enable if the LSM hook cannot be located.
      */
-    ret = nksu_lsm_hook(&nksu_setprocattr_hook);
-    if (ret)
-        pr_warn("[selinux_hide] setprocattr hook not installed: %d\n", ret);
+	ret = nksu_lsm_hook(&nksu_setprocattr_hook);
+	if (ret)
+		pr_warn("[selinux_hide] setprocattr hook not installed: %d\n", ret);
 
-    pr_info("[selinux_hide] enabled\n");
-    return 0;
+	pr_info("[selinux_hide] enabled\n");
+	return 0;
 
 fail:
-    nksu_hide_unhook();
-    return ret;
+	nksu_hide_unhook();
+	return ret;
 }
 
 static void nksu_hide_disable(void)
 {
-    if (!nksu_hide_running)
-        return;
-    static_key_disable(&nksu_fake_status_init_key.key);
-    nksu_hide_unhook();
-    pr_info("[selinux_hide] disabled\n");
+	if (!nksu_hide_running)
+		return;
+	static_key_disable(&nksu_fake_status_init_key.key);
+	nksu_hide_unhook();
+	pr_info("[selinux_hide] disabled\n");
 }
 
 static int nksu_hide_feature_get(u64 *value)
 {
-    *value = nksu_hide_running ? 1 : 0;
-    return 0;
+	*value = nksu_hide_running ? 1 : 0;
+	return 0;
 }
 
 /*
@@ -736,72 +730,74 @@ static int nksu_hide_feature_get(u64 *value)
  */
 static int nksu_hide_apply(u64 value, bool persist)
 {
-    int ret = 0;
+	int ret = 0;
 
-    mutex_lock(&nksu_hide_mutex);
-    if (value) {
-        if (!nksu_hide_running) {
-            ret = nksu_hide_enable();
-            if (!ret)
-                nksu_hide_running = true;
-        }
-    } else if (nksu_hide_running) {
-        nksu_hide_disable();
-        nksu_hide_running = false;
-    }
-    mutex_unlock(&nksu_hide_mutex);
+	mutex_lock(&nksu_hide_mutex);
+	if (value) {
+		if (!nksu_hide_running) {
+			ret = nksu_hide_enable();
+			if (!ret)
+				nksu_hide_running = true;
+		}
+	} else if (nksu_hide_running) {
+		nksu_hide_disable();
+		nksu_hide_running = false;
+	}
+	mutex_unlock(&nksu_hide_mutex);
 
-    if (!ret && persist)
-        nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
+	if (!ret && persist)
+		nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
 
-    return ret;
+	return ret;
 }
 
-static int nksu_hide_feature_set(u64 value) { return nksu_hide_apply(value, true); }
+static int nksu_hide_feature_set(u64 value)
+{
+	return nksu_hide_apply(value, true);
+}
 
 static const struct nksu_feature nksu_hide_feature = {
-    .id = NKSU_FEATURE_SELINUX_HIDE,
-    .name = "selinux_hide",
-    .get = nksu_hide_feature_get,
-    .set = nksu_hide_feature_set,
+	.id = NKSU_FEATURE_SELINUX_HIDE,
+	.name = "selinux_hide",
+	.get = nksu_hide_feature_get,
+	.set = nksu_hide_feature_set,
 };
 
 int nksu_selinux_hide_init(void)
 {
-    int ret;
+	int ret;
 
-    ret = nksu_feature_register(&nksu_hide_feature);
-    if (ret)
-        pr_warn("[selinux_hide] feature register failed: %d\n", ret);
+	ret = nksu_feature_register(&nksu_hide_feature);
+	if (ret)
+		pr_warn("[selinux_hide] feature register failed: %d\n", ret);
 
-    if (!nksu_feature_persist_has(NKSU_HIDE_FEATURE_NAME)) {
-        pr_info("[selinux_hide] not in the enabled feature set, off\n");
-        return 0;
-    }
+	if (!nksu_feature_persist_has(NKSU_HIDE_FEATURE_NAME)) {
+		pr_info("[selinux_hide] not in the enabled feature set, off\n");
+		return 0;
+	}
 
-    ret = nksu_hide_apply(1, false);
-    if (ret)
-        pr_warn("[selinux_hide] enable from the feature set failed: %d\n",
-                ret);
+	ret = nksu_hide_apply(1, false);
+	if (ret)
+		pr_warn("[selinux_hide] enable from the feature set failed: %d\n", ret);
 
-    return 0;
+	return 0;
 }
 
 void nksu_selinux_hide_exit(void)
 {
-    mutex_lock(&nksu_hide_mutex);
-    nksu_hide_disable();
-    nksu_hide_running = false;
-    mutex_unlock(&nksu_hide_mutex);
+	mutex_lock(&nksu_hide_mutex);
+	nksu_hide_disable();
+	nksu_hide_running = false;
+	mutex_unlock(&nksu_hide_mutex);
 
-    nksu_clean_policy_release();
+	nksu_clean_policy_release();
 
-    mutex_lock(&selinux_state.status_lock);
-    if (fake_status) {
-        __free_page(fake_status);
-        fake_status = NULL;
-    }
-    mutex_unlock(&selinux_state.status_lock);
+	mutex_lock(&selinux_state.status_lock);
+	if (fake_status) {
+		__free_page(fake_status);
+		fake_status = NULL;
+	}
+	mutex_unlock(&selinux_state.status_lock);
 }
 
 #if defined(__clang__)

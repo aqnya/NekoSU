@@ -2,21 +2,21 @@
 #ifndef _NKSU_SELINUX_SELINUX_H
 #define _NKSU_SELINUX_SELINUX_H
 
-#define DOMAIN           "nksu"
-#define DOMAIN_FILE      "nksu_file"
-#define DOMAIN_CTX       "u:r:" DOMAIN ":s0"
-#define DOMAIN_FILE_CTX  "u:object_r:" DOMAIN_FILE ":s0"
+#define DOMAIN "nksu"
+#define DOMAIN_FILE "nksu_file"
+#define DOMAIN_CTX "u:r:" DOMAIN ":s0"
+#define DOMAIN_FILE_CTX "u:object_r:" DOMAIN_FILE ":s0"
 
 void setenforce(bool status);
 bool getenforce(void);
-int  set_domain(const char *domain, struct cred *new_cred);
+int set_domain(const char *domain, struct cred *new_cred);
 
 /*
  * Subjective SID of the current task.  The kernel's current_sid() inline pulls
  * in selinux_blob_sizes via selinux_cred(); this accessor avoids the
  * relocation (see selinux.c).  hide.c uses it for its avc_has_perm checks.
  */
-u32  nksu_current_sid(void);
+u32 nksu_current_sid(void);
 
 /*
  * SELinux blob of a cred (task_security_struct).  hide.c's setprocattr hook
@@ -44,7 +44,7 @@ void nksu_borrow_creds_release(void);
  */
 void nksu_relabel_path(const char *path);
 
-int  init_selinux_hook(void);
+int init_selinux_hook(void);
 void selinux_exit(void);
 
 #endif /* _NKSU_SELINUX_SELINUX_H */

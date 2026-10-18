@@ -49,12 +49,12 @@
  * kernel). Functions the kernel calls back live in other files.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 /* some older kernels don't have this helper */
 #ifndef hashtab_for_each
-#define hashtab_for_each(h, node)                                            \
+#define hashtab_for_each(h, node)                                           \
 	for (int _i##__LINE__ = 0; _i##__LINE__ < (h).size; _i##__LINE__++) \
 		for (node = (h).htable[_i##__LINE__]; node; node = node->next)
 #endif
@@ -92,8 +92,7 @@ void avc_reset(void)
 
 /* ---- low-level avtab helpers ---- */
 
-static struct avtab_node *rule_get_avtab_node(struct policydb *db,
-					      struct avtab_key *key,
+static struct avtab_node *rule_get_avtab_node(struct policydb *db, struct avtab_key *key,
 					      struct avtab_extended_perms *xperms)
 {
 	struct avtab_node *node;
@@ -201,20 +200,20 @@ static inline bool rule_strip_av(int effect, bool invert)
 	return (effect == AVTAB_AUDITDENY) == !invert;
 }
 
-#define for_each_htable(htab, cur)                       \
-	for (int _i = 0; _i < (htab).size; _i++)         \
+#define for_each_htable(htab, cur)               \
+	for (int _i = 0; _i < (htab).size; _i++) \
 		for (cur = (htab).htable[_i]; cur; cur = cur->next)
 
-static bool rule_add_raw(struct policydb *db, struct type_datum *src,
-			 struct type_datum *tgt, struct class_datum *cls,
-			 struct perm_datum *perm, int effect, bool invert)
+static bool rule_add_raw(struct policydb *db, struct type_datum *src, struct type_datum *tgt,
+			 struct class_datum *cls, struct perm_datum *perm, int effect, bool invert)
 {
 	bool success = true;
 
 	if (src == NULL) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_types.table, node) {
+		for_each_htable(db->p_types.table, node)
+		{
 			struct type_datum *type = node->datum;
 
 			if (!rule_strip_av(effect, invert) && !type->attribute)
@@ -224,7 +223,8 @@ static bool rule_add_raw(struct policydb *db, struct type_datum *src,
 	} else if (tgt == NULL) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_types.table, node) {
+		for_each_htable(db->p_types.table, node)
+		{
 			struct type_datum *type = node->datum;
 
 			if (!rule_strip_av(effect, invert) && !type->attribute)
@@ -234,7 +234,8 @@ static bool rule_add_raw(struct policydb *db, struct type_datum *src,
 	} else if (cls == NULL) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_classes.table, node) {
+		for_each_htable(db->p_classes.table, node)
+		{
 			success &= rule_add_raw(db, src, tgt, node->datum, perm, effect, invert);
 		}
 	} else {
@@ -275,8 +276,8 @@ static bool rule_add_raw(struct policydb *db, struct type_datum *src,
 	return success;
 }
 
-static bool rule_add(struct policydb *db, const char *s, const char *t,
-		     const char *c, const char *p, int effect, bool invert)
+static bool rule_add(struct policydb *db, const char *s, const char *t, const char *c,
+		     const char *p, int effect, bool invert)
 {
 	struct type_datum *src = NULL, *tgt = NULL;
 	struct class_datum *cls = NULL;
@@ -331,14 +332,14 @@ static inline void xperm_clear(u32 x, u32 *p)
 	p[x >> 5] &= ~(1U << (x & 0x1f));
 }
 
-static void rule_add_xperm_raw(struct policydb *db, struct type_datum *src,
-			       struct type_datum *tgt, struct class_datum *cls,
-			       u16 low, u16 high, int effect, bool invert)
+static void rule_add_xperm_raw(struct policydb *db, struct type_datum *src, struct type_datum *tgt,
+			       struct class_datum *cls, u16 low, u16 high, int effect, bool invert)
 {
 	if (src == NULL) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_types.table, node) {
+		for_each_htable(db->p_types.table, node)
+		{
 			struct type_datum *type = node->datum;
 
 			if (type->attribute)
@@ -347,7 +348,8 @@ static void rule_add_xperm_raw(struct policydb *db, struct type_datum *src,
 	} else if (tgt == NULL) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_types.table, node) {
+		for_each_htable(db->p_types.table, node)
+		{
 			struct type_datum *type = node->datum;
 
 			if (type->attribute)
@@ -405,8 +407,8 @@ static void rule_add_xperm_raw(struct policydb *db, struct type_datum *src,
 	}
 }
 
-static bool rule_add_xperm(struct policydb *db, const char *s, const char *t,
-			   const char *c, const char *range, int effect, bool invert)
+static bool rule_add_xperm(struct policydb *db, const char *s, const char *t, const char *c,
+			   const char *range, int effect, bool invert)
 {
 	struct type_datum *src = NULL, *tgt = NULL;
 	struct class_datum *cls = NULL;
@@ -431,8 +433,7 @@ static bool rule_add_xperm(struct policydb *db, const char *s, const char *t,
 			    sscanf(range, "%hx-%hx", &low, &high) != 2)
 				return false;
 		} else {
-			if (sscanf(range, "0x%hx", &low) != 1 &&
-			    sscanf(range, "%hx", &low) != 1)
+			if (sscanf(range, "0x%hx", &low) != 1 && sscanf(range, "%hx", &low) != 1)
 				return false;
 			high = low;
 		}
@@ -447,8 +448,8 @@ static bool rule_add_xperm(struct policydb *db, const char *s, const char *t,
 
 /* ---- type rules and filename transitions ---- */
 
-static bool rule_add_type(struct policydb *db, const char *s, const char *t,
-			  const char *c, const char *d, int effect)
+static bool rule_add_type(struct policydb *db, const char *s, const char *t, const char *c,
+			  const char *d, int effect)
 {
 	struct type_datum *src, *tgt, *def;
 	struct class_datum *cls;
@@ -537,13 +538,11 @@ static int nksu_hashtab_insert(struct hashtab *h, void *key, void *datum,
 		cur = cur->next;
 	}
 
-	return nksu___hashtab_insert(h, prev ? &prev->next : &h->htable[hvalue],
-				     key, datum);
+	return nksu___hashtab_insert(h, prev ? &prev->next : &h->htable[hvalue], key, datum);
 }
 
-static bool rule_add_filename_trans(struct policydb *db, const char *s,
-				    const char *t, const char *c, const char *d,
-				    const char *o)
+static bool rule_add_filename_trans(struct policydb *db, const char *s, const char *t,
+				    const char *c, const char *d, const char *o)
 {
 	struct type_datum *src, *tgt, *def;
 	struct class_datum *cls;
@@ -622,8 +621,8 @@ free_trans:
 }
 
 /* NekoSU does not implement genfscon yet; keep the call a no-op. */
-static bool rule_add_genfscon(struct policydb *db, const char *fs_name,
-			      const char *path, const char *ctx)
+static bool rule_add_genfscon(struct policydb *db, const char *fs_name, const char *path,
+			      const char *ctx)
 {
 	return false;
 }
@@ -663,12 +662,9 @@ static bool rule_add_type_datum(struct policydb *db, const char *type_name, bool
 		goto err_free;
 
 	/* Commit: from here on nothing can fail. */
-	memcpy(attr_map, db->type_attr_map_array,
-	       (value - 1) * sizeof(*attr_map));
-	memcpy(val_to_struct, db->type_val_to_struct,
-	       (value - 1) * sizeof(*val_to_struct));
-	memcpy(val_to_name, db->sym_val_to_name[SYM_TYPES],
-	       (value - 1) * sizeof(*val_to_name));
+	memcpy(attr_map, db->type_attr_map_array, (value - 1) * sizeof(*attr_map));
+	memcpy(val_to_struct, db->type_val_to_struct, (value - 1) * sizeof(*val_to_struct));
+	memcpy(val_to_name, db->sym_val_to_name[SYM_TYPES], (value - 1) * sizeof(*val_to_name));
 
 	kvfree(db->type_attr_map_array);
 	kvfree(db->type_val_to_struct);
@@ -709,7 +705,8 @@ static bool rule_set_type_state(struct policydb *db, const char *type_name, bool
 	if (type_name == NULL || !*type_name) {
 		struct hashtab_node *node;
 
-		for_each_htable(db->p_types.table, node) {
+		for_each_htable(db->p_types.table, node)
+		{
 			type = node->datum;
 			ebitmap_set_bit(&db->permissive_map, type->value, permissive);
 		}
@@ -734,7 +731,8 @@ static void rule_add_typeattribute_raw(struct policydb *db, struct type_datum *t
 
 	ebitmap_set_bit(sattr, attr->value - 1, 1);
 
-	for_each_htable(db->p_classes.table, node) {
+	for_each_htable(db->p_classes.table, node)
+	{
 		struct class_datum *cls = node->datum;
 
 		for (n = cls->constraints; n; n = n->next) {
@@ -747,8 +745,7 @@ static void rule_add_typeattribute_raw(struct policydb *db, struct type_datum *t
 	}
 }
 
-static bool rule_add_typeattribute(struct policydb *db, const char *type,
-				   const char *attr)
+static bool rule_add_typeattribute(struct policydb *db, const char *type, const char *attr)
 {
 	struct type_datum *type_d, *attr_d;
 
@@ -811,22 +808,22 @@ void sepolicy_batch_end(void)
 	}
 }
 
-#define RULE_LOCK_GET(db)                                    \
-	struct policydb *db;                                 \
-	mutex_lock(&selinux_state.policy_mutex);             \
-	db = fmac_get_pdb();                                 \
-	if (!db) {                                           \
-		mutex_unlock(&selinux_state.policy_mutex);   \
-		return -ENOENT;                              \
+#define RULE_LOCK_GET(db)                                  \
+	struct policydb *db;                               \
+	mutex_lock(&selinux_state.policy_mutex);           \
+	db = fmac_get_pdb();                               \
+	if (!db) {                                         \
+		mutex_unlock(&selinux_state.policy_mutex); \
+		return -ENOENT;                            \
 	}
 
-#define RULE_UNLOCK(ret)                                     \
-	mutex_unlock(&selinux_state.policy_mutex);           \
-	if ((ret) == 0)                                      \
+#define RULE_UNLOCK(ret)                           \
+	mutex_unlock(&selinux_state.policy_mutex); \
+	if ((ret) == 0)                            \
 		rule_mark_dirty();
 
-int sepolicy_add_rule(const char *sname, const char *tname, const char *cname,
-		      const char *pname, int effect, bool invert)
+int sepolicy_add_rule(const char *sname, const char *tname, const char *cname, const char *pname,
+		      int effect, bool invert)
 {
 	int ret;
 	RULE_LOCK_GET(db);
@@ -836,8 +833,8 @@ int sepolicy_add_rule(const char *sname, const char *tname, const char *cname,
 	return ret;
 }
 
-int sepolicy_add_xperm(const char *s, const char *t, const char *c,
-		       const char *range, int effect, bool invert)
+int sepolicy_add_xperm(const char *s, const char *t, const char *c, const char *range, int effect,
+		       bool invert)
 {
 	int ret;
 	RULE_LOCK_GET(db);
@@ -907,8 +904,8 @@ int sepolicy_type_exists(const char *type_name)
 	return ret;
 }
 
-int sepolicy_add_type_transition(const char *s, const char *t, const char *c,
-				 const char *d, const char *obj)
+int sepolicy_add_type_transition(const char *s, const char *t, const char *c, const char *d,
+				 const char *obj)
 {
 	int ret;
 	RULE_LOCK_GET(db);

@@ -20,7 +20,7 @@
  * timeout window.
  */
 
-int  nksu_safe_mode_init(void);
+int nksu_safe_mode_init(void);
 void nksu_safe_mode_exit(void);
 
 /* True once three volume-up presses have been seen this boot. */

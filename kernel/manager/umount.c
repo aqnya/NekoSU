@@ -40,7 +40,7 @@
 #include "symbol/symbol_compat.h"
 
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 struct nksu_umount_entry {
@@ -172,8 +172,7 @@ struct nksu_umount_snapshot {
 };
 
 static struct nksu_umount_snapshot *
-nksu_umount_take_snapshot(size_t *count, struct nksu_umount_snapshot *inline_buf,
-			  size_t inline_n)
+nksu_umount_take_snapshot(size_t *count, struct nksu_umount_snapshot *inline_buf, size_t inline_n)
 {
 	struct nksu_umount_snapshot *snapshot;
 	struct nksu_umount_entry *entry;
@@ -226,8 +225,7 @@ static bool nksu_mnt_ns_done(void)
 		return false;
 
 	return READ_ONCE(nksu_done_mnt_ns) == ns &&
-	       READ_ONCE(nksu_done_mnt_gen) ==
-		       atomic64_read(&nksu_umount_gen);
+	       READ_ONCE(nksu_done_mnt_gen) == atomic64_read(&nksu_umount_gen);
 }
 
 static void nksu_umount_run(void)
@@ -254,8 +252,7 @@ static void nksu_umount_run(void)
 	ns = current->nsproxy ? READ_ONCE(current->nsproxy->mnt_ns) : NULL;
 	gen = atomic64_read(&nksu_umount_gen);
 
-	snapshot = nksu_umount_take_snapshot(&count, inline_buf,
-					     ARRAY_SIZE(inline_buf));
+	snapshot = nksu_umount_take_snapshot(&count, inline_buf, ARRAY_SIZE(inline_buf));
 	if (!snapshot)
 		return;
 
@@ -276,8 +273,7 @@ static void nksu_umount_run(void)
 			continue;
 		}
 		if (!nksu_umount_module_root(path.dentry)) {
-			pr_debug("[umount] %s is not under the module store, skip\n",
-				 target);
+			pr_debug("[umount] %s is not under the module store, skip\n", target);
 			path_put(&path);
 			continue;
 		}
@@ -293,8 +289,7 @@ static void nksu_umount_run(void)
 			pr_info("[umount] %s failed: %d\n", target, ret);
 			failed = true;
 		} else {
-			pr_info_ratelimited("[umount] removed %s (pid %d)\n",
-                    target, current->pid);
+			pr_info_ratelimited("[umount] removed %s (pid %d)\n", target, current->pid);
 		}
 	}
 	if (old)
@@ -315,8 +310,7 @@ struct nksu_umount_work {
 
 static void nksu_umount_work_fn(struct callback_head *cb)
 {
-	struct nksu_umount_work *work =
-		container_of(cb, struct nksu_umount_work, cb);
+	struct nksu_umount_work *work = container_of(cb, struct nksu_umount_work, cb);
 
 	nksu_umount_run();
 	kfree(work);
@@ -443,12 +437,10 @@ static int nksu_ida_alloc_pre(struct kprobe *p, struct pt_regs *regs)
 	 * a duplicate id.
 	 */
 	nksu_task_set_ida_alloc(task);
-	id = nksu_ida_alloc_range(nksu_mnt_id_ida, NKSU_MNT_ID_MIN,
-				  INT_MAX - 1, GFP_ATOMIC);
+	id = nksu_ida_alloc_range(nksu_mnt_id_ida, NKSU_MNT_ID_MIN, INT_MAX - 1, GFP_ATOMIC);
 	nksu_task_clear_ida_alloc(task);
 	if (id < 0) {
-		pr_warn_ratelimited("[mount-id] high id allocation failed: %d\n",
-				    id);
+		pr_warn_ratelimited("[mount-id] high id allocation failed: %d\n", id);
 		if (clone)
 			nksu_task_clear_clone_mnt(task);
 		return 0;
@@ -567,12 +559,11 @@ static int nksu_resolve_probe_symbols(void)
 			(typeof(unregister_kprobe) *)nksu_ksym_lookup("unregister_kprobe");
 		nksu_ida_alloc_range =
 			(typeof(ida_alloc_range) *)nksu_ksym_lookup("ida_alloc_range");
-		nksu_mnt_id_ida =
-			(struct ida *)nksu_ksym_lookup("mnt_id_ida");
+		nksu_mnt_id_ida = (struct ida *)nksu_ksym_lookup("mnt_id_ida");
 	}
 
-	if (!nksu_register_kprobe || !nksu_unregister_kprobe ||
-	    !nksu_ida_alloc_range || !nksu_mnt_id_ida) {
+	if (!nksu_register_kprobe || !nksu_unregister_kprobe || !nksu_ida_alloc_range ||
+	    !nksu_mnt_id_ida) {
 		pr_err("[mount-id] unresolved kprobe/ida symbols\n");
 		return -ENOENT;
 	}
@@ -588,11 +579,9 @@ static int nksu_register_one(struct kprobe *kp, const char *name, bool required)
 	ret = nksu_register_kprobe(kp);
 	if (ret) {
 		if (required)
-			pr_err("[mount-id] register_kprobe(%s) failed: %d\n",
-			       name, ret);
+			pr_err("[mount-id] register_kprobe(%s) failed: %d\n", name, ret);
 		else
-			pr_warn("[mount-id] register_kprobe(%s) failed: %d\n",
-				name, ret);
+			pr_warn("[mount-id] register_kprobe(%s) failed: %d\n", name, ret);
 		return ret;
 	}
 	pr_info("[mount-id] hooked %s\n", name);
@@ -629,13 +618,11 @@ static int nksu_mount_probes_register_locked(void)
 			nksu_copy_ns_probe_ready = true;
 	}
 	if (!nksu_install_ns_probe_ready) {
-		ret = nksu_register_one(&nksu_kp_mntns_install, "mntns_install",
-					false);
+		ret = nksu_register_one(&nksu_kp_mntns_install, "mntns_install", false);
 		if (!ret)
 			nksu_install_ns_probe_ready = true;
 	}
-	nksu_mnt_ns_hooks_ready = nksu_copy_ns_probe_ready &&
-				  nksu_install_ns_probe_ready;
+	nksu_mnt_ns_hooks_ready = nksu_copy_ns_probe_ready && nksu_install_ns_probe_ready;
 	WRITE_ONCE(nksu_done_mnt_ns, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(nksu_show_probes); i++) {
@@ -643,8 +630,8 @@ static int nksu_mount_probes_register_locked(void)
 			show_ok++;
 			continue;
 		}
-		ret = nksu_register_one(nksu_show_probes[i],
-					nksu_show_probes[i]->symbol_name, false);
+		ret = nksu_register_one(nksu_show_probes[i], nksu_show_probes[i]->symbol_name,
+					false);
 		if (!ret) {
 			nksu_show_probe_ready[i] = true;
 			show_ok++;
@@ -664,8 +651,7 @@ int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 {
 	int ret;
 
-	if (mnt_id_off > 4096 - sizeof(int) || mnt_off > 4096 ||
-	    (mnt_id_off & (sizeof(int) - 1)))
+	if (mnt_id_off > 4096 - sizeof(int) || mnt_off > 4096 || (mnt_id_off & (sizeof(int) - 1)))
 		return -EINVAL;
 
 	mutex_lock(&nksu_mount_layout_lock);
@@ -688,8 +674,7 @@ int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 
 	WRITE_ONCE(nksu_mount_layout_ready, true);
 	mutex_unlock(&nksu_mount_layout_lock);
-	pr_info("[mount-id] active (mnt_id@%u, mnt@%u)\n", mnt_id_off,
-		mnt_off);
+	pr_info("[mount-id] active (mnt_id@%u, mnt@%u)\n", mnt_id_off, mnt_off);
 	return 0;
 }
 
@@ -757,8 +742,7 @@ static void nksu_mount_probes_exit(void)
  */
 static bool nksu_umount_uid(uid_t uid)
 {
-	return (uid >= 10000 && uid < 20000) ||
-	       (uid >= 90000 && uid < 100000);
+	return (uid >= 10000 && uid < 20000) || (uid >= 90000 && uid < 100000);
 }
 
 static uid_t nksu_setresuid_target(const struct pt_regs *regs)
@@ -782,22 +766,18 @@ static bool nksu_path_is_module(const char *path)
 {
 	return !strncmp(path, "/data/adb/modules/", 18) ||
 	       !strncmp(path, "/data/adb/modules_update/", 25) ||
-	       !strncmp(path, "/adb/modules/", 13) ||
-	       !strncmp(path, "/adb/modules_update/", 20);
+	       !strncmp(path, "/adb/modules/", 13) || !strncmp(path, "/adb/modules_update/", 20);
 }
 
-static bool nksu_read_abs_path(struct pt_regs *regs, unsigned int argno,
-			       char *buf, size_t len)
+static bool nksu_read_abs_path(struct pt_regs *regs, unsigned int argno, char *buf, size_t len)
 {
 	int n = get_path_arg(regs, argno, buf, len);
 
 	return n > 0 && n < (int)len - 1 && buf[0] == '/';
 }
 
-static void nksu_register_mount_target(struct pt_regs *regs,
-				       unsigned int source_arg,
-				       unsigned int target_arg,
-				       const char *what, bool force)
+static void nksu_register_mount_target(struct pt_regs *regs, unsigned int source_arg,
+				       unsigned int target_arg, const char *what, bool force)
 {
 	char source[256];
 	char target[256];
@@ -814,8 +794,7 @@ static void nksu_register_mount_target(struct pt_regs *regs,
 	 * Target-only checks cover mounts into the module store; the source
 	 * check covers the usual bind mount from /data/adb/modules to /system.
 	 */
-	if (!force && !nksu_path_is_module(target) &&
-	    !(source_ok && nksu_path_is_module(source)))
+	if (!force && !nksu_path_is_module(target) && !(source_ok && nksu_path_is_module(source)))
 		return;
 
 	if (nksu_umount_add(target, MNT_DETACH))
@@ -835,8 +814,7 @@ static void nksu_register_mount_target(struct pt_regs *regs,
 
 static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
 {
-	if (id == __NR_setresuid &&
-	    nksu_umount_uid(nksu_setresuid_target(regs)))
+	if (id == __NR_setresuid && nksu_umount_uid(nksu_setresuid_target(regs)))
 		nksu_umount_schedule();
 
 	/*
@@ -902,8 +880,7 @@ static int nksu_umount_start(void)
 		return -ENOENT;
 	}
 
-	ret = tracepoint_probe_register(nksu_umount_tp_sys_enter,
-					nksu_umount_sys_enter, NULL);
+	ret = tracepoint_probe_register(nksu_umount_tp_sys_enter, nksu_umount_sys_enter, NULL);
 	if (ret) {
 		pr_err("[umount] register sys_enter probe failed: %d\n", ret);
 		mutex_unlock(&nksu_umount_init_lock);
@@ -938,8 +915,7 @@ static void nksu_umount_stop(void)
 	nksu_mount_probes_exit();
 
 	if (nksu_umount_hooked) {
-		tracepoint_probe_unregister(nksu_umount_tp_sys_enter,
-					    nksu_umount_sys_enter, NULL);
+		tracepoint_probe_unregister(nksu_umount_tp_sys_enter, nksu_umount_sys_enter, NULL);
 		tracepoint_synchronize_unregister();
 		nksu_umount_hooked = false;
 	}
@@ -971,8 +947,7 @@ static int nksu_umount_apply(u64 value, bool persist)
 	}
 	mutex_unlock(&nksu_umount_state_lock);
 
-	if (!ret && persist &&
-	    nksu_feature_persist_set(NKSU_UMOUNT_DISABLED_NAME, !value))
+	if (!ret && persist && nksu_feature_persist_set(NKSU_UMOUNT_DISABLED_NAME, !value))
 		pr_warn("[umount] cannot persist feature state\n");
 
 	return ret;

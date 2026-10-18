@@ -38,7 +38,7 @@
  * kernel). Functions the kernel calls back live in other files.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 static struct task_struct *nksu_init_thread;
@@ -127,10 +127,10 @@ static int resolve_domain_sid(const char *domain, u32 *sid)
 {
 	int i, rc;
 
-	scoped_guard(nksu_mutex, &domain_cache_lock) {
+	scoped_guard(nksu_mutex, &domain_cache_lock)
+	{
 		for (i = 0; i < NKSU_DOMAIN_CACHE; i++) {
-			if (domain_cache[i].sid &&
-			    strcmp(domain_cache[i].domain, domain) == 0) {
+			if (domain_cache[i].sid && strcmp(domain_cache[i].domain, domain) == 0) {
 				*sid = domain_cache[i].sid;
 				return 0;
 			}
@@ -140,13 +140,13 @@ static int resolve_domain_sid(const char *domain, u32 *sid)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	rc = security_context_to_sid(domain, strlen(domain), sid, GFP_KERNEL);
 #else
-	rc = security_context_to_sid(&selinux_state, domain, strlen(domain), sid,
-				     GFP_KERNEL);
+	rc = security_context_to_sid(&selinux_state, domain, strlen(domain), sid, GFP_KERNEL);
 #endif
 	if (rc)
 		return rc;
 
-	scoped_guard(nksu_mutex, &domain_cache_lock) {
+	scoped_guard(nksu_mutex, &domain_cache_lock)
+	{
 		i = domain_cache_next;
 		domain_cache_next = (domain_cache_next + 1) % NKSU_DOMAIN_CACHE;
 		strscpy(domain_cache[i].domain, domain, sizeof(domain_cache[i].domain));
@@ -173,10 +173,10 @@ int set_domain(const char *domain, struct cred *new_cred)
 	if (new_cred->security) {
 		struct task_security_struct *tsec = nksu_cred_security(new_cred);
 
-		tsec->osid          = tsec->sid;
-		tsec->sid           = newsid;
-		tsec->exec_sid      = 0;
-		tsec->create_sid    = 0;
+		tsec->osid = tsec->sid;
+		tsec->sid = newsid;
+		tsec->exec_sid = 0;
+		tsec->create_sid = 0;
 		tsec->keycreate_sid = 0;
 		tsec->sockcreate_sid = 0;
 		return 0;
@@ -231,18 +231,15 @@ static u32 nksu_file_sid;
 static void resolve_file_sid(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	int rc = security_context_to_sid(DOMAIN_FILE_CTX,
-					  strlen(DOMAIN_FILE_CTX),
-					  &nksu_file_sid, GFP_KERNEL);
+	int rc = security_context_to_sid(DOMAIN_FILE_CTX, strlen(DOMAIN_FILE_CTX), &nksu_file_sid,
+					 GFP_KERNEL);
 #else
-	int rc = security_context_to_sid(&selinux_state, DOMAIN_FILE_CTX,
-					  strlen(DOMAIN_FILE_CTX),
-					  &nksu_file_sid, GFP_KERNEL);
+	int rc = security_context_to_sid(&selinux_state, DOMAIN_FILE_CTX, strlen(DOMAIN_FILE_CTX),
+					 &nksu_file_sid, GFP_KERNEL);
 #endif
 
 	if (rc) {
-		pr_err("nksu: failed to get SID for %s: %d\n",
-		       DOMAIN_FILE_CTX, rc);
+		pr_err("nksu: failed to get SID for %s: %d\n", DOMAIN_FILE_CTX, rc);
 		nksu_file_sid = 0;
 	}
 }
@@ -291,23 +288,19 @@ void nksu_relabel_path(const char *path)
 	 */
 	if (__vfs_setxattr_noperm) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
-		rc = __vfs_setxattr_noperm(mnt_idmap(file->f_path.mnt),
-					   file->f_path.dentry,
+		rc = __vfs_setxattr_noperm(mnt_idmap(file->f_path.mnt), file->f_path.dentry,
 					   XATTR_NAME_SELINUX, DOMAIN_FILE_CTX,
 					   strlen(DOMAIN_FILE_CTX) + 1, 0);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
-		rc = __vfs_setxattr_noperm(mnt_user_ns(file->f_path.mnt),
-					   file->f_path.dentry,
+		rc = __vfs_setxattr_noperm(mnt_user_ns(file->f_path.mnt), file->f_path.dentry,
 					   XATTR_NAME_SELINUX, DOMAIN_FILE_CTX,
 					   strlen(DOMAIN_FILE_CTX) + 1, 0);
 #else
-		rc = __vfs_setxattr_noperm(file->f_path.dentry, XATTR_NAME_SELINUX,
-					   DOMAIN_FILE_CTX,
+		rc = __vfs_setxattr_noperm(file->f_path.dentry, XATTR_NAME_SELINUX, DOMAIN_FILE_CTX,
 					   strlen(DOMAIN_FILE_CTX) + 1, 0);
 #endif
 		if (rc)
-			pr_warn("nksu: cannot persist label on %s: %d\n", path,
-				rc);
+			pr_warn("nksu: cannot persist label on %s: %d\n", path, rc);
 	}
 }
 
@@ -322,14 +315,12 @@ static bool do_allow(struct policydb *db, const char *type_name)
 
 	type = (struct type_datum *)symtab_search(&db->p_types, type_name);
 	if (!type) {
-		pr_err("[selinux]: type '%s' not found, cannot set permissive\n",
-		       type_name);
+		pr_err("[selinux]: type '%s' not found, cannot set permissive\n", type_name);
 		return false;
 	}
 
 	if (ebitmap_set_bit(&db->permissive_map, type->value, true)) {
-		pr_err("[selinux]: failed to set permissive bit for '%s'\n",
-		       type_name);
+		pr_err("[selinux]: failed to set permissive bit for '%s'\n", type_name);
 		return false;
 	}
 
@@ -364,8 +355,8 @@ int load_hook(void)
 	}
 
 #ifdef CONFIG_NKSU_DEBUG
-    // Too noisy, disabled.
-    /*
+	// Too noisy, disabled.
+	/*
 	rc = sepolicy_make_audit();
 	if (rc) {
 		pr_err("[selinux]: failed to make audit: %d\n", rc);
@@ -375,15 +366,13 @@ int load_hook(void)
 
 	rc = sepolicy_add_domain(DOMAIN);
 	if (rc) {
-		pr_err("[selinux]: Failed to add domain '%s': %d\n",
-		       DOMAIN, rc);
+		pr_err("[selinux]: Failed to add domain '%s': %d\n", DOMAIN, rc);
 		return rc;
 	}
 
 	rc = sepolicy_init();
 	if (rc) {
-		pr_err("[selinux]: Failed to apply rules for '%s': %d\n",
-		       DOMAIN, rc);
+		pr_err("[selinux]: Failed to apply rules for '%s': %d\n", DOMAIN, rc);
 		return rc;
 	}
 
@@ -391,11 +380,12 @@ int load_hook(void)
 	resolve_file_sid();
 
 #ifdef CONFIG_NKSU_DEBUG
-	pr_info("[selinux]: debug mode, setting permissive for '%s'\n",
-		DOMAIN);
-	scoped_guard(nksu_mutex, &selinux_state.policy_mutex) {
+	pr_info("[selinux]: debug mode, setting permissive for '%s'\n", DOMAIN);
+	scoped_guard(nksu_mutex, &selinux_state.policy_mutex)
+	{
 		db = &rcu_dereference_protected(selinux_state.policy,
-			lockdep_is_held(&selinux_state.policy_mutex))->policydb;
+						lockdep_is_held(&selinux_state.policy_mutex))
+			      ->policydb;
 		do_allow(db, DOMAIN);
 	}
 	avc_reset();
@@ -442,8 +432,7 @@ static int nksu_selinux_init_thread(void *data)
 int init_selinux_hook(void)
 {
 	if (!READ_ONCE(selinux_state.policy)) {
-		nksu_init_thread = kthread_run(nksu_selinux_init_thread,
-					       NULL, "nksu-selinux-init");
+		nksu_init_thread = kthread_run(nksu_selinux_init_thread, NULL, "nksu-selinux-init");
 		if (IS_ERR(nksu_init_thread)) {
 			pr_err("[selinux]: failed to start init thread: %ld\n",
 			       PTR_ERR(nksu_init_thread));

@@ -24,7 +24,7 @@
  *      appscan_init+0x128/0x1a8 [nksu]
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 /* definitions */
@@ -105,13 +105,13 @@ typeof(init_nsproxy) *nksu_init_nsproxy;
 typeof(__set_fixmap) *nksu___set_fixmap;
 typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 
-#define NKSU_RESOLVE(ptr, sym)                                     \
-	do {                                                       \
-		(ptr) = (typeof(ptr))nksu_ksym_lookup(sym);        \
-		if (!(ptr)) {                                      \
-			pr_err("[ksym] unresolved %s\n", (sym));   \
-			missing++;                                 \
-		}                                                  \
+#define NKSU_RESOLVE(ptr, sym)                                   \
+	do {                                                     \
+		(ptr) = (typeof(ptr))nksu_ksym_lookup(sym);      \
+		if (!(ptr)) {                                    \
+			pr_err("[ksym] unresolved %s\n", (sym)); \
+			missing++;                               \
+		}                                                \
 	} while (0)
 
 /*
@@ -123,18 +123,16 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
  *   <= 6.9  fsnotify_add_mark(mark, &inode->i_fsnotify_marks, type, flags, NULL)
  *   >= 6.10 fsnotify_add_mark(mark, inode, type, flags)
  */
-int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
-				 int add_flags)
+int nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode, int add_flags)
 {
 	if (!nksu_fsnotify_add_mark)
 		return -ENOSYS;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
-	return nksu_fsnotify_add_mark(mark, inode, FSNOTIFY_OBJ_TYPE_INODE,
-				      add_flags);
+	return nksu_fsnotify_add_mark(mark, inode, FSNOTIFY_OBJ_TYPE_INODE, add_flags);
 #else
-	return nksu_fsnotify_add_mark(mark, &inode->i_fsnotify_marks,
-				      FSNOTIFY_OBJ_TYPE_INODE, add_flags, NULL);
+	return nksu_fsnotify_add_mark(mark, &inode->i_fsnotify_marks, FSNOTIFY_OBJ_TYPE_INODE,
+				      add_flags, NULL);
 #endif
 }
 
@@ -160,16 +158,13 @@ int nksu_symbol_compat_init(void)
 
 	NKSU_RESOLVE(nksu_avc_ss_reset, "avc_ss_reset");
 	NKSU_RESOLVE(nksu_selnl_notify_policyload, "selnl_notify_policyload");
-	NKSU_RESOLVE(nksu_selinux_status_update_policyload,
-		     "selinux_status_update_policyload");
+	NKSU_RESOLVE(nksu_selinux_status_update_policyload, "selinux_status_update_policyload");
 	NKSU_RESOLVE(nksu_security_context_to_sid, "security_context_to_sid");
 	NKSU_RESOLVE(nksu_avc_has_perm, "avc_has_perm");
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	NKSU_RESOLVE(nksu_security_sid_to_context, "security_sid_to_context");
-	NKSU_RESOLVE(nksu_security_context_str_to_sid,
-		     "security_context_str_to_sid");
-	NKSU_RESOLVE(nksu_security_compute_av_user,
-		     "security_compute_av_user");
+	NKSU_RESOLVE(nksu_security_context_str_to_sid, "security_context_str_to_sid");
+	NKSU_RESOLVE(nksu_security_compute_av_user, "security_compute_av_user");
 #endif
 	NKSU_RESOLVE(nksu_vfs_mkdir, "vfs_mkdir");
 	NKSU_RESOLVE(nksu_vfs_unlink, "vfs_unlink");
@@ -229,13 +224,12 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_copy_to_kernel_nofault, "copy_to_kernel_nofault");
 
 	if (missing) {
-		pr_err("[ksym] %d unexported symbol(s) unresolved, cache=%lu\n",
-		       missing, nksu_ksym_count());
+		pr_err("[ksym] %d unexported symbol(s) unresolved, cache=%lu\n", missing,
+		       nksu_ksym_count());
 		return -ENOENT;
 	}
 
-	pr_info("[ksym] all unexported symbols resolved, cache=%lu\n",
-		nksu_ksym_count());
+	pr_info("[ksym] all unexported symbols resolved, cache=%lu\n", nksu_ksym_count());
 	return 0;
 }
 
@@ -315,4 +309,3 @@ void nksu_symbol_compat_exit(void)
 #if defined(__clang__)
 #pragma clang attribute pop
 #endif
-

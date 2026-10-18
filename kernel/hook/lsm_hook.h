@@ -21,14 +21,14 @@
  */
 
 struct nksu_lsm_hook {
-    const char *head_name;
-    const char *target_name;
-    size_t hook_offset;
-    void *replacement;
-    void *original;
-    struct security_hook_list *entry;
+	const char *head_name;
+	const char *target_name;
+	size_t hook_offset;
+	void *replacement;
+	void *original;
+	struct security_hook_list *entry;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-    struct lsm_static_call *scall;
+	struct lsm_static_call *scall;
 #endif
 };
 
@@ -37,13 +37,13 @@ struct nksu_lsm_hook {
  * target_symbol the kernel function currently registered for that hook,
  * replacement_fn the function to install.
  */
-#define NKSU_LSM_HOOK_INIT(member, target_symbol, replacement_fn)                                                      \
-    {                                                                                                                  \
-        .head_name = #member,                                                                                          \
-        .target_name = target_symbol,                                                                                  \
-        .hook_offset = offsetof(struct security_hook_list, hook.member),                                               \
-        .replacement = (void *)(replacement_fn),                                                                       \
-    }
+#define NKSU_LSM_HOOK_INIT(member, target_symbol, replacement_fn)                \
+	{                                                                        \
+		.head_name = #member,                                            \
+		.target_name = target_symbol,                                    \
+		.hook_offset = offsetof(struct security_hook_list, hook.member), \
+		.replacement = (void *)(replacement_fn),                         \
+	}
 
 /*
  * Replace the LSM hook handler that currently points to hook->target_name with

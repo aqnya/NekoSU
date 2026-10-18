@@ -47,11 +47,9 @@
  * Wrap it so the call sites below stay identical across versions.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-#define nksu_kernel_thread_run(fn, arg, name, flags) \
-	kernel_thread((fn), (arg), (name), (flags))
+#define nksu_kernel_thread_run(fn, arg, name, flags) kernel_thread((fn), (arg), (name), (flags))
 #else
-#define nksu_kernel_thread_run(fn, arg, name, flags) \
-	kernel_thread((fn), (arg), (flags))
+#define nksu_kernel_thread_run(fn, arg, name, flags) kernel_thread((fn), (arg), (flags))
 #endif
 
 /*
@@ -59,7 +57,7 @@
  * pointer can fail the compiler's CFI type check, so opt this file out.
  */
 #if defined(__clang__)
-#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 struct nksu_spawn {
@@ -174,8 +172,7 @@ static int nksu_spawn_child(void *data)
 	wait_for_initramfs();
 #endif
 
-	ret = kernel_execve(work->path,
-			    (const char *const *)work->argv,
+	ret = kernel_execve(work->path, (const char *const *)work->argv,
 			    (const char *const *)work->envp);
 out:
 	work->ret = ret;
@@ -213,8 +210,7 @@ static int nksu_spawn_supervisor(void *data)
 	kernel_sigaction(SIGCHLD, SIG_DFL);
 
 	if (work->wait == NKSU_SPAWN_WAIT_PROC) {
-		pid = nksu_kernel_thread_run(nksu_spawn_child, work,
-					     "nksu-spawn", SIGCHLD);
+		pid = nksu_kernel_thread_run(nksu_spawn_child, work, "nksu-spawn", SIGCHLD);
 		if (pid < 0) {
 			work->ret = pid;
 		} else {
@@ -231,8 +227,7 @@ static int nksu_spawn_supervisor(void *data)
 	 * SIGCHLD, so the helper is reaped automatically and never pollutes
 	 * our children list.
 	 */
-	pid = nksu_kernel_thread_run(nksu_spawn_child, work,
-				     "nksu-spawn", CLONE_PARENT | SIGCHLD);
+	pid = nksu_kernel_thread_run(nksu_spawn_child, work, "nksu-spawn", CLONE_PARENT | SIGCHLD);
 	if (pid < 0) {
 		work->ret = pid;
 		nksu_spawn_complete(work);
