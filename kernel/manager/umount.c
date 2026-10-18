@@ -1,31 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Module mount handling: syscall observation, per-process removal and mount-id
- * isolation all live here.  The sys_enter probe is registered by this module
- * itself; the main syscall hook is not involved.
+ * Module mount hiding: module mounts are given a high mount id and the
+ * mount-info readers filter those ids out.  The mounts stay in place; nothing
+ * is unmounted.
  */
 #include <linux/cred.h>
-#include <linux/atomic.h>
-#include <linux/dcache.h>
-#include <linux/err.h>
-#include <linux/fs.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/kconfig.h>
 #include <linux/kprobes.h>
 #include <linux/limits.h>
-#include <linux/list.h>
-#include <linux/mount.h>
 #include <linux/mutex.h>
-#include <linux/namei.h>
-#include <linux/nsproxy.h>
-#include <linux/path.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
-#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
-#include <linux/task_work.h>
 #include <linux/tracepoint.h>
 #include <linux/types.h>
 #include <asm/ptrace.h>
@@ -35,314 +24,14 @@
 #include "manager/feature.h"
 #include "manager/umount.h"
 #include "nksu_task.h"
-#include "selinux/selinux.h"
 #include "symbol/symbol.h"
-#include "symbol/symbol_compat.h"
 
 #if defined(__clang__)
 #pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to=function)
 #endif
 
-struct nksu_umount_entry {
-	struct list_head list;
-	char *path;
-	int flags;
-};
-
-struct mnt_namespace;
-
-static LIST_HEAD(nksu_umount_list);
-static DEFINE_SPINLOCK(nksu_umount_lock);
 static DEFINE_MUTEX(nksu_umount_state_lock);
 static bool nksu_umount_running;
-static struct mnt_namespace *nksu_done_mnt_ns;
-static u64 nksu_done_mnt_gen;
-static atomic64_t nksu_umount_gen = ATOMIC64_INIT(0);
-static bool nksu_mnt_ns_hooks_ready;
-
-int nksu_umount_add(const char *path, int flags)
-{
-	struct nksu_umount_entry *entry;
-	unsigned long irqflags;
-
-	if (!path || !path[0])
-		return -EINVAL;
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_for_each_entry(entry, &nksu_umount_list, list) {
-		if (!strcmp(entry->path, path)) {
-			spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-			/* A remount at the same path still invalidates the cache. */
-			atomic64_inc(&nksu_umount_gen);
-			return 0;
-		}
-	}
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-
-	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
-	if (!entry)
-		return -ENOMEM;
-	entry->path = kstrdup(path, GFP_ATOMIC);
-	if (!entry->path) {
-		kfree(entry);
-		return -ENOMEM;
-	}
-	entry->flags = flags;
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_add_tail(&entry->list, &nksu_umount_list);
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-	atomic64_inc(&nksu_umount_gen);
-	return 0;
-}
-
-static void nksu_umount_free_list(struct list_head *list)
-{
-	struct nksu_umount_entry *entry, *tmp;
-
-	list_for_each_entry_safe(entry, tmp, list, list) {
-		list_del(&entry->list);
-		kfree(entry->path);
-		kfree(entry);
-	}
-}
-
-void nksu_umount_wipe(void)
-{
-	LIST_HEAD(victim);
-	unsigned long irqflags;
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_splice_init(&nksu_umount_list, &victim);
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-
-	nksu_umount_free_list(&victim);
-	WRITE_ONCE(nksu_done_mnt_ns, NULL);
-}
-
-static bool nksu_umount_empty(void)
-{
-	bool empty;
-	unsigned long irqflags;
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	empty = list_empty(&nksu_umount_list);
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-	return empty;
-}
-
-/*
- * A path registered at mount(2) entry may never have become a mount (the
- * syscall can fail).  Only remove the mount when its root dentry lives under
- * the module store, so a stale entry can never unmount an unrelated mount.
- *
- * Walking the dentry parents is intentional: d_path() would resolve the mount
- * root through the namespace and report the mountpoint ("/system/..."), not
- * the filesystem-relative root (".../adb/modules/...") we need here.
- */
-static bool nksu_umount_module_root(struct dentry *root)
-{
-	struct dentry *dentry;
-	bool saw_modules = false;
-	int depth;
-
-	rcu_read_lock();
-	dentry = root;
-	for (depth = 0; dentry && depth < 16; depth++) {
-		const char *name = (const char *)dentry->d_name.name;
-
-		if (!strcmp(name, "modules") || !strcmp(name, "modules_update"))
-			saw_modules = true;
-		else if (saw_modules && !strcmp(name, "adb")) {
-			rcu_read_unlock();
-			return true;
-		}
-
-		if (dentry == dentry->d_parent)
-			break;
-		dentry = dentry->d_parent;
-	}
-	rcu_read_unlock();
-	return false;
-}
-
-struct nksu_umount_snapshot {
-	char path[256];
-	int flags;
-};
-
-static struct nksu_umount_snapshot *
-nksu_umount_take_snapshot(size_t *count, struct nksu_umount_snapshot *inline_buf,
-			  size_t inline_n)
-{
-	struct nksu_umount_snapshot *snapshot;
-	struct nksu_umount_entry *entry;
-	unsigned long irqflags;
-	size_t n = 0, i = 0;
-
-	*count = 0;
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_for_each_entry(entry, &nksu_umount_list, list)
-		n++;
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-
-	if (!n)
-		return NULL;
-
-	if (n <= inline_n) {
-		snapshot = inline_buf;
-	} else {
-		snapshot = kmalloc_array(n, sizeof(*snapshot), GFP_KERNEL);
-		if (!snapshot) {
-			pr_warn_ratelimited("[umount] cannot allocate snapshot\n");
-			return NULL;
-		}
-	}
-
-	spin_lock_irqsave(&nksu_umount_lock, irqflags);
-	list_for_each_entry(entry, &nksu_umount_list, list) {
-		if (i == n)
-			break;
-		strscpy(snapshot[i].path, entry->path, sizeof(snapshot[i].path));
-		snapshot[i].flags = entry->flags;
-		i++;
-	}
-	spin_unlock_irqrestore(&nksu_umount_lock, irqflags);
-
-	*count = i;
-	return snapshot;
-}
-
-static bool nksu_mnt_ns_done(void)
-{
-	struct mnt_namespace *ns;
-
-	if (!READ_ONCE(nksu_mnt_ns_hooks_ready) || !current->nsproxy)
-		return false;
-
-	ns = READ_ONCE(current->nsproxy->mnt_ns);
-	if (!ns)
-		return false;
-
-	return READ_ONCE(nksu_done_mnt_ns) == ns &&
-	       READ_ONCE(nksu_done_mnt_gen) ==
-		       atomic64_read(&nksu_umount_gen);
-}
-
-static void nksu_umount_run(void)
-{
-	const struct cred *old;
-	/*
-	 * Keep the stack copy small: this function is inlined into the
-	 * task_work callback, which is built with -Wframe-larger-than=2048.
-	 * Larger lists fall back to the heap snapshot.
-	 */
-	struct nksu_umount_snapshot inline_buf[4];
-	struct nksu_umount_snapshot *snapshot;
-	struct mnt_namespace *ns;
-	u64 gen;
-	size_t count = 0, i;
-	bool failed = false;
-
-	if (!READ_ONCE(nksu_umount_running) || nksu_umount_empty())
-		return;
-
-	if (nksu_mnt_ns_done())
-		return;
-
-	ns = current->nsproxy ? READ_ONCE(current->nsproxy->mnt_ns) : NULL;
-	gen = atomic64_read(&nksu_umount_gen);
-
-	snapshot = nksu_umount_take_snapshot(&count, inline_buf,
-					     ARRAY_SIZE(inline_buf));
-	if (!snapshot)
-		return;
-
-	old = nksu_borrow_creds_begin();
-	for (i = 0; i < count; i++) {
-		const char *target = snapshot[i].path;
-		struct path path;
-		int ret;
-
-		ret = kern_path(target, 0, &path);
-		if (ret) {
-			pr_debug("[umount] %s: kern_path failed: %d\n", target, ret);
-			continue;
-		}
-		if (path.dentry != path.mnt->mnt_root) {
-			pr_debug("[umount] %s is not a mount root, skip\n", target);
-			path_put(&path);
-			continue;
-		}
-		if (!nksu_umount_module_root(path.dentry)) {
-			pr_debug("[umount] %s is not under the module store, skip\n",
-				 target);
-			path_put(&path);
-			continue;
-		}
-
-		if (!path_umount) {
-			pr_err("[umount] path_umount is unresolved\n");
-			path_put(&path);
-			failed = true;
-			continue;
-		}
-		ret = path_umount(&path, snapshot[i].flags);
-		if (ret) {
-			pr_info("[umount] %s failed: %d\n", target, ret);
-			failed = true;
-		} else {
-			pr_info("[umount] removed %s\n", target);
-		}
-	}
-	if (old)
-		nksu_borrow_creds_end(old);
-
-	if (snapshot != inline_buf)
-		kfree(snapshot);
-
-	if (ns && !failed) {
-		WRITE_ONCE(nksu_done_mnt_ns, ns);
-		WRITE_ONCE(nksu_done_mnt_gen, gen);
-	}
-}
-
-struct nksu_umount_work {
-	struct callback_head cb;
-};
-
-static void nksu_umount_work_fn(struct callback_head *cb)
-{
-	struct nksu_umount_work *work =
-		container_of(cb, struct nksu_umount_work, cb);
-
-	nksu_umount_run();
-	kfree(work);
-}
-
-void nksu_umount_schedule(void)
-{
-	struct nksu_umount_work *work;
-
-	if (!READ_ONCE(nksu_umount_running))
-		return;
-	if (nksu_mnt_ns_done())
-		return;
-	if (nksu_umount_empty())
-		return;
-
-	work = kzalloc(sizeof(*work), GFP_ATOMIC);
-	if (!work) {
-		pr_warn_ratelimited("[umount] cannot allocate task_work\n");
-		return;
-	}
-	init_task_work(&work->cb, nksu_umount_work_fn);
-	if (task_work_add(current, &work->cb, TWA_RESUME)) {
-		pr_warn_ratelimited("[umount] cannot queue task_work\n");
-		kfree(work);
-	}
-}
 
 /*
  * ---------------------------------------------------------------------------
@@ -372,8 +61,6 @@ static bool nksu_mount_layout_seen;
 static bool nksu_ida_probe_ready;
 static bool nksu_mount_probes_ready;
 static bool nksu_clone_probe_ready;
-static bool nksu_copy_ns_probe_ready;
-static bool nksu_install_ns_probe_ready;
 static bool nksu_show_probe_ready[3];
 static DEFINE_MUTEX(nksu_mount_layout_lock);
 
@@ -423,13 +110,14 @@ static int nksu_ida_alloc_pre(struct kprobe *p, struct pt_regs *regs)
 	struct task_struct *task = current;
 	struct ida *ida = (struct ida *)nksu_arg0(regs);
 	bool clone = nksu_task_clone_mnt(task);
+	bool high_mnt = nksu_task_high_mnt(task);
 	int id;
 
 	if (ida != nksu_mnt_id_ida || !READ_ONCE(nksu_mount_layout_ready))
 		return 0;
 	if (!nksu_ida_alloc_range)
 		return 0;
-	if (!nksu_task_is_ncore(task) && !clone)
+	if (!nksu_task_is_ncore(task) && !clone && !high_mnt)
 		return 0;
 	/* The recursive allocation below must reach the real function. */
 	if (nksu_task_ida_alloc(task))
@@ -450,6 +138,8 @@ static int nksu_ida_alloc_pre(struct kprobe *p, struct pt_regs *regs)
 				    id);
 		if (clone)
 			nksu_task_clear_clone_mnt(task);
+		if (high_mnt)
+			nksu_task_clear_high_mnt(task);
 		return 0;
 	}
 
@@ -514,26 +204,6 @@ static struct kprobe nksu_kp_ida_alloc = {
 static struct kprobe nksu_kp_clone_mnt = {
 	.symbol_name = "clone_mnt",
 	.pre_handler = nksu_clone_mnt_pre,
-};
-
-/*
- * A namespace gets a fresh mount view; drop the "already processed" marker so
- * the first setresuid in it still walks the module mount list.
- */
-static int nksu_mnt_ns_reset_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	WRITE_ONCE(nksu_done_mnt_ns, NULL);
-	return 0;
-}
-
-static struct kprobe nksu_kp_copy_mnt_ns = {
-	.symbol_name = "copy_mnt_ns",
-	.pre_handler = nksu_mnt_ns_reset_pre,
-};
-
-static struct kprobe nksu_kp_mntns_install = {
-	.symbol_name = "mntns_install",
-	.pre_handler = nksu_mnt_ns_reset_pre,
 };
 
 static struct kprobe nksu_kp_show_mountinfo = {
@@ -622,21 +292,6 @@ static int nksu_mount_probes_register_locked(void)
 			nksu_clone_probe_ready = true;
 	}
 
-	if (!nksu_copy_ns_probe_ready) {
-		ret = nksu_register_one(&nksu_kp_copy_mnt_ns, "copy_mnt_ns", false);
-		if (!ret)
-			nksu_copy_ns_probe_ready = true;
-	}
-	if (!nksu_install_ns_probe_ready) {
-		ret = nksu_register_one(&nksu_kp_mntns_install, "mntns_install",
-					false);
-		if (!ret)
-			nksu_install_ns_probe_ready = true;
-	}
-	nksu_mnt_ns_hooks_ready = nksu_copy_ns_probe_ready &&
-				  nksu_install_ns_probe_ready;
-	WRITE_ONCE(nksu_done_mnt_ns, NULL);
-
 	for (i = 0; i < ARRAY_SIZE(nksu_show_probes); i++) {
 		if (nksu_show_probe_ready[i]) {
 			show_ok++;
@@ -709,16 +364,6 @@ static void nksu_mount_probes_exit(void)
 		nksu_unregister_kprobe(&nksu_kp_clone_mnt);
 		nksu_clone_probe_ready = false;
 	}
-	if (nksu_copy_ns_probe_ready) {
-		nksu_unregister_kprobe(&nksu_kp_copy_mnt_ns);
-		nksu_copy_ns_probe_ready = false;
-	}
-	if (nksu_install_ns_probe_ready) {
-		nksu_unregister_kprobe(&nksu_kp_mntns_install);
-		nksu_install_ns_probe_ready = false;
-	}
-	nksu_mnt_ns_hooks_ready = false;
-	WRITE_ONCE(nksu_done_mnt_ns, NULL);
 	for (i = 0; i < ARRAY_SIZE(nksu_show_probes); i++) {
 		if (!nksu_show_probe_ready[i])
 			continue;
@@ -751,31 +396,15 @@ static void nksu_mount_probes_exit(void)
  * ---------------------------------------------------------------------------
  * sys_enter observation
  * ---------------------------------------------------------------------------
- * This is a probe owned by the umount module, not an entry in the main syscall
- * hook.  It records module mount points and schedules the per-app umount.
+ * This is a probe owned by the mount-hiding feature, not an entry in the main
+ * syscall hook.
  */
-static bool nksu_umount_uid(uid_t uid)
-{
-	return (uid >= 10000 && uid < 20000) ||
-	       (uid >= 90000 && uid < 100000);
-}
-
-static uid_t nksu_setresuid_target(const struct pt_regs *regs)
-{
-#if defined(__aarch64__)
-	return (uid_t)regs->regs[1];
-#elif defined(__x86_64__)
-	return (uid_t)regs->si;
-#else
-	return 0;
-#endif
-}
 
 /*
- * ncore owns every module mount: module scripts are forked from ncore and
- * inherit NKSU_TIF_NCORE.  Register the target before the real mount runs.
- * A failed mount leaves a stale path behind; nksu_umount_run() verifies the
- * root is actually a module path before touching it.
+ * Module mounts must be hidden without tearing them down.  If a mount is
+ * created from the module store, mark the task for the duration of the
+ * syscall; the mnt_id allocation hook then gives it a high id and the
+ * mount-info readers filter that id out.
  */
 static bool nksu_path_is_module(const char *path)
 {
@@ -793,64 +422,60 @@ static bool nksu_read_abs_path(struct pt_regs *regs, unsigned int argno,
 	return n > 0 && n < (int)len - 1 && buf[0] == '/';
 }
 
-static void nksu_register_mount_target(struct pt_regs *regs,
-				       unsigned int source_arg,
-				       unsigned int target_arg,
-				       const char *what, bool force)
+static bool nksu_is_module_mount(struct pt_regs *regs)
 {
 	char source[256];
 	char target[256];
+	char data[512];
 	bool source_ok;
+	int n;
 
-	source_ok = nksu_read_abs_path(regs, source_arg, source, sizeof(source));
-	if (!nksu_read_abs_path(regs, target_arg, target, sizeof(target))) {
-		pr_warn("[mount] cannot read %s target\n", what);
-		return;
-	}
+	source_ok = nksu_read_abs_path(regs, 0, source, sizeof(source));
+	if (!nksu_read_abs_path(regs, 1, target, sizeof(target)))
+		return false;
 
-	/*
-	 * Keep the list limited to mounts that can possibly be module mounts.
-	 * Target-only checks cover mounts into the module store; the source
-	 * check covers the usual bind mount from /data/adb/modules to /system.
-	 */
-	if (!force && !nksu_path_is_module(target) &&
-	    !(source_ok && nksu_path_is_module(source)))
-		return;
+	if (nksu_path_is_module(target) ||
+	    (source_ok && nksu_path_is_module(source)))
+		return true;
 
-	if (nksu_umount_add(target, MNT_DETACH))
-		pr_warn("[mount] cannot register %s: %s\n", what, target);
-	else
-		pr_debug("[mount] registered %s: %s\n", what, target);
-
-	/*
-	 * A mount made after the app already switched to its final UID (for
-	 * example a zygisk daemon mounting in the app namespace) will not get a
-	 * later setresuid trigger.  Queue the removal from this syscall's
-	 * task_work instead.
-	 */
-	if (nksu_umount_uid(__kuid_val(current_euid())))
-		nksu_umount_schedule();
+	/* overlayfs puts the module paths in the data argument. */
+	n = get_path_arg(regs, 4, data, sizeof(data));
+	return n > 0 &&
+	       (strstr(data, "/data/adb/modules") ||
+		strstr(data, "/adb/modules"));
 }
 
 static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
 {
-	if (id == __NR_setresuid &&
-	    nksu_umount_uid(nksu_setresuid_target(regs)))
-		nksu_umount_schedule();
+	bool mount_call = id == __NR_mount;
+
+#ifdef __NR_move_mount
+	mount_call = mount_call || id == __NR_move_mount;
+#endif
+#ifdef __NR_fsmount
+	mount_call = mount_call || id == __NR_fsmount;
+#endif
 
 	/*
-	 * Record mount targets, but only when the source or target can be a
-	 * module path.  nksu_umount_run() still verifies the mount root before
-	 * removing anything.
+	 * The high-id marker covers every mount made by one syscall (a recursive
+	 * bind can create several).  It is cleared at the next syscall entry.
 	 */
+	if (!mount_call)
+		nksu_task_clear_high_mnt(current);
+
 	switch (id) {
 	case __NR_mount:
-		nksu_register_mount_target(regs, 0, 1, "mount", false);
+		nksu_task_clear_high_mnt(current);
+		if (nksu_is_module_mount(regs))
+			nksu_task_set_high_mnt(current);
 		break;
-#ifdef __NR_move_mount
-	case __NR_move_mount:
-		/* Source may be an O_PATH fd, so the path can be empty. */
-		nksu_register_mount_target(regs, 1, 3, "move_mount", true);
+#ifdef __NR_fsmount
+	case __NR_fsmount:
+		nksu_task_clear_high_mnt(current);
+		/* New mount API: the id is allocated by fsmount(). */
+		if (nksu_task_is_ncore(current) ||
+		    uid_eq(current_euid(), GLOBAL_ROOT_UID))
+			nksu_task_set_high_mnt(current);
 		break;
 #endif
 	}
@@ -1027,7 +652,6 @@ void nksu_umount_exit(void)
 	mutex_lock(&nksu_umount_state_lock);
 	nksu_umount_stop();
 	nksu_umount_running = false;
-	nksu_umount_wipe();
 	mutex_unlock(&nksu_umount_state_lock);
 }
 

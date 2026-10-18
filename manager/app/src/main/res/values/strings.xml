@@ -23,7 +23,7 @@
     <string name="feature_selinux_hide">SELinux hiding</string>
     <string name="feature_selinux_hide_describe">Answer SELinux queries from the policy as it was before the module loaded.</string>
     <string name="feature_umount">Module mount hiding</string>
-    <string name="feature_umount_describe">Remove module mounts from app mount namespaces and hide their mount IDs.</string>
+    <string name="feature_umount_describe">Hide module mounts and their mount IDs from app mount views without unmounting them.</string>
     <string name="close_search">Close Search</string>
     <string name="search_hint">Search app name or package</string>
     <string name="no_app_found">No apps found</string>

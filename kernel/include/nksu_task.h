@@ -18,6 +18,7 @@
 #define NKSU_TIF_NCORE      30
 #define NKSU_TIF_CLONE_MNT  29
 #define NKSU_TIF_IDA_ALLOC  28
+#define NKSU_TIF_HIGH_MNT   27
 
 static inline bool nksu_task_is_ncore(struct task_struct *task)
 {
@@ -52,6 +53,21 @@ static inline void nksu_task_set_ida_alloc(struct task_struct *task)
 static inline void nksu_task_clear_ida_alloc(struct task_struct *task)
 {
 	clear_tsk_thread_flag(task, NKSU_TIF_IDA_ALLOC);
+}
+
+static inline bool nksu_task_high_mnt(struct task_struct *task)
+{
+	return test_tsk_thread_flag(task, NKSU_TIF_HIGH_MNT);
+}
+
+static inline void nksu_task_set_high_mnt(struct task_struct *task)
+{
+	set_tsk_thread_flag(task, NKSU_TIF_HIGH_MNT);
+}
+
+static inline void nksu_task_clear_high_mnt(struct task_struct *task)
+{
+	clear_tsk_thread_flag(task, NKSU_TIF_HIGH_MNT);
 }
 
 #endif /* NKSU_TASK_H */

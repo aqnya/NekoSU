@@ -82,8 +82,6 @@ enum fmac_flag {
     IOC_GET_SAFEMODE = 18,   /* data 为空，返回 1=已请求安全模式 / 0=未请求 */
     IOC_DISARM_SAFEMODE = 19, /* data 为空，关闭安全模式观察器 */
     IOC_SET_INIT_PGRP = 20,   /* data 为空，把调用者进程组切到 init（root） */
-    IOC_ADD_TRY_UMOUNT = 21,  /* data = 挂载点路径（含 NUL），flags 固定 MNT_DETACH */
-    IOC_WIPE_UMOUNT = 22,     /* data 为空，清空 umount 列表 */
     /*
      * data[8] = uint32_t mnt_id_off | uint32_t mnt_off.  ncore reads the
      * offsets from /sys/kernel/btf/vmlinux and installs them before running
