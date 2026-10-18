@@ -78,6 +78,10 @@
 
     <!-- 关于 -->
     <string name="about_version">Version</string>
+    <string name="about_tagline">Kernel-level root for Android</string>
+    <string name="about_module_version">Kernel module version</string>
+    <string name="about_project">Project</string>
+    <string name="about_license_short">GPL-3.0 licensed</string>
     <string name="about_repository">Repository</string>
     <string name="about_repository_summary">View source code on GitHub</string>
     <string name="about_open_source">Open Source Licenses</string>
