@@ -4,7 +4,6 @@
  * mount-info readers filter those ids out.  The mounts stay in place; nothing
  * is unmounted.
  */
-#include <linux/cred.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/kconfig.h>
@@ -40,8 +39,8 @@ static bool nksu_umount_running;
  * Every mount created by ncore (and every clone of such a mount) gets an id
  * from the high range instead of the kernel's low, sequential allocator.  The
  * mount-info readers then omit high-id mounts unless the reader is ncore
- * itself.  The low id sequence an app observes therefore stays contiguous even
- * after the per-app umount removed module mounts from its namespace.
+ * itself.  The low id sequence an app observes therefore stays contiguous
+ * without unmounting anything.
  *
  * The struct mount field offsets are supplied by ncore, which reads them from
  * the kernel's BTF.  Hard-coding offsets across GKI versions is not an option.
@@ -408,7 +407,11 @@ static void nksu_mount_probes_exit(void)
  */
 static bool nksu_path_is_module(const char *path)
 {
-	return !strncmp(path, "/data/adb/modules/", 18) ||
+	return !strcmp(path, "/data/adb/modules") ||
+	       !strcmp(path, "/data/adb/modules_update") ||
+	       !strcmp(path, "/adb/modules") ||
+	       !strcmp(path, "/adb/modules_update") ||
+	       !strncmp(path, "/data/adb/modules/", 18) ||
 	       !strncmp(path, "/data/adb/modules_update/", 25) ||
 	       !strncmp(path, "/adb/modules/", 13) ||
 	       !strncmp(path, "/adb/modules_update/", 20);
@@ -473,8 +476,7 @@ static void nksu_umount_sys_enter(void *data, struct pt_regs *regs, long id)
 	case __NR_fsmount:
 		nksu_task_clear_high_mnt(current);
 		/* New mount API: the id is allocated by fsmount(). */
-		if (nksu_task_is_ncore(current) ||
-		    uid_eq(current_euid(), GLOBAL_ROOT_UID))
+		if (nksu_task_is_ncore(current))
 			nksu_task_set_high_mnt(current);
 		break;
 #endif
