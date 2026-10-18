@@ -69,6 +69,20 @@ static const module_component_t early_components[] = {
 };
 
 /*
+ * Features that must be armed before ncore runs at post-fs-data.  They are
+ * kept out of the core boot group above but are initialized at the same
+ * second_stage point; feature_components (below) is too late because it is
+ * gated on zygote detection.
+ */
+static const module_component_t early_feature_components[] = {
+    {
+        .name = "module mounts",
+        .init = nksu_umount_init,
+        .exit = nksu_umount_exit,
+    },
+};
+
+/*
  * SELinux needs the policy, which is loaded during the "selinux_setup"
  * stage; everything else needs /data, which is mounted by the time zygote
  * runs (Android init triggers `post-fs-data` before `zygote-start`, matching
@@ -120,17 +134,6 @@ static const module_component_t feature_components[] = {
         .name = "SELinux hide",
         .init = nksu_selinux_hide_init,
         .exit = nksu_selinux_hide_exit,
-    },
-    {
-        /*
-         * Module mount handling is a feature, not part of the boot core.
-         * ncore activates it from IOC_SET_MNT_LAYOUT before the first module
-         * mount script; this slot is the normal feature-lifecycle owner and
-         * is idempotent when ncore already initialized it.
-         */
-        .name = "module mounts",
-        .init = nksu_umount_init,
-        .exit = nksu_umount_exit,
     },
 #ifdef CONFIG_NKSU_SYSCALL
     {
@@ -211,6 +214,18 @@ void nksu_exit_early_components(void)
                               ARRAY_SIZE(early_components));
 }
 
+int nksu_init_early_feature_components(void)
+{
+    return init_component_list(early_feature_components,
+                               ARRAY_SIZE(early_feature_components));
+}
+
+void nksu_exit_early_feature_components(void)
+{
+    nekosu_cleanup_components(early_feature_components,
+                              ARRAY_SIZE(early_feature_components));
+}
+
 int nksu_init_selinux_components(void)
 {
     return init_component_list(selinux_components,
@@ -242,8 +257,15 @@ static int nekosu_init_all_components(void)
     if (ret)
         return ret;
 
+    ret = nksu_init_early_feature_components();
+    if (ret) {
+        nksu_exit_early_components();
+        return ret;
+    }
+
     ret = nksu_init_selinux_components();
     if (ret) {
+        nksu_exit_early_feature_components();
         nksu_exit_early_components();
         return ret;
     }
@@ -251,6 +273,7 @@ static int nekosu_init_all_components(void)
     ret = nksu_init_feature_components();
     if (ret) {
         nksu_exit_selinux_components();
+        nksu_exit_early_feature_components();
         nksu_exit_early_components();
     }
 
@@ -261,6 +284,7 @@ static void nekosu_cleanup_all_components(void)
 {
     nksu_exit_feature_components();
     nksu_exit_selinux_components();
+    nksu_exit_early_feature_components();
     nksu_exit_early_components();
 }
 

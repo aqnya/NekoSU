@@ -458,33 +458,21 @@ static int nksu_register_one(struct kprobe *kp, const char *name, bool required)
 	return 0;
 }
 
-int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
+static int nksu_mount_probes_register_locked(void)
 {
 	int ret, i, show_ok = 0;
 
-	if (mnt_id_off > 4096 - sizeof(int) || mnt_off > 4096 ||
-	    (mnt_id_off & (sizeof(int) - 1)))
-		return -EINVAL;
-
-	mutex_lock(&nksu_mount_layout_lock);
-
-	WRITE_ONCE(nksu_mnt_id_off, mnt_id_off);
-	WRITE_ONCE(nksu_mnt_off, mnt_off);
-
-	if (nksu_mount_probes_ready) {
-		WRITE_ONCE(nksu_mount_layout_ready, true);
-		mutex_unlock(&nksu_mount_layout_lock);
+	if (nksu_mount_probes_ready)
 		return 0;
-	}
 
 	ret = nksu_resolve_probe_symbols();
 	if (ret)
-		goto out;
+		return ret;
 
 	if (!nksu_ida_probe_ready) {
 		ret = nksu_register_one(&nksu_kp_ida_alloc, "ida_alloc_range", true);
 		if (ret)
-			goto out;
+			return ret;
 		nksu_ida_probe_ready = true;
 	}
 
@@ -509,19 +497,37 @@ int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 
 	if (!show_ok) {
 		pr_err("[mount-id] no mountinfo reader could be hooked\n");
-		ret = -ENOENT;
-		goto out;
+		return -ENOENT;
 	}
 
 	nksu_mount_probes_ready = true;
-	WRITE_ONCE(nksu_mount_layout_ready, true);
-	pr_info("[mount-id] active (mnt_id@%u, mnt@%u, readers=%d)\n",
-		mnt_id_off, mnt_off, show_ok);
-	ret = 0;
+	return 0;
+}
 
-out:
+int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
+{
+	int ret;
+
+	if (mnt_id_off > 4096 - sizeof(int) || mnt_off > 4096 ||
+	    (mnt_id_off & (sizeof(int) - 1)))
+		return -EINVAL;
+
+	mutex_lock(&nksu_mount_layout_lock);
+
+	WRITE_ONCE(nksu_mnt_id_off, mnt_id_off);
+	WRITE_ONCE(nksu_mnt_off, mnt_off);
+
+	ret = nksu_mount_probes_register_locked();
+	if (ret) {
+		mutex_unlock(&nksu_mount_layout_lock);
+		return ret;
+	}
+
+	WRITE_ONCE(nksu_mount_layout_ready, true);
 	mutex_unlock(&nksu_mount_layout_lock);
-	return ret;
+	pr_info("[mount-id] active (mnt_id@%u, mnt@%u)\n", mnt_id_off,
+		mnt_off);
+	return 0;
 }
 
 static void nksu_mount_probes_exit(void)
@@ -555,6 +561,11 @@ static void nksu_mount_probes_exit(void)
 int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 {
 	pr_err("[mount-id] CONFIG_KPROBES is disabled\n");
+	return -EOPNOTSUPP;
+}
+
+static int nksu_mount_probes_register_locked(void)
+{
 	return -EOPNOTSUPP;
 }
 
@@ -696,6 +707,17 @@ int nksu_umount_init(void)
 
 	nksu_umount_hooked = true;
 	mutex_unlock(&nksu_umount_init_lock);
+
+	/*
+	 * Arm the mount-id hooks now, before ncore starts.  They stay inert
+	 * until IOC_SET_MNT_LAYOUT supplies the BTF offsets.
+	 */
+	mutex_lock(&nksu_mount_layout_lock);
+	ret = nksu_mount_probes_register_locked();
+	mutex_unlock(&nksu_mount_layout_lock);
+	if (ret)
+		pr_warn("[mount-id] probes not ready at early init: %d\n", ret);
+
 	pr_info("[umount] sys_enter probe active\n");
 	return 0;
 }
