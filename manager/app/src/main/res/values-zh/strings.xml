@@ -89,15 +89,21 @@
     <string name="cd_save">保存</string>
     <string name="cd_reset">重置</string>
     <string name="cd_delete">删除</string>
+    <string name="cd_clear">清空</string>
 
     <!-- App Detail -->
     <string name="app_tag_system">系统</string>
     <string name="app_uid_format">UID: %d</string>
     <string name="app_uid_tag">UID %1$d</string>
-    <string name="app_profile_title">应用配置</string>
+    <string name="app_profile_title">应用授权</string>
     <string name="app_root_uid">Root UID</string>
+    <string name="app_root_uid_input">进程 UID</string>
     <string name="app_root_uid_desc">授权 root 后进程使用的 UID（0 为真正的 root）</string>
+    <string name="app_root_uid_zero">真实 root（0）</string>
+    <string name="app_root_uid_app">应用 UID（%1$d）</string>
     <string name="app_allow_root">允许 Root 访问</string>
+    <string name="app_root_access_summary">使用配置的身份与能力运行此应用</string>
+    <string name="app_root_configuration">Root 配置</string>
     <string name="app_status_granted">已授权</string>
     <string name="app_status_denied">已拒绝</string>
     <string name="app_caps_selected">%1$d / %2$d 已选</string>
@@ -105,6 +111,8 @@
     <string name="app_enable_root_first">请先启用 Root 授权</string>
     <string name="app_no_capabilities">无 capabilities</string>
     <string name="app_selinux_domain">SELinux Domain</string>
+    <string name="app_selinux_domain_input">Domain 上下文</string>
+    <string name="app_selinux_domain_desc">提权后进程使用的 SELinux 上下文</string>
     <string name="app_mount_namespace">Mount 命名空间</string>
 
     <!-- 通用对话框 -->

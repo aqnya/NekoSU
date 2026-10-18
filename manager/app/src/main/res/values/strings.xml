@@ -91,15 +91,21 @@
     <string name="cd_save">Save</string>
     <string name="cd_reset">Reset</string>
     <string name="cd_delete">Delete</string>
+    <string name="cd_clear">Clear</string>
 
     <!-- App Detail -->
     <string name="app_tag_system">system</string>
     <string name="app_uid_format">UID: %d</string>
     <string name="app_uid_tag">UID %1$d</string>
-    <string name="app_profile_title">App Profile</string>
+    <string name="app_profile_title">App Authorization</string>
     <string name="app_root_uid">Root UID</string>
+    <string name="app_root_uid_input">Process UID</string>
     <string name="app_root_uid_desc">UID the app runs as after being granted root (0 = real root)</string>
+    <string name="app_root_uid_zero">Real root (0)</string>
+    <string name="app_root_uid_app">App UID (%1$d)</string>
     <string name="app_allow_root">Allow Root Access</string>
+    <string name="app_root_access_summary">Run this app with the configured identity and capabilities</string>
+    <string name="app_root_configuration">Root configuration</string>
     <string name="app_status_granted">Granted</string>
     <string name="app_status_denied">Denied</string>
     <string name="app_caps_selected">%1$d / %2$d selected</string>
@@ -107,6 +113,8 @@
     <string name="app_enable_root_first">Please enable Root access first</string>
     <string name="app_no_capabilities">No capabilities</string>
     <string name="app_selinux_domain">SELinux Domain</string>
+    <string name="app_selinux_domain_input">Domain context</string>
+    <string name="app_selinux_domain_desc">SELinux context used by processes after elevation</string>
     <string name="app_mount_namespace">Mount Namespace</string>
 
     <!-- 通用对话框 -->

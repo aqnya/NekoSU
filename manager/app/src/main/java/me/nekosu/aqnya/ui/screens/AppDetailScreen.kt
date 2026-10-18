@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Layers
@@ -39,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,12 +52,10 @@ import me.nekosu.aqnya.R
 import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.AppCheckbox
 import me.nekosu.aqnya.ui.component.AppDialog
-import me.nekosu.aqnya.ui.component.AppListItem
 import me.nekosu.aqnya.ui.component.AppRadioButton
 import me.nekosu.aqnya.ui.component.AppSwitch
-import me.nekosu.aqnya.ui.component.AppTextField
 import me.nekosu.aqnya.ui.component.AppTopAppBar
-import me.nekosu.aqnya.ui.component.CardGroup
+import me.nekosu.aqnya.ui.component.ExpressiveTextField
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,7 +161,7 @@ private fun CapsSheet(
             }
 
             // ── 搜索 ───────────────────────────────────────────────────
-            AppTextField(
+            ExpressiveTextField(
                 value = query,
                 onValueChange = { query = it },
                 label = stringResource(R.string.caps_search_hint),
@@ -325,6 +326,7 @@ private fun CapRow(
 @Composable
 private fun UidDialog(
     current: String,
+    appUid: Int,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -341,26 +343,51 @@ private fun UidDialog(
         },
         dismissText = stringResource(R.string.dialog_cancel),
     ) {
-        Column {
-            AppTextField(
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ExpressiveTextField(
                 value = draft,
                 onValueChange = { value ->
                     if (value.length <= 10 && value.all { it.isDigit() }) draft = value
                 },
-                label = stringResource(R.string.app_root_uid),
+                label = stringResource(R.string.app_root_uid_input),
+                supportingText = stringResource(R.string.app_root_uid_desc),
+                counterText = "${draft.length}/10",
+                placeholder = "0",
+                monospace = true,
                 leadingIcon = {
                     Icon(Icons.Rounded.Badge, contentDescription = null, modifier = Modifier.size(20.dp))
                 },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                trailingIcon = {
+                    if (draft.isNotEmpty()) {
+                        IconButton(onClick = { draft = "" }) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.cd_clear),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                },
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                    ),
             )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.app_root_uid_desc),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = draft == "0",
+                    onClick = { draft = "0" },
+                    label = { Text(stringResource(R.string.app_root_uid_zero)) },
+                    shape = ContinuousCornerShape(12.dp),
+                )
+                FilterChip(
+                    selected = draft == appUid.toString(),
+                    onClick = { draft = appUid.toString() },
+                    label = { Text(stringResource(R.string.app_root_uid_app, appUid)) },
+                    shape = ContinuousCornerShape(12.dp),
+                )
+            }
         }
     }
 }
@@ -384,28 +411,46 @@ private fun DomainDialog(
         },
         dismissText = stringResource(R.string.dialog_cancel),
     ) {
-        Column {
-            AppTextField(
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ExpressiveTextField(
                 value = draft,
                 onValueChange = { draft = it },
-                label = stringResource(R.string.app_selinux_domain),
+                label = stringResource(R.string.app_selinux_domain_input),
+                supportingText = stringResource(R.string.app_selinux_domain_desc),
+                placeholder = "u:r:nksu:s0",
+                monospace = true,
                 leadingIcon = {
                     Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(20.dp))
                 },
                 trailingIcon = {
-                    if (draft != "u:r:nksu:s0") {
-                        IconButton(onClick = { draft = "u:r:nksu:s0" }) {
+                    if (draft.isNotEmpty()) {
+                        IconButton(onClick = { draft = "" }) {
                             Icon(
-                                Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.cd_reset),
+                                Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.cd_clear),
                                 modifier = Modifier.size(18.dp),
                             )
                         }
                     }
                 },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Done,
+                    ),
+            )
+            FilterChip(
+                selected = draft == "u:r:nksu:s0",
+                onClick = { draft = "u:r:nksu:s0" },
+                label = { Text(stringResource(R.string.dialog_default)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                shape = ContinuousCornerShape(12.dp),
             )
         }
     }
@@ -536,6 +581,7 @@ fun AppDetailScreen(
     if (showUidDialog) {
         UidDialog(
             current = rootUidText,
+            appUid = app.uid,
             onDismiss = { showUidDialog = false },
             onConfirm = { value ->
                 val resolved = value.ifBlank { "0" }
@@ -597,52 +643,7 @@ fun AppDetailScreen(
         ) {
             // ── Hero：应用身份 ────────────────────────────────────────────────
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                ) {
-                    AppIcon(
-                        packageName = app.packageName,
-                        modifier =
-                            Modifier
-                                .size(72.dp)
-                                .clip(ContinuousCornerShape(20.dp)),
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = app.name,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = app.packageName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppTag(
-                            label = stringResource(R.string.app_uid_tag, app.uid),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                        if (allowed) {
-                            AppTag(
-                                label = stringResource(R.string.app_status_granted),
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        if (app.isSystem) {
-                            AppTag(
-                                label = stringResource(R.string.app_tag_system),
-                                color = MaterialTheme.colorScheme.secondary,
-                            )
-                        }
-                    }
-                }
+                AppIdentityCard(app = app, allowed = allowed)
             }
 
             // ── Root 开关（重点卡片）────────────────────────────────────────
@@ -682,55 +683,202 @@ fun AppDetailScreen(
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut(),
                 ) {
-                    CardGroup {
-                        item {
-                            AppListItem(
-                                title = stringResource(R.string.app_root_uid),
-                                summary = rootUidText,
-                                leading = {
-                                    Icon(Icons.Rounded.Badge, contentDescription = null)
-                                },
-                                onClick = { showUidDialog = true },
-                            )
-                        }
-                        item {
-                            AppListItem(
-                                title = stringResource(R.string.app_capabilities),
-                                summary =
-                                    stringResource(
-                                        R.string.app_caps_selected,
-                                        caps.size,
-                                        LinuxCap.entries.size,
-                                    ),
-                                leading = {
-                                    Icon(Icons.Rounded.Tune, contentDescription = null)
-                                },
-                                onClick = { showCapsSheet = true },
-                            )
-                        }
-                        item {
-                            AppListItem(
-                                title = stringResource(R.string.app_selinux_domain),
-                                summary = domain,
-                                leading = {
-                                    Icon(Icons.Rounded.Shield, contentDescription = null)
-                                },
-                                onClick = { showDomainDialog = true },
-                            )
-                        }
-                        item {
-                            AppListItem(
-                                title = stringResource(R.string.app_mount_namespace),
-                                summary = stringResource(ns.labelRes),
-                                leading = {
-                                    Icon(Icons.Rounded.Layers, contentDescription = null)
-                                },
-                                onClick = { showNsDialog = true },
-                            )
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.app_root_configuration),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                        )
+                        ConfigurationCard(
+                            title = stringResource(R.string.app_root_uid),
+                            summary = rootUidText,
+                            icon = { Icon(Icons.Rounded.Badge, contentDescription = null) },
+                            onClick = { showUidDialog = true },
+                        )
+                        ConfigurationCard(
+                            title = stringResource(R.string.app_capabilities),
+                            summary =
+                                stringResource(
+                                    R.string.app_caps_selected,
+                                    caps.size,
+                                    LinuxCap.entries.size,
+                                ),
+                            icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+                            onClick = { showCapsSheet = true },
+                        )
+                        ConfigurationCard(
+                            title = stringResource(R.string.app_selinux_domain),
+                            summary = domain,
+                            icon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
+                            onClick = { showDomainDialog = true },
+                        )
+                        ConfigurationCard(
+                            title = stringResource(R.string.app_mount_namespace),
+                            summary = stringResource(ns.labelRes),
+                            icon = { Icon(Icons.Rounded.Layers, contentDescription = null) },
+                            onClick = { showNsDialog = true },
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppIdentityCard(
+    app: AppInfo,
+    allowed: Boolean,
+) {
+    val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = ContinuousCornerShape(32.dp),
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = contentColor,
+    ) {
+        Box {
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 52.dp, y = (-64).dp)
+                        .size(176.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), CircleShape),
+            )
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        modifier = Modifier.size(80.dp),
+                        shape = ContinuousCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        AppIcon(
+                            packageName = app.packageName,
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp)
+                                    .clip(ContinuousCornerShape(18.dp)),
+                        )
+                    }
+
+                    Spacer(Modifier.width(18.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = app.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = app.packageName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.72f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AppTag(
+                        label = stringResource(R.string.app_uid_tag, app.uid),
+                        color = contentColor,
+                    )
+                    AppTag(
+                        label =
+                            stringResource(
+                                if (allowed) R.string.app_status_granted else R.string.app_status_denied,
+                            ),
+                        color =
+                            if (allowed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                    )
+                    if (app.isSystem) {
+                        AppTag(
+                            label = stringResource(R.string.app_tag_system),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfigurationCard(
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        shape = ContinuousCornerShape(24.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            ContinuousCornerShape(16.dp),
+                        ),
+                contentAlignment = Alignment.Center,
+            ) {
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    icon()
+                }
+            }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -758,7 +906,7 @@ private fun RootAccessCard(
 
     AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = ContinuousCornerShape(28.dp),
+        shape = ContinuousCornerShape(32.dp),
         containerColor = containerColor,
         contentColor = contentColor,
     ) {
@@ -770,30 +918,40 @@ private fun RootAccessCard(
                         value = allowed,
                         role = Role.Switch,
                         onValueChange = onToggle,
-                    ).padding(20.dp),
+                    ).padding(22.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = if (allowed) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .size(56.dp)
+                        .background(
+                            if (allowed) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            },
+                            ContinuousCornerShape(18.dp),
+                        ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (allowed) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
             Spacer(Modifier.width(16.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = stringResource(R.string.app_allow_root),
                     style = MaterialTheme.typography.titleMediumEmphasized,
                 )
                 Text(
-                    text =
-                        if (allowed) {
-                            stringResource(R.string.app_status_granted)
-                        } else {
-                            stringResource(R.string.app_status_denied)
-                        },
+                    text = stringResource(R.string.app_root_access_summary),
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor.copy(alpha = 0.8f),
                 )
