@@ -233,7 +233,12 @@ static bool nksu_mnt_ns_done(void)
 static void nksu_umount_run(void)
 {
 	const struct cred *old;
-	struct nksu_umount_snapshot inline_buf[8];
+	/*
+	 * Keep the stack copy small: this function is inlined into the
+	 * task_work callback, which is built with -Wframe-larger-than=2048.
+	 * Larger lists fall back to the heap snapshot.
+	 */
+	struct nksu_umount_snapshot inline_buf[4];
 	struct nksu_umount_snapshot *snapshot;
 	struct mnt_namespace *ns;
 	u64 gen;
