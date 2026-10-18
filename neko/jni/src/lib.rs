@@ -7,23 +7,10 @@ use std::os::fd::RawFd;
 use std::ptr;
 use std::sync::atomic::{AtomicI32, Ordering};
 
+use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
-use jni::objects::{JClass, JString};
+use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
-use jni::vm::JavaVM;
-use jni::{EnvUnowned, NativeMethod};
-
-macro_rules! native_method {
-    ($name:literal, $sig:literal, $func:ident) => {
-        unsafe {
-            NativeMethod::from_raw_parts(
-                jni::jni_str!($name),
-                jni::jni_str!($sig),
-                $func as *mut libc::c_void,
-            )
-        }
-    };
-}
 
 const FMAC_MAX_DATA: usize = 4096;
 const FMAC_DATA_CAP: usize = 12;
@@ -120,7 +107,12 @@ fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
     ret
 }
 
-extern "system" fn ctl(_env: EnvUnowned, _class: JClass, value: jint) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
+    _env: EnvUnowned,
+    _this: JObject,
+    value: jint,
+) -> jint {
     log::info!("ctl({value})");
     match value {
         1 => {
@@ -175,9 +167,10 @@ fn put_bytes(env: &mut EnvUnowned, data: &[u8]) -> jbyteArray {
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-extern "system" fn set_profile(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfile(
     mut env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     uid: jint,
     root_uid: jint,
     caps: jlong,
@@ -202,7 +195,12 @@ extern "system" fn set_profile(
     }
 }
 
-extern "system" fn add_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_adduid(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -215,7 +213,12 @@ extern "system" fn add_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint 
     }
 }
 
-extern "system" fn del_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_deluid(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -228,7 +231,12 @@ extern "system" fn del_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint 
     }
 }
 
-extern "system" fn has_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_hasuid(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -240,7 +248,13 @@ extern "system" fn has_uid(_env: EnvUnowned, _class: JClass, uid: jint) -> jint 
     if u32::from_ne_bytes(data) != 0 { 1 } else { 0 }
 }
 
-extern "system" fn set_cap(_env: EnvUnowned, _class: JClass, uid: jint, caps: jlong) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setCap(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+    caps: jlong,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -255,7 +269,12 @@ extern "system" fn set_cap(_env: EnvUnowned, _class: JClass, uid: jint, caps: jl
     }
 }
 
-extern "system" fn get_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jlong {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_getCap(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+) -> jlong {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -268,7 +287,12 @@ extern "system" fn get_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jlong
     u64::from_ne_bytes(data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].try_into().unwrap()) as jlong
 }
 
-extern "system" fn del_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_delCap(
+    _env: EnvUnowned,
+    _this: JObject,
+    uid: jint,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     if uid < 0 {
         return -1;
@@ -282,9 +306,10 @@ extern "system" fn del_cap(_env: EnvUnowned, _class: JClass, uid: jint) -> jint 
     }
 }
 
-extern "system" fn add_selinux_rule(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_addSelinuxRule(
     mut env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     src: JString,
     tgt: JString,
     cls: JString,
@@ -317,20 +342,30 @@ extern "system" fn add_selinux_rule(
     }
 }
 
-extern "system" fn add_rule(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_addRule(
     _env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     _path: JString,
     _bits: jlong,
 ) -> jint {
     0
 }
 
-extern "system" fn del_rule(_env: EnvUnowned, _class: JClass, _path: JString) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_delRule(
+    _env: EnvUnowned,
+    _this: JObject,
+    _path: JString,
+) -> jint {
     0
 }
 
-extern "system" fn list_profiles(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_listProfiles(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -427,7 +462,12 @@ fn read_file_impl(path: &str) -> Option<Vec<u8>> {
     }
 }
 
-extern "system" fn read_file(mut env: EnvUnowned, _class: JClass, path: JString) -> jbyteArray {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_readFile(
+    mut env: EnvUnowned,
+    _this: JObject,
+    path: JString,
+) -> jbyteArray {
     let Some(path) = get_utf(&mut env, &path) else {
         return ptr::null_mut();
     };
@@ -440,9 +480,10 @@ extern "system" fn read_file(mut env: EnvUnowned, _class: JClass, path: JString)
     }
 }
 
-extern "system" fn read_file_persistent(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_readFilePersistent(
     mut env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     path: JString,
 ) -> jbyteArray {
     let Some(path) = get_utf(&mut env, &path) else {
@@ -457,9 +498,10 @@ extern "system" fn read_file_persistent(
     }
 }
 
-extern "system" fn write_block(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_writeBlock(
     mut env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     src: JString,
     dst: JString,
 ) -> jboolean {
@@ -560,9 +602,10 @@ extern "system" fn write_block(
     }
 }
 
-extern "system" fn find_vendor_boot(
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_findVendorBoot(
     mut env: EnvUnowned,
-    _class: JClass,
+    _this: JObject,
     slot: JString,
     allow_slotless: jboolean,
 ) -> jstring {
@@ -680,28 +723,44 @@ fn uname_release() -> Option<String> {
     Some(release.to_string_lossy().into_owned())
 }
 
-extern "system" fn is_gki(_env: EnvUnowned, _class: JClass) -> jboolean {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_isGki(
+    _env: EnvUnowned,
+    _this: JObject,
+) -> jboolean {
     uname_release()
         .and_then(|r| parse_gki(&r))
         .map(|(gki, _)| if gki { JNI_TRUE } else { JNI_FALSE })
         .unwrap_or(JNI_FALSE)
 }
 
-extern "system" fn kernel_version(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_kernelVersion(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     match uname_release().and_then(|r| parse_gki(&r)) {
         Some((_, version)) => put_string(&mut env, &version),
         None => ptr::null_mut(),
     }
 }
 
-extern "system" fn kernel_release(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_kernelRelease(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     match uname_release() {
         Some(release) => put_string(&mut env, &release),
         None => ptr::null_mut(),
     }
 }
 
-extern "system" fn module_version(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_moduleVersion(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -713,7 +772,11 @@ extern "system" fn module_version(mut env: EnvUnowned, _class: JClass) -> jstrin
     put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
-extern "system" fn feature_list(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureList(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     let Some(fd) = ensure_ctl_fd() else {
         return ptr::null_mut();
     };
@@ -725,7 +788,12 @@ extern "system" fn feature_list(mut env: EnvUnowned, _class: JClass) -> jstring 
     put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
-extern "system" fn feature_get(_env: EnvUnowned, _class: JClass, id: jint) -> jlong {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureGet(
+    _env: EnvUnowned,
+    _this: JObject,
+    id: jint,
+) -> jlong {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     let mut data = [0u8; FMAC_DATA_FEATURE];
     data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
@@ -739,7 +807,13 @@ extern "system" fn feature_get(_env: EnvUnowned, _class: JClass, id: jint) -> jl
     ) as jlong
 }
 
-extern "system" fn feature_set(_env: EnvUnowned, _class: JClass, id: jint, value: jlong) -> jint {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
+    _env: EnvUnowned,
+    _this: JObject,
+    id: jint,
+    value: jlong,
+) -> jint {
     let Some(fd) = ensure_ctl_fd() else { return -1 };
     let mut data = [0u8; FMAC_DATA_FEATURE];
     data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
@@ -752,7 +826,11 @@ extern "system" fn feature_set(_env: EnvUnowned, _class: JClass, id: jint, value
     }
 }
 
-extern "system" fn get_slot_suffix(mut env: EnvUnowned, _class: JClass) -> jstring {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_getSlotSuffix(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
     unsafe extern "C" {
         fn __system_property_get(
             name: *const libc::c_char,
@@ -775,7 +853,8 @@ extern "system" fn get_slot_suffix(mut env: EnvUnowned, _class: JClass) -> jstri
     ptr::null_mut()
 }
 
-extern "system" fn hello_log(_env: EnvUnowned, _class: JClass) {
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_helloLog(_env: EnvUnowned, _this: JObject) {
     log::info!("ncore jni (Rust) loaded");
 }
 
@@ -784,7 +863,7 @@ extern "system" fn hello_log(_env: EnvUnowned, _class: JClass) {
 /// `vm` must be a valid, non-null `JavaVM` pointer supplied by the JVM.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn JNI_OnLoad(
-    vm: *mut jni::sys::JavaVM,
+    _vm: *mut jni::sys::JavaVM,
     _reserved: *mut libc::c_void,
 ) -> jint {
     android_logger::init_once(
@@ -792,61 +871,6 @@ pub unsafe extern "system" fn JNI_OnLoad(
             .with_max_level(log::LevelFilter::Info)
             .with_tag("ncore"),
     );
-    log::info!("JNI loaded");
-    let vm = unsafe { JavaVM::from_raw(vm) };
-    let methods = [
-        native_method!("ctl", "(I)I", ctl),
-        native_method!("setProfile", "(IIJLjava/lang/String;I)I", set_profile),
-        native_method!("adduid", "(I)I", add_uid),
-        native_method!("deluid", "(I)I", del_uid),
-        native_method!("hasuid", "(I)I", has_uid),
-        native_method!("setCap", "(IJ)I", set_cap),
-        native_method!("getCap", "(I)J", get_cap),
-        native_method!("delCap", "(I)I", del_cap),
-        native_method!(
-            "addSelinuxRule",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)I",
-            add_selinux_rule
-        ),
-        native_method!("addRule", "(Ljava/lang/String;J)I", add_rule),
-        native_method!("delRule", "(Ljava/lang/String;)I", del_rule),
-        native_method!("listProfiles", "()Ljava/lang/String;", list_profiles),
-        native_method!("readFile", "(Ljava/lang/String;)[B", read_file),
-        native_method!(
-            "readFilePersistent",
-            "(Ljava/lang/String;)[B",
-            read_file_persistent
-        ),
-        native_method!(
-            "writeBlock",
-            "(Ljava/lang/String;Ljava/lang/String;)Z",
-            write_block
-        ),
-        native_method!("helloLog", "()V", hello_log),
-        native_method!("isGki", "()Z", is_gki),
-        native_method!("kernelVersion", "()Ljava/lang/String;", kernel_version),
-        native_method!("kernelRelease", "()Ljava/lang/String;", kernel_release),
-        native_method!("moduleVersion", "()Ljava/lang/String;", module_version),
-        native_method!("featureList", "()Ljava/lang/String;", feature_list),
-        native_method!("featureGet", "(I)J", feature_get),
-        native_method!("featureSet", "(IJ)I", feature_set),
-        native_method!("getSlotSuffix", "()Ljava/lang/String;", get_slot_suffix),
-        native_method!(
-            "findVendorBoot",
-            "(Ljava/lang/String;Z)Ljava/lang/String;",
-            find_vendor_boot
-        ),
-    ];
-    let result = vm.with_top_local_frame(|env| -> jni::errors::Result<()> {
-        let class = env.find_class(jni::jni_str!("me/nekosu/aqnya/core/Ncore"))?;
-        unsafe {
-            env.register_native_methods(class, &methods)?;
-        }
-        Ok(())
-    });
-    match result {
-        Ok(()) => log::info!("registered {} native methods", methods.len()),
-        Err(err) => log::error!("register_native_methods failed: {err}"),
-    }
+    log::info!("JNI loaded (conventional binding)");
     JNI_VERSION_1_6
 }
