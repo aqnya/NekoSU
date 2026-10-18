@@ -10,6 +10,6 @@
 #ifndef NKSU_UAPI_VERSION_H
 #define NKSU_UAPI_VERSION_H
 
-#define NKSU_VERSION "1.0.5"
+#define NKSU_VERSION "1.0.6"
 
 #endif /* NKSU_UAPI_VERSION_H */

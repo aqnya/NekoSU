@@ -23,7 +23,7 @@
     <string name="feature_selinux_hide">SELinux 隐藏</string>
     <string name="feature_selinux_hide_describe">向应用回答模块加载前的原始策略,隐藏注入的域与规则</string>
     <string name="feature_umount">模块挂载隐藏</string>
-    <string name="feature_umount_describe">在应用的挂载视图中隐藏模块挂载及对应 mount ID，不卸载挂载</string>
+    <string name="feature_umount_describe">从应用挂载命名空间移除模块挂载，并隐藏对应 mount ID</string>
     <string name="close_search">关闭</string>
     <string name="search_hint">搜索应用或包名</string>
     <string name="no_app_found">未找到应用</string>
