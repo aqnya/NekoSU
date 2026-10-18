@@ -30,6 +30,7 @@
 
 #include "hook/tools.h"
 #include "klog.h"
+#include "manager/feature.h"
 #include "manager/umount.h"
 #include "nksu_task.h"
 #include "selinux/selinux.h"
@@ -48,6 +49,8 @@ struct nksu_umount_entry {
 
 static LIST_HEAD(nksu_umount_list);
 static DEFINE_SPINLOCK(nksu_umount_lock);
+static DEFINE_MUTEX(nksu_umount_state_lock);
+static bool nksu_umount_running;
 
 int nksu_umount_add(const char *path, int flags)
 {
@@ -201,7 +204,7 @@ static void nksu_umount_run(void)
 	struct nksu_umount_snapshot *snapshot;
 	size_t count = 0, i;
 
-	if (nksu_umount_empty())
+	if (!READ_ONCE(nksu_umount_running) || nksu_umount_empty())
 		return;
 
 	snapshot = nksu_umount_take_snapshot(&count);
@@ -264,7 +267,7 @@ void nksu_umount_schedule(void)
 {
 	struct nksu_umount_work *work;
 
-	if (nksu_umount_empty())
+	if (!READ_ONCE(nksu_umount_running) || nksu_umount_empty())
 		return;
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
@@ -303,6 +306,7 @@ static u32 nksu_mnt_id_off;
 static u32 nksu_mnt_off;
 
 static bool nksu_mount_layout_ready;
+static bool nksu_mount_layout_seen;
 static bool nksu_ida_probe_ready;
 static bool nksu_mount_probes_ready;
 static bool nksu_clone_probe_ready;
@@ -568,6 +572,13 @@ int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 
 	WRITE_ONCE(nksu_mnt_id_off, mnt_id_off);
 	WRITE_ONCE(nksu_mnt_off, mnt_off);
+	nksu_mount_layout_seen = true;
+
+	/* The feature may be disabled from the manager; keep only the layout. */
+	if (!READ_ONCE(nksu_umount_running)) {
+		mutex_unlock(&nksu_mount_layout_lock);
+		return 0;
+	}
 
 	ret = nksu_mount_probes_register_locked();
 	if (ret) {
@@ -764,7 +775,7 @@ static struct tracepoint *nksu_umount_find_tracepoint(const char *name)
 	return result;
 }
 
-int nksu_umount_init(void)
+static int nksu_umount_start(void)
 {
 	int ret;
 
@@ -798,6 +809,8 @@ int nksu_umount_init(void)
 	 */
 	mutex_lock(&nksu_mount_layout_lock);
 	ret = nksu_mount_probes_register_locked();
+	if (!ret && nksu_mount_layout_seen)
+		WRITE_ONCE(nksu_mount_layout_ready, true);
 	mutex_unlock(&nksu_mount_layout_lock);
 	if (ret)
 		pr_warn("[mount-id] probes not ready at early init: %d\n", ret);
@@ -806,7 +819,7 @@ int nksu_umount_init(void)
 	return 0;
 }
 
-void nksu_umount_exit(void)
+static void nksu_umount_stop(void)
 {
 	nksu_mount_probes_exit();
 
@@ -816,7 +829,93 @@ void nksu_umount_exit(void)
 		tracepoint_synchronize_unregister();
 		nksu_umount_hooked = false;
 	}
+}
+
+#define NKSU_UMOUNT_FEATURE_NAME "umount"
+#define NKSU_UMOUNT_DISABLED_NAME "umount_disabled"
+
+static int nksu_umount_feature_get(u64 *value)
+{
+	*value = READ_ONCE(nksu_umount_running) ? 1 : 0;
+	return 0;
+}
+
+static int nksu_umount_apply(u64 value, bool persist)
+{
+	int ret = 0;
+
+	mutex_lock(&nksu_umount_state_lock);
+	if (value) {
+		if (!nksu_umount_running) {
+			ret = nksu_umount_start();
+			if (!ret)
+				nksu_umount_running = true;
+		}
+	} else if (nksu_umount_running) {
+		nksu_umount_stop();
+		nksu_umount_running = false;
+	}
+	mutex_unlock(&nksu_umount_state_lock);
+
+	if (!ret && persist &&
+	    nksu_feature_persist_set(NKSU_UMOUNT_DISABLED_NAME, !value))
+		pr_warn("[umount] cannot persist feature state\n");
+
+	return ret;
+}
+
+static int nksu_umount_feature_set(u64 value)
+{
+	return nksu_umount_apply(value, true);
+}
+
+static const struct nksu_feature nksu_umount_feature = {
+	.id = NKSU_FEATURE_UMOUNT,
+	.name = NKSU_UMOUNT_FEATURE_NAME,
+	.get = nksu_umount_feature_get,
+	.set = nksu_umount_feature_set,
+};
+
+int nksu_umount_init(void)
+{
+	int ret;
+
+	ret = nksu_feature_register(&nksu_umount_feature);
+	if (ret && ret != -EEXIST) {
+		pr_err("[umount] feature register failed: %d\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&nksu_umount_state_lock);
+	ret = nksu_umount_start();
+	if (!ret)
+		nksu_umount_running = true;
+	mutex_unlock(&nksu_umount_state_lock);
+
+	return ret;
+}
+
+/*
+ * Runs in the feature group, after /data and the SELinux domain are available.
+ * The feature itself must already be running (it has to cover ncore's mount
+ * scripts), so this only applies a persisted "disabled" marker.
+ */
+int nksu_umount_feature_init(void)
+{
+	if (!nksu_feature_persist_has(NKSU_UMOUNT_DISABLED_NAME))
+		return 0;
+
+	pr_info("[umount] disabled by persisted feature state\n");
+	return nksu_umount_apply(0, false);
+}
+
+void nksu_umount_exit(void)
+{
+	mutex_lock(&nksu_umount_state_lock);
+	nksu_umount_stop();
+	nksu_umount_running = false;
 	nksu_umount_wipe();
+	mutex_unlock(&nksu_umount_state_lock);
 }
 
 #if defined(__clang__)

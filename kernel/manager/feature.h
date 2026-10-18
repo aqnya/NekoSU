@@ -15,6 +15,7 @@
  * with manager/app/src/main/cpp/libjni/ioctl.h and ncore.kt.
  */
 #define NKSU_FEATURE_SELINUX_HIDE 1
+#define NKSU_FEATURE_UMOUNT 2
 
 struct nksu_feature {
     u32 id;

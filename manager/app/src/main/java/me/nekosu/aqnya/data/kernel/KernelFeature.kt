@@ -4,6 +4,7 @@ import me.nekosu.aqnya.core.Ncore
 
 object KernelFeature {
     const val SELINUX_HIDE = 1
+    const val UMOUNT = 2
 
     // 复用同一个 Regex，避免每行都构造一次。
     private val WHITESPACE = Regex("\\s+")

@@ -3,6 +3,7 @@ package me.nekosu.aqnya.ui.screens.settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,6 +82,7 @@ fun FeatureSection() {
 private fun KernelFeature.Info.icon(): ImageVector =
     when (id) {
         KernelFeature.SELINUX_HIDE -> Icons.Rounded.Security
+        KernelFeature.UMOUNT -> Icons.Rounded.VisibilityOff
         else -> Icons.Rounded.Tune
     }
 
@@ -88,6 +90,7 @@ private fun KernelFeature.Info.icon(): ImageVector =
 private fun featureLabel(feature: KernelFeature.Info): String =
     when (feature.id) {
         KernelFeature.SELINUX_HIDE -> stringResource(R.string.feature_selinux_hide)
+        KernelFeature.UMOUNT -> stringResource(R.string.feature_umount)
         // 未知 feature 直接显示内核给的名字。
         else -> feature.name
     }
@@ -96,5 +99,6 @@ private fun featureLabel(feature: KernelFeature.Info): String =
 private fun featureSummary(feature: KernelFeature.Info): String =
     when (feature.id) {
         KernelFeature.SELINUX_HIDE -> stringResource(R.string.feature_selinux_hide_describe)
+        KernelFeature.UMOUNT -> stringResource(R.string.feature_umount_describe)
         else -> feature.name
     }

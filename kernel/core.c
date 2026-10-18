@@ -127,6 +127,16 @@ static const module_component_t feature_components[] = {
         .init = nksu_selinux_hide_init,
         .exit = nksu_selinux_hide_exit,
     },
+    {
+        /*
+         * The umount feature is already running from module init (it must
+         * cover ncore's mount scripts); this reads its persisted off switch
+         * now that /data and the SELinux domain exist.
+         */
+        .name = "umount config",
+        .init = nksu_umount_feature_init,
+        .exit = NULL,
+    },
 #ifdef CONFIG_NKSU_SYSCALL
     {
         .name = "syscall hook",
