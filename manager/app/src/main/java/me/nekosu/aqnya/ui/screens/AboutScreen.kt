@@ -49,6 +49,7 @@ import androidx.core.net.toUri
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.ui.component.AppListItem
 import me.nekosu.aqnya.ui.component.AppTopAppBar
 import me.nekosu.aqnya.ui.component.CardGroup
@@ -165,7 +166,7 @@ fun AboutScreen(navController: NavHostController) {
                         leading = {
                             Icon(painter = painterResource(id = R.drawable.source_code_24px), contentDescription = null)
                         },
-                        onClick = { navController.navigate("open_source") },
+                        onClick = { navController.navigate(AppRoute.OpenSource) },
                     )
                 }
             }

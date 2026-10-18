@@ -60,6 +60,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.protobuf.ProtoBuf
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.core.Ncore
 import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.SearchAppBar
@@ -557,7 +558,7 @@ fun AppListScreen(
                             AppInfoItem(
                                 app = app,
                                 config = viewModel.appConfigs[app.packageName],
-                                onClick = { navController.navigate("app_detail/${app.packageName}") },
+                                onClick = { navController.navigate(AppRoute.appDetail(app.packageName)) },
                                 shape = groupShape(index, allItems.size),
                                 modifier = Modifier.animateItem(),
                             )

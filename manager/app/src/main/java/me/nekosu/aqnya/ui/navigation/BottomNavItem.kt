@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.core.navigation.AppRoute
 
 sealed class BottomNavItem(
     val route: String,
@@ -22,35 +23,35 @@ sealed class BottomNavItem(
     val unselectedIcon: ImageVector,
 ) {
     object Home : BottomNavItem(
-        route = "home",
+        route = AppRoute.Home,
         titleRes = R.string.nav_home,
         selectedIcon = Icons.Rounded.Home,
         unselectedIcon = Icons.Outlined.Home,
     )
 
     object History : BottomNavItem(
-        route = "app",
+        route = AppRoute.Apps,
         titleRes = R.string.nav_apps,
         selectedIcon = Icons.AutoMirrored.Rounded.List,
         unselectedIcon = Icons.AutoMirrored.Outlined.List,
     )
 
     object Modules : BottomNavItem(
-        route = "modules",
+        route = AppRoute.Modules,
         titleRes = R.string.nav_modules,
         selectedIcon = Icons.Rounded.Extension,
         unselectedIcon = Icons.Outlined.Extension,
     )
 
     object FmacRules : BottomNavItem(
-        route = "rules",
+        route = AppRoute.Rules,
         titleRes = R.string.nav_rules,
         selectedIcon = Icons.Rounded.Security,
         unselectedIcon = Icons.Outlined.Security,
     )
 
     object Settings : BottomNavItem(
-        route = "settings",
+        route = AppRoute.Settings,
         titleRes = R.string.nav_settings,
         selectedIcon = Icons.Rounded.Settings,
         unselectedIcon = Icons.Outlined.Settings,

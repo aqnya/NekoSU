@@ -8,8 +8,19 @@ on:
         required: false
         default: true
         type: boolean
+      channel:
+        description: 'Release channel'
+        required: true
+        default: canary
+        type: choice
+        options:
+          - canary
+          - beta
+          - release
   push:
     branches: [ "main" ]
+    tags:
+      - "v*"
     paths:
       - ".github/workflows/build.yml"
       - ".github/workflows/ko.yml"
@@ -143,16 +154,64 @@ jobs:
       run: |
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
 
+    - name: Determine version channel
+      id: version
+      run: |
+        set -euo pipefail
+        version_name=""
+        if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          channel="${{ github.event.inputs.channel }}"
+        elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+          case "$GITHUB_REF_NAME" in
+            *-beta*) channel=beta ;;
+            *) channel=release ;;
+          esac
+
+          version_name="${GITHUB_REF_NAME#v}"
+          base_version="$(sed -n 's/^#define[[:space:]]\+NKSU_VERSION[[:space:]]\+"\([^"]*\)".*/\1/p' uapi/version.h)"
+          case "$channel" in
+            release)
+              [ "$version_name" = "$base_version" ] || {
+                echo "release tag $GITHUB_REF_NAME does not match uapi version $base_version" >&2
+                exit 1
+              }
+              ;;
+            beta)
+              case "$version_name" in
+                "$base_version"-beta.*) ;;
+                *)
+                  echo "beta tag $GITHUB_REF_NAME does not match uapi version $base_version" >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+          esac
+        else
+          channel=canary
+        fi
+        echo "channel=$channel" >> "$GITHUB_OUTPUT"
+        echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+        echo "version channel: $channel"
+        echo "version name: ${version_name:-generated}"
+
     - name: Build with Gradle
       env:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      run: ./gradlew assembleRelease --no-daemon
+        VERSION_CHANNEL: ${{ steps.version.outputs.channel }}
+        VERSION_NAME: ${{ steps.version.outputs.version_name }}
+      run: |
+        set -euo pipefail
+        args=(-PversionChannel="$VERSION_CHANNEL")
+        if [ -n "$VERSION_NAME" ]; then
+          args+=("-PversionNameOverride=$VERSION_NAME")
+        fi
+        ./gradlew assembleRelease --no-daemon "${args[@]}"
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v7
       with:
-        name: release
+        name: release-${{ steps.version.outputs.channel }}
         path: manager/app/build/outputs/apk/release/*.apk
         archive: false

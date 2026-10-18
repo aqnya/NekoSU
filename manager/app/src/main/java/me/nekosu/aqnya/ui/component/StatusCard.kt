@@ -26,7 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.R
-import me.nekosu.aqnya.ui.screens.InstallStatus
+import me.nekosu.aqnya.core.model.InstallStatus
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 
 @Composable

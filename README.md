@@ -27,6 +27,18 @@ runs `cargo ndk` for the bundled `ncore` daemon and `bootpatcher` vendor_boot pa
 JDK 25, Android NDK r29 (`ANDROID_NDK_HOME`), Rust stable (`aarch64-linux-android` target) and
 `cargo-ndk`.
 
+### Version channels
+
+- `canary` — built automatically for every `main`/pull-request commit.
+  Version: `<uapi version>-canary.<commit count>+<short commit>`.
+- `beta` — pre-release test build, created from a tag like `v1.0.6-beta.1`.
+- `release` — public build, created from the matching tag `v1.0.6`.
+
+Local builds select the channel with `-PversionChannel=canary|beta|release` (default: `canary`).
+For tag builds the workflow passes the tag name as the version name and rejects a tag that does not
+match `uapi/version.h`. `versionCode` is `commitCount * 10 + channelCode`, so a release can be
+installed over a beta built from the same commit.
+
 ## Credits
 
 - [KernelSU](https://github.com/tiann/KernelSU) — the SELinux policy/rule engine, LSM hook layout,

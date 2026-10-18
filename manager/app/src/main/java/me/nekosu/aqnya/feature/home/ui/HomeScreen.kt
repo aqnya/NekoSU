@@ -1,7 +1,8 @@
-package me.nekosu.aqnya.ui.screens
+package me.nekosu.aqnya.feature.home.ui
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,16 +30,10 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.core.model.InstallStatus
+import me.nekosu.aqnya.feature.home.presentation.HomeViewModel
 import me.nekosu.aqnya.ui.component.HazeTopAppBar
 import me.nekosu.aqnya.ui.component.StatusCard
-
-enum class InstallStatus {
-    INSTALLED,
-    NEED_UPDATE,
-    NEED_REBOOT,
-    NOT_INSTALLED,
-    UNKNOWN,
-}
 
 private data class InfoEntry(
     val label: String,
@@ -56,38 +51,40 @@ fun HomeScreenContent(
     onAboutClick: () -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        topBar = {
-            HazeTopAppBar(
-                state = hazeState,
-                title = stringResource(R.string.app_name),
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .hazeSource(hazeState)
-                    .verticalScroll(rememberScrollState())
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .padding(bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(13.dp),
-        ) {
-            StatusCard(
-                state = installStatus,
-                isGki = isGki,
-                managerVersion = managerVersion,
-                onClick = onInstallClick,
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            topBar = {
+                HazeTopAppBar(
+                    state = hazeState,
+                    title = stringResource(R.string.app_name),
+                )
+            },
+        ) { innerPadding ->
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .hazeSource(hazeState)
+                        .verticalScroll(rememberScrollState())
+                        .padding(innerPadding)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp),
+            ) {
+                StatusCard(
+                    state = installStatus,
+                    isGki = isGki,
+                    managerVersion = managerVersion,
+                    onClick = onInstallClick,
+                )
 
-            SectionLabel(stringResource(R.string.install_device_info))
-            DeviceInfoList()
+                SectionLabel(stringResource(R.string.install_device_info))
+                DeviceInfoList()
 
-            SectionLabel(stringResource(R.string.about))
-            AboutItem(onClick = onAboutClick)
+                SectionLabel(stringResource(R.string.about))
+                AboutItem(onClick = onAboutClick)
+            }
         }
     }
 }
@@ -99,20 +96,18 @@ fun HomeScreen(
     onAboutClick: () -> Unit = {},
     onInstallClick: () -> Unit = {},
 ) {
-    val installStatus by viewModel.installStatus.collectAsState()
-    val managerVersion by viewModel.managerVersion.collectAsState()
-    val isGki by viewModel.isGki.collectAsState()
+    val state by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(installStatus) {
-        if (installStatus == InstallStatus.INSTALLED) {
+    LaunchedEffect(state.installStatus) {
+        if (state.installStatus == InstallStatus.INSTALLED) {
             viewModel.refresh()
         }
     }
 
     HomeScreenContent(
-        installStatus = installStatus,
-        isGki = isGki,
-        managerVersion = managerVersion,
+        installStatus = state.installStatus,
+        isGki = state.isGki,
+        managerVersion = state.managerVersion,
         onInstallClick = onInstallClick,
         onAboutClick = onAboutClick,
     )

@@ -36,9 +36,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.delay
+import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
+import me.nekosu.aqnya.feature.home.presentation.HomeViewModel
+import me.nekosu.aqnya.feature.home.presentation.HomeViewModelFactory
+import me.nekosu.aqnya.feature.home.ui.HomeScreen
 import me.nekosu.aqnya.ui.animation.AnimatedBottomNavBar
 import me.nekosu.aqnya.ui.animation.PageTransitions
+import me.nekosu.aqnya.ui.component.NonProductionRibbon
 import me.nekosu.aqnya.ui.navigation.BottomNavItem
 import me.nekosu.aqnya.ui.navigation.NormalBottomNavigationBar
 import me.nekosu.aqnya.ui.permission.AppPermission
@@ -177,7 +182,7 @@ fun MainScreen() {
                 ) {
                     HomeScreen(
                         viewModel = homeViewModel,
-                        onInstallClick = { navController.navigate("install") },
+                        onInstallClick = { navController.navigate(AppRoute.Install) },
                     )
                 }
 
@@ -209,7 +214,7 @@ fun MainScreen() {
                 }
 
                 composable(
-                    route = "about",
+                    route = AppRoute.About,
                     enterTransition = { PageTransitions.defaultEnter },
                     exitTransition = { PageTransitions.defaultExit },
                 ) {
@@ -217,7 +222,7 @@ fun MainScreen() {
                 }
 
                 composable(
-                    route = "open_source",
+                    route = AppRoute.OpenSource,
                     enterTransition = { PageTransitions.defaultEnter },
                     exitTransition = { PageTransitions.defaultExit },
                 ) {
@@ -225,14 +230,14 @@ fun MainScreen() {
                 }
 
                 composable(
-                    route = "install",
+                    route = AppRoute.Install,
                     enterTransition = { PageTransitions.defaultEnter },
                     exitTransition = { PageTransitions.defaultExit },
                 ) {
                     InstallScreen(navController)
                 }
 
-                composable("app_detail/{packageName}") { backStackEntry ->
+                composable(AppRoute.AppDetailPattern) { backStackEntry ->
                     val pkg = backStackEntry.arguments?.getString("packageName")
                     if (pkg == null) {
                         LaunchedEffect(Unit) { navController.popBackStack() }
@@ -265,6 +270,8 @@ fun MainScreen() {
                     }
                 }
             }
+
+            NonProductionRibbon(modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }

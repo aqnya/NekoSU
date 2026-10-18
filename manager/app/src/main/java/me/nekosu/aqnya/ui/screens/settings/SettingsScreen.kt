@@ -31,6 +31,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
 import me.nekosu.aqnya.ui.component.HazeTopAppBar
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
@@ -126,7 +127,7 @@ fun SettingsScreen(navController: NavController) {
 
             // ── 关于 ──
             AboutSection(
-                onAboutClick = { navController.navigate("about") },
+                onAboutClick = { navController.navigate(AppRoute.About) },
             )
 
             Spacer(Modifier)

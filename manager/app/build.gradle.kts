@@ -44,6 +44,44 @@ fun nksuVersion(): String =
         ?.ifEmpty { null }
         ?: "unknown"
 
+/*
+ * Release channels:
+ *   canary  - every commit (CI default for main/PR builds)
+ *   beta    - pre-release test build (tag containing "-beta")
+ *   release - public release (other version tags)
+ *
+ * Select with -PversionChannel=<name> or VERSION_CHANNEL=<name>.
+ */
+val versionChannel: String =
+    (
+        (project.findProperty("versionChannel") as? String)
+            ?: System.getenv("VERSION_CHANNEL")
+            ?: "canary"
+    ).trim().lowercase()
+
+val versionChannelCode: Int =
+    when (versionChannel) {
+        "canary" -> 0
+        "beta" -> 1
+        "release" -> 2
+        else -> error("unknown versionChannel: $versionChannel (expected canary, beta or release)")
+    }
+
+val baseVersion: String = nksuVersion()
+
+val versionNameOverride: String? =
+    (project.findProperty("versionNameOverride") as? String)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+val buildVersionName: String =
+    versionNameOverride
+        ?: when (versionChannel) {
+            "canary" -> "$baseVersion-canary.${gitCommitCount()}+${gitCommitHash()}"
+            "beta" -> "$baseVersion-beta.${gitCommitCount()}+${gitCommitHash()}"
+            else -> baseVersion
+        }
+
 // The manager's own package name (applicationId).  It is deliberately
 // rotatable: the kernel authenticates the manager by its signing certificate
 // and shared uid (android:sharedUserId="me.nekosu.shared"), never by this name,
@@ -70,10 +108,11 @@ android {
         applicationId = managerPackage
         minSdk = 31
         targetSdk = 37
-        versionCode = gitCommitCount()
-        versionName = gitCommitHash()
+        versionCode = gitCommitCount() * 10 + versionChannelCode
+        versionName = buildVersionName
 
         buildConfigField("String", "NKSU_VERSION", "\"${nksuVersion()}\"")
+        buildConfigField("String", "NKSU_CHANNEL", "\"$versionChannel\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
