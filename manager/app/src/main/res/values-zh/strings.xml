@@ -77,7 +77,6 @@
     <!-- 关于 -->
     <string name="about_version">版本</string>
     <string name="about_tagline">为 Android 打造的内核级 Root 方案</string>
-    <string name="about_module_version">内核模块版本</string>
     <string name="about_project">项目</string>
     <string name="about_license_short">GPL-3.0 开源许可</string>
     <string name="about_repository">仓库</string>

@@ -68,7 +68,7 @@
     <string name="settings_amoled_black">AMOLED Pure Black</string>
     <string name="settings_amoled_black_summary">Use pure black background in dark mode</string>
 
-    <!-- 设置 — 开发者 -->
+    <!-- Setting — debug -->
     <string name="settings_debug">Debug Settings</string>
     <string name="settings_debug_summary">Developer debugging options</string>
     <string name="settings_fmac_config">FMAC Rules Config</string>
@@ -76,10 +76,9 @@
     <string name="settings_selinux_rules">SELinux Rules</string>
     <string name="settings_selinux_rules_summary">Dynamically inject SELinux policy rules</string>
 
-    <!-- 关于 -->
+    <!-- About -->
     <string name="about_version">Version</string>
     <string name="about_tagline">Kernel-level root for Android</string>
-    <string name="about_module_version">Kernel module version</string>
     <string name="about_project">Project</string>
     <string name="about_license_short">GPL-3.0 licensed</string>
     <string name="about_repository">Repository</string>

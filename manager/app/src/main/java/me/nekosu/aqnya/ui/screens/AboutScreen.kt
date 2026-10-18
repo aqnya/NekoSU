@@ -123,13 +123,6 @@ fun AboutScreen(navController: NavHostController) {
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             )
 
-            AboutVersionCard(
-                label = stringResource(R.string.about_module_version),
-                value = BuildConfig.NKSU_VERSION,
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            )
-
             Text(
                 text = stringResource(R.string.about_project),
                 style = MaterialTheme.typography.titleSmall,
