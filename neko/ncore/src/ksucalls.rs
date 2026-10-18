@@ -27,8 +27,8 @@ const IOC_GET_VERSION: u32 = 14;
 const IOC_GET_SAFEMODE: u32 = 18;
 const IOC_DISARM_SAFEMODE: u32 = 19;
 const IOC_SET_INIT_PGRP: u32 = 20;
-const IOC_ADD_TRY_UMOUNT: u32 = 21;
-const IOC_WIPE_UMOUNT: u32 = 22;
+const IOC_SET_MNT_LAYOUT: u32 = 23;
+const IOC_UMOUNT_INIT: u32 = 24;
 
 std::thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
@@ -196,16 +196,17 @@ pub fn set_init_pgrp() -> Result<()> {
     Ok(())
 }
 
-pub fn wipe_umount_paths() -> Result<()> {
-    let mut data = [];
-    ksuctl(IOC_WIPE_UMOUNT, &mut data)?;
+pub fn set_mount_layout(mnt_id_off: u32, mnt_off: u32) -> Result<()> {
+    let mut data = Vec::with_capacity(8);
+    data.extend_from_slice(&mnt_id_off.to_ne_bytes());
+    data.extend_from_slice(&mnt_off.to_ne_bytes());
+    ksuctl(IOC_SET_MNT_LAYOUT, &mut data)?;
     Ok(())
 }
 
-pub fn add_umount_path(path: &str) -> Result<()> {
-    let mut data = path.as_bytes().to_vec();
-    data.push(0);
-    ksuctl(IOC_ADD_TRY_UMOUNT, &mut data)?;
+pub fn init_umount() -> Result<()> {
+    let mut data = [];
+    ksuctl(IOC_UMOUNT_INIT, &mut data)?;
     Ok(())
 }
 

@@ -5,11 +5,12 @@
  * ncore and everything it forks must stay visible to the kernel after exec.
  * Instead of hooking prctl and granting the control fd to every root process,
  * mark the executed ncore image and all of its descendants with
- * TIF_SYSCALL_TRACEPOINT.  A sched_process_exec probe recognises the ncore
- * binary, marks it and schedules a task_work that attaches the control fd
- * before returning to userspace.  sched_process_fork propagates the mark to
- * children, so module scripts started by ncore stay in the same kernel-visible
- * group.
+ * TIF_SYSCALL_TRACEPOINT.  A private NKSU_TIF_NCORE bit distinguishes this
+ * group from zygote/app processes, which also carry the tracepoint flag.
+ * A sched_process_exec probe recognises the ncore binary, marks it and
+ * schedules a task_work that attaches the control fd before returning to
+ * userspace.  sched_process_fork propagates both marks to children, so module
+ * scripts started by ncore stay in the same kernel-visible group.
  *
  * The probe is registered at second_stage, before init execs ncore at
  * post-fs-data, and stays registered for the lifetime of the module.
@@ -17,7 +18,9 @@
 #include <linux/binfmts.h>
 #include <linux/cred.h>
 #include <linux/kernel.h>
+#include <linux/pid.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
 #include <linux/tracepoint.h>
@@ -28,6 +31,7 @@
 
 #include "klog.h"
 #include "manager/ioctl.h"
+#include "nksu_task.h"
 
 /*
  * task_work_add is reached through the kallsyms-resolved pointer; the module's
@@ -79,6 +83,7 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 		return;
 
 	set_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT);
+	set_tsk_thread_flag(p, NKSU_TIF_NCORE);
 	pr_info("[daemon] marked %s (pid %d) as ncore\n",
 		bprm ? bprm->filename : "?", p->pid);
 
@@ -95,6 +100,26 @@ static void nksu_daemon_fork(void *data, struct task_struct *parent,
 {
 	if (test_tsk_thread_flag(parent, TIF_SYSCALL_TRACEPOINT))
 		set_tsk_thread_flag(child, TIF_SYSCALL_TRACEPOINT);
+	if (nksu_task_is_ncore(parent))
+		set_tsk_thread_flag(child, NKSU_TIF_NCORE);
+}
+
+/* Used by the manager scan to mark every thread of zygote. */
+void nksu_mark_threads_by_pid(pid_t pid)
+{
+	struct task_struct *task, *t;
+
+	rcu_read_lock();
+
+	task = find_task_by_vpid(pid);
+	if (!task)
+		goto out;
+
+	for_each_thread(task, t)
+		set_tsk_thread_flag(t, TIF_SYSCALL_TRACEPOINT);
+
+out:
+	rcu_read_unlock();
 }
 
 struct nksu_tp_find_ctx {

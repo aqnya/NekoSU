@@ -18,6 +18,7 @@
 #include "manager/umount.h"
 #include "manager/ioctl.h"
 #include "nksu.h"
+#include "nksu_task.h"
 #include "boot/safe_mode.h"
 #include "privilege/profile_store.h"
 #include "symbol/symbol_compat.h"
@@ -330,6 +331,59 @@ static long ioc_add_try_umount(const void __user *data, unsigned int size)
     return nksu_umount_add(path, MNT_DETACH);
 }
 
+struct nksu_mnt_layout {
+    u32 mnt_id_off;
+    u32 mnt_off;
+};
+
+static void nksu_mark_current_ncore(void)
+{
+    struct task_struct *t;
+
+    /*
+     * The exec probe marks ncore at boot, but a late-loaded module sees an
+     * ncore that is already running.  This ioctl is only reachable through
+     * ncore's control fd, so it is a trustworthy place to mark the whole
+     * thread group.
+     */
+    rcu_read_lock();
+    for_each_thread(current, t) {
+        set_tsk_thread_flag(t, TIF_SYSCALL_TRACEPOINT);
+        set_tsk_thread_flag(t, NKSU_TIF_NCORE);
+    }
+    rcu_read_unlock();
+}
+
+static long ioc_umount_init(void)
+{
+    if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
+        return -EPERM;
+
+    nksu_mark_current_ncore();
+    return nksu_umount_init();
+}
+
+static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
+{
+    struct nksu_mnt_layout layout;
+    int ret;
+
+    if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
+        return -EPERM;
+    if (!data || size != sizeof(layout))
+        return -EINVAL;
+    if (copy_from_user(&layout, data, sizeof(layout)))
+        return -EFAULT;
+
+    nksu_mark_current_ncore();
+
+    ret = nksu_umount_init();
+    if (ret)
+        return ret;
+
+    return nksu_mount_id_set_layout(layout.mnt_id_off, layout.mnt_off);
+}
+
 static long ioc_disarm_safemode(void)
 {
     nksu_safe_mode_disable();
@@ -399,6 +453,10 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     case IOC_WIPE_UMOUNT:
         nksu_umount_wipe();
         return 0;
+    case IOC_SET_MNT_LAYOUT:
+        return ioc_set_mnt_layout(data, ioc.size);
+    case IOC_UMOUNT_INIT:
+        return ioc_umount_init();
     default:
         return -ENOTTY;
     }

@@ -13,6 +13,8 @@
 
 mod assets;
 #[cfg(target_os = "android")]
+mod btf;
+#[cfg(target_os = "android")]
 mod cli;
 #[cfg(not(target_os = "android"))]
 mod cli_non_android;

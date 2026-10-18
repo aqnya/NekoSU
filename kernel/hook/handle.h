@@ -10,7 +10,6 @@ long hook__NR_execve(struct pt_regs *regs);
 long hook__NR_setresuid(struct pt_regs *regs);
 
 #ifndef CONFIG_NKSU_SYSCALL
-void mark_threads_by_pid(pid_t pid);
 int load_tracepoint_hook(void);
 void unload_tracepoint_hook(void);
 #endif

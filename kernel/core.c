@@ -16,6 +16,7 @@
 #include "boot/init.h"
 #include "boot/safe_mode.h"
 #include "manager/ioctl.h"
+#include "manager/umount.h"
 #include "privilege/profile_store.h"
 #include "selinux/hide.h"
 
@@ -119,6 +120,17 @@ static const module_component_t feature_components[] = {
         .name = "SELinux hide",
         .init = nksu_selinux_hide_init,
         .exit = nksu_selinux_hide_exit,
+    },
+    {
+        /*
+         * Module mount handling is a feature, not part of the boot core.
+         * ncore activates it from IOC_SET_MNT_LAYOUT before the first module
+         * mount script; this slot is the normal feature-lifecycle owner and
+         * is idempotent when ncore already initialized it.
+         */
+        .name = "module mounts",
+        .init = nksu_umount_init,
+        .exit = nksu_umount_exit,
     },
 #ifdef CONFIG_NKSU_SYSCALL
     {

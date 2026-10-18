@@ -18,7 +18,6 @@
 #include <fmac.h>
 #include "hook/syscall.h"
 #include "hook/dispatch.h"
-#include "manager/umount.h"
 
 syscall_fn_t nksu_orig_table[__NR_syscalls] ____cacheline_aligned;
 nksu_handler_t virt_table[__NR_syscalls] ____cacheline_aligned;
@@ -81,19 +80,6 @@ asmlinkage long nksu_dispatch_fast(const struct pt_regs *regs)
         return -ENOSYS;
 
     nr = array_index_nospec(nr, __NR_syscalls);
-
-    if (nr == __NR_setresuid) {
-        uid_t uid;
-#if defined(__aarch64__)
-        uid = (uid_t)regs->regs[1];
-#elif defined(__x86_64__)
-        uid = (uid_t)regs->si;
-#else
-        uid = 0;
-#endif
-        if ((uid >= 10000 && uid < 20000) || (uid >= 90000 && uid < 100000))
-            nksu_umount_schedule();
-    }
 
     orig = READ_ONCE(nksu_orig_table[nr]);
 

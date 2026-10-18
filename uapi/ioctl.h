@@ -84,6 +84,17 @@ enum fmac_flag {
     IOC_SET_INIT_PGRP = 20,   /* data 为空，把调用者进程组切到 init（root） */
     IOC_ADD_TRY_UMOUNT = 21,  /* data = 挂载点路径（含 NUL），flags 固定 MNT_DETACH */
     IOC_WIPE_UMOUNT = 22,     /* data 为空，清空 umount 列表 */
+    /*
+     * data[8] = uint32_t mnt_id_off | uint32_t mnt_off.  ncore reads the
+     * offsets from /sys/kernel/btf/vmlinux and installs them before running
+     * the first module mount script.
+     */
+    IOC_SET_MNT_LAYOUT = 23,
+    /*
+     * data 为空。ncore 在运行任何 module mount 脚本前调用：标记 ncore 线程组，
+     * 并安装本模块自己的 mount/umount sys_enter probe。
+     */
+    IOC_UMOUNT_INIT = 24,
 };
 
 #define NKSU_PROFILE_TEXT_MAX (64 * 1024)

@@ -17,6 +17,10 @@ pub fn on_post_fs_data() -> Result<()> {
 
     utils::umask(0);
 
+    // Must run before any script can mount: the kernel needs the struct mount
+    // offsets to give ncore-created mounts a high, non-contiguous id.
+    setup_mount_layout();
+
     // Clear all temporary module configs early
     if let Err(e) = crate::module_config::clear_all_temp_configs() {
         warn!("clear temp configs failed: {e}");
@@ -104,7 +108,6 @@ pub fn on_post_fs_data() -> Result<()> {
     }
 
     run_stage("post-mount", wait);
-    register_umount_paths();
 
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
@@ -158,8 +161,8 @@ pub fn on_services() {
     }
 
     info!("on_services triggered!");
+    setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
-    register_umount_paths();
 }
 
 pub fn on_boot_completed() {
@@ -213,62 +216,19 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn unescape_mountinfo(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let bytes = value.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'\\' && i + 3 < bytes.len() {
-            let octal = &value[i + 1..i + 4];
-            if let Ok(byte) = u8::from_str_radix(octal, 8) {
-                out.push(byte as char);
-                i += 4;
-                continue;
-            }
-        }
-        out.push(bytes[i] as char);
-        i += 1;
+fn setup_mount_layout() {
+    if let Err(e) = ksucalls::init_umount() {
+        warn!("initialize umount feature failed: {e:#}");
     }
-    out
-}
 
-/// Register mounts whose source/root lives under /data/adb/modules.  The
-/// kernel removes them from app mount namespaces when zygote changes uid.
-fn register_umount_paths() {
-    let Ok(text) = std::fs::read_to_string("/proc/self/mountinfo") else {
-        return;
-    };
-    if ksucalls::wipe_umount_paths().is_err() {
-        warn!("cannot wipe kernel umount list");
-        return;
-    }
-    for line in text.lines() {
-        let Some((before, after)) = line.split_once(" - ") else {
-            continue;
-        };
-        let fields: Vec<&str> = before.split_whitespace().collect();
-        if fields.len() < 5 {
-            continue;
-        }
-        let root = unescape_mountinfo(fields[3]);
-        let mountpoint = unescape_mountinfo(fields[4]);
-        let source = after
-            .split_whitespace()
-            .nth(1)
-            .map(unescape_mountinfo)
-            .unwrap_or_default();
-        // For a bind mount from the /data filesystem, mountinfo's root is
-        // relative to that filesystem: /adb/modules/... instead of
-        // /data/adb/modules/....
-        if root.starts_with("/data/adb/modules/")
-            || root.starts_with("/adb/modules/")
-            || source.starts_with("/data/adb/modules/")
-            || source.starts_with("/adb/modules/")
-        {
-            match ksucalls::add_umount_path(&mountpoint) {
-                Ok(()) => info!("umount registered: {mountpoint} (root={root})"),
-                Err(e) => warn!("register umount {mountpoint} failed: {e:#}"),
-            }
-        }
+    match crate::btf::read_mount_layout() {
+        Ok(layout) => match ksucalls::set_mount_layout(layout.mnt_id_off, layout.mnt_off) {
+            Ok(()) => info!(
+                "mount layout: mnt_id@{}, mnt@{}",
+                layout.mnt_id_off, layout.mnt_off
+            ),
+            Err(e) => warn!("install mount layout failed: {e:#}"),
+        },
+        Err(e) => warn!("cannot read mount layout: {e:#}"),
     }
 }

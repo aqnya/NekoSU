@@ -6,6 +6,7 @@
 int appscan_init(void);
 void appscan_exit(void);
 bool is_manager(void);
+void nksu_mark_threads_by_pid(pid_t pid);
 
 /*
  * True once the manager scan has confirmed (or installed) /data/adb/ncore.

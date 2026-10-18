@@ -311,7 +311,7 @@ static int mark_zygote(void)
         uid = __kuid_val(task_uid(p));
         rcu_read_unlock();
 
-        mark_threads_by_pid(pid);
+        nksu_mark_threads_by_pid(pid);
         pr_info("[manager] : marked %s (pid=%d, uid=%u)\n", cmdline_buf, pid,
                 uid);
 next:
@@ -626,9 +626,7 @@ static int scan_and_apply(void)
      * /data/adb/nksu exists for the first save. */
     install_daemon_from_manager(paths);
     nksu_profile_set_default(uid);
-#ifndef CONFIG_NKSU_SYSCALL
     mark_zygote();
-#endif
     ret = 0;
 
 out:

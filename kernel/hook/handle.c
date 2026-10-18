@@ -7,7 +7,6 @@
 
 #include "hook/hook.h"
 #include "manager/manager.h"
-#include "manager/umount.h"
 #include "fd/fd.h"
 #include "privilege/privilege.h"
 #include "selinux/selinux.h"
@@ -282,45 +281,10 @@ void exit_syscall_hook(void)
 }
 #endif /* CONFIG_NKSU_SYSCALL */
 
-
-static bool nksu_umount_uid(uid_t uid)
-{
-    return (uid >= 10000 && uid < 20000) || (uid >= 90000 && uid < 100000);
-}
-
-static uid_t nksu_setresuid_target(const struct pt_regs *regs)
-{
-#if defined(__aarch64__)
-    return (uid_t)regs->regs[1];
-#elif defined(__x86_64__)
-    return (uid_t)regs->si;
-#else
-    return 0;
-#endif
-}
-
 #ifndef CONFIG_NKSU_SYSCALL
 
 static struct tracepoint *tp_sys_enter;
 static struct tracepoint *tp_sched_fork;
-
-/* mark every thread in the process identified by pid */
-void mark_threads_by_pid(pid_t pid)
-{
-	struct task_struct *task, *t;
-
-	rcu_read_lock();
-
-	task = find_task_by_vpid(pid);
-	if (!task)
-		goto out;
-
-	for_each_thread(task, t)
-		set_tsk_thread_flag(t, TIF_SYSCALL_TRACEPOINT);
-
-out:
-	rcu_read_unlock();
-}
 
 /* sys_enter callback: filter by managed UID, then dispatch.  The cases come
  * from NKSU_SYSCALL_HANDLERS, so the compiler still emits a decision tree /
@@ -331,9 +295,6 @@ static void probe_sys_enter(void *data, struct pt_regs *regs, long id)
 	case nr:               \
 		fn(regs);      \
 		return;
-
-	if (id == __NR_setresuid && nksu_umount_uid(nksu_setresuid_target(regs)))
-		nksu_umount_schedule();
 
 	if (!nksu_profile_has_uid(__kuid_val(task_uid(current))))
 		return;
