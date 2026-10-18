@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import androidx.annotation.StringRes
-import java.util.Locale
 import me.nekosu.aqnya.R
+import java.util.Locale
 
 object LocaleHelper {
     private const val PREFS_NAME = "app_preferences"

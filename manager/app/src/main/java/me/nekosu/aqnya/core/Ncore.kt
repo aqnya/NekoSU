@@ -80,6 +80,7 @@ object Ncore {
     ): Boolean
 
     external fun isGki(): Boolean
+
     external fun kernelVersion(): String?
 
     /** uname() 的原始 release 字符串，如 `5.15.194-android13-8-...`；失败返回 null。 */
@@ -99,7 +100,7 @@ object Ncore {
         id: Int,
         value: Long,
     ): Int
-    
+
     external fun getSlotSuffix(): String?
 
     /** 查找 vendor_boot 分区路径（root 子进程）；找不到返回 null。 */

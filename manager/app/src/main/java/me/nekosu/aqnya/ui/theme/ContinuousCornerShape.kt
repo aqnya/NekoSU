@@ -29,7 +29,6 @@ class ContinuousCornerShape(
     bottomEnd: CornerSize,
     bottomStart: CornerSize,
 ) : CornerBasedShape(topStart, topEnd, bottomEnd, bottomStart) {
-
     override fun createOutline(
         size: Size,
         topStart: Float,
@@ -52,7 +51,10 @@ class ContinuousCornerShape(
         bottomStart: CornerSize,
     ): ContinuousCornerShape = ContinuousCornerShape(topStart, topEnd, bottomEnd, bottomStart)
 
-    override fun lerp(other: Any?, t: Float): Any? {
+    override fun lerp(
+        other: Any?,
+        t: Float,
+    ): Any? {
         val target =
             when (other) {
                 null, RectangleShape -> ContinuousCornerShape(0.dp)
@@ -89,11 +91,9 @@ class ContinuousCornerShape(
     }
 }
 
-fun ContinuousCornerShape(radius: Dp): ContinuousCornerShape =
-    ContinuousCornerShape(CornerSize(radius))
+fun ContinuousCornerShape(radius: Dp): ContinuousCornerShape = ContinuousCornerShape(CornerSize(radius))
 
-fun ContinuousCornerShape(corner: CornerSize): ContinuousCornerShape =
-    ContinuousCornerShape(corner, corner, corner, corner)
+fun ContinuousCornerShape(corner: CornerSize): ContinuousCornerShape = ContinuousCornerShape(corner, corner, corner, corner)
 
 fun ContinuousCornerShape(
     topStart: Dp = 0.dp,
@@ -109,7 +109,7 @@ fun ContinuousCornerShape(
     )
 
 // Figma 的圆角平滑度以 60% 作为最接近 Apple 连续圆角的取值。
-private const val continuousCornerSmoothing: Float = 0.6f
+private const val CONTINUOUS_CORNER_SMOOTHING: Float = 0.6f
 
 /** 位于原点的 [size] 矩形，每个角按各自半径做像素级圆角并平滑。 */
 private fun continuousRectangle(
@@ -131,16 +131,23 @@ private fun continuousRectangle(
         // graphics-shapes 的矩形顶点自右下角开始列举。
         perVertexRounding =
             listOf(bottomRight, bottomLeft, topLeft, topRight).map { radius ->
-                CornerRounding(radius = radius, smoothing = continuousCornerSmoothing)
+                CornerRounding(radius = radius, smoothing = CONTINUOUS_CORNER_SMOOTHING)
             },
         centerX = size.width / 2f,
         centerY = size.height / 2f,
     )
 }
 
-private fun lerp(start: CornerSize, stop: CornerSize, fraction: Float): CornerSize =
+private fun lerp(
+    start: CornerSize,
+    stop: CornerSize,
+    fraction: Float,
+): CornerSize =
     object : CornerSize {
-        override fun toPx(shapeSize: Size, density: Density): Float =
+        override fun toPx(
+            shapeSize: Size,
+            density: Density,
+        ): Float =
             lerp(
                 start.toPx(shapeSize, density),
                 stop.toPx(shapeSize, density),

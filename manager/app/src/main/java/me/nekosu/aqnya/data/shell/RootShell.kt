@@ -1,7 +1,7 @@
 package me.nekosu.aqnya.data.shell
 
-import java.util.concurrent.TimeUnit
 import me.nekosu.aqnya.core.Ncore
+import java.util.concurrent.TimeUnit
 
 object RootShell {
     data class Result(
@@ -62,7 +62,10 @@ object RootShell {
             "for f in ${candidates.joinToString(" ")}; do " +
                 "[ -e \"\$f\" ] && { echo \"\$f\"; exit 0; }; done; exit 1"
         val r = exec(script)
-        return r.output.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
+        return r.output
+            .lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() }
     }
 
     /**
@@ -166,8 +169,7 @@ object RootShell {
         }
     }
 
-    private fun withPath(cmd: String): String =
-        "PATH=/sbin:/system/sbin:/system/bin:/system/xbin; export PATH; $cmd"
+    private fun withPath(cmd: String): String = "PATH=/sbin:/system/sbin:/system/bin:/system/xbin; export PATH; $cmd"
 
     private fun quote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 

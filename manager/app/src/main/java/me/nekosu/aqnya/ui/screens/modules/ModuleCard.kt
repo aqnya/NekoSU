@@ -59,13 +59,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.data.module.ModuleInfo
 import me.nekosu.aqnya.data.module.ModuleUpdateInfo
 import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.AppSwitch
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+import kotlin.math.roundToInt
 
 /** 描述收起时最多显示的行数，超出后可点击卡片展开。 */
 private const val DESCRIPTION_MAX_LINES = 3

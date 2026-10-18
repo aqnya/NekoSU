@@ -6,7 +6,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,6 +20,7 @@ import me.nekosu.aqnya.data.module.ModuleInfo
 import me.nekosu.aqnya.data.module.ModuleRepository
 import me.nekosu.aqnya.data.module.ModuleUpdateInfo
 import me.nekosu.aqnya.data.shell.RootShell
+import java.io.File
 
 /** 日志刷新间隔：合并高频输出，避免每来一行都做一次 O(n) 拼接并触发整页重组。 */
 private const val LOG_EMIT_INTERVAL_MS = 50L
@@ -43,7 +43,9 @@ data class ModulesUiState(
     val message: String? = null,
 )
 
-class ModuleViewModel(app: Application) : AndroidViewModel(app) {
+class ModuleViewModel(
+    app: Application,
+) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow(ModulesUiState())
     val uiState: StateFlow<ModulesUiState> = _uiState.asStateFlow()
 

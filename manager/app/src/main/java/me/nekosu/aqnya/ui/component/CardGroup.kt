@@ -22,8 +22,7 @@ import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 val LocalListItemShapes = compositionLocalOf<ListItemShapes?> { null }
 
 @Composable
-fun currentListItemShapes(): ListItemShapes =
-    LocalListItemShapes.current ?: ListItemDefaults.segmentedShapes(index = 0, count = 1)
+fun currentListItemShapes(): ListItemShapes = LocalListItemShapes.current ?: ListItemDefaults.segmentedShapes(index = 0, count = 1)
 
 fun groupShape(
     index: Int,

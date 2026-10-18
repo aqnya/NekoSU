@@ -3,7 +3,6 @@ package me.nekosu.aqnya.data.module
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -13,6 +12,7 @@ import me.nekosu.aqnya.data.installer.VendorBootInstaller
 import me.nekosu.aqnya.data.shell.RootShell
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 
 /**
  * 模块列表与安装流程的入口。
@@ -116,7 +116,8 @@ object ModuleRepository {
                 runCatching {
                     dest.delete()
                     manager.enqueue(
-                        DownloadManager.Request(Uri.parse(url))
+                        DownloadManager
+                            .Request(Uri.parse(url))
                             .setTitle(fileName)
                             .setNotificationVisibility(
                                 DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED,

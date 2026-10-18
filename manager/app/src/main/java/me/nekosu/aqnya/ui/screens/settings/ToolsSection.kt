@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,9 +13,7 @@ import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.ListRow
 
 @Composable
-fun ToolsSection(
-    onExportLog: () -> Unit,
-) {
+fun ToolsSection(onExportLog: () -> Unit) {
     CardGroup {
         item {
             ListRow(

@@ -41,7 +41,9 @@ enum class InstallMethod { FILE, DIRECT, INACTIVE }
 sealed interface LkmSelection {
     data object Auto : LkmSelection
 
-    data class Kmi(val kmi: String) : LkmSelection
+    data class Kmi(
+        val kmi: String,
+    ) : LkmSelection
 
     data class Local(
         val uri: Uri,
@@ -101,7 +103,9 @@ data class InstallUiState(
  * 安装方式与 KernelSU 对齐：选择镜像、直接安装、安装到非活动 slot；后两者
  * 只有在检测到 root（且为 GKI 设备）时才显示。
  */
-class InstallViewModel(app: Application) : AndroidViewModel(app) {
+class InstallViewModel(
+    app: Application,
+) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow(InstallUiState())
     val uiState: StateFlow<InstallUiState> = _uiState.asStateFlow()
 
@@ -116,8 +120,7 @@ class InstallViewModel(app: Application) : AndroidViewModel(app) {
      * 语言切换只会重建 Activity 而不会重建进程，因此这里每次安装时重新读取
      * 已保存的语言标签，避免沿用旧的 [android.content.res.Resources] 配置。
      */
-    private fun i18nContext(): Context =
-        LocaleHelper.wrap(appContext, LocaleHelper.savedLanguageTag(appContext))
+    private fun i18nContext(): Context = LocaleHelper.wrap(appContext, LocaleHelper.savedLanguageTag(appContext))
 
     /** 载入内核信息与可用的内核模块，只执行一次。 */
     fun load() {

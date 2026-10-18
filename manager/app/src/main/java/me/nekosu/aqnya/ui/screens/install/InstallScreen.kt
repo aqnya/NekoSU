@@ -26,10 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material3.Button
@@ -38,9 +36,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -56,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -73,11 +70,10 @@ import me.nekosu.aqnya.ui.component.AppDialog
 import me.nekosu.aqnya.ui.component.AppRadioButton
 import me.nekosu.aqnya.ui.component.AppTopAppBar
 import me.nekosu.aqnya.ui.component.CardGroup
-import me.nekosu.aqnya.ui.component.currentListItemShapes
-import me.nekosu.aqnya.ui.component.ListRow
 import me.nekosu.aqnya.ui.component.LogDoneFab
 import me.nekosu.aqnya.ui.component.LogPane
 import me.nekosu.aqnya.ui.component.LogTopBar
+import me.nekosu.aqnya.ui.component.currentListItemShapes
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.util.LogUtils
 
@@ -422,7 +418,7 @@ private fun KernelModuleSection(
                                 .fillMaxWidth()
                                 .clickable(enabled = !state.running) { onSelectKmi() },
                         shapes = currentListItemShapes(),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
+                        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
                         leadingContent = {
                             Icon(Icons.Rounded.Memory, contentDescription = null)
                         },
@@ -462,7 +458,7 @@ private fun KernelModuleSection(
                             .fillMaxWidth()
                             .clickable(enabled = !state.running) { onPickLocal() },
                     shapes = currentListItemShapes(),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
+                    colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
                     leadingContent = {
                         Icon(Icons.AutoMirrored.Rounded.InsertDriveFile, contentDescription = null)
                     },

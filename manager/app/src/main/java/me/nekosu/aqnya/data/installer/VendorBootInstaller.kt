@@ -5,17 +5,16 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import java.io.File
-import java.io.IOException
-import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.Ncore
 import me.nekosu.aqnya.data.shell.RootShell
+import java.io.File
+import java.io.IOException
+import kotlin.random.Random
 
 object VendorBootInstaller {
-
     /** 内核模块在 assets 中的存放目录，例如 assets/ko/android14-6.1_nksu.ko。 */
     private const val KO_ASSET_DIR = "ko"
 
@@ -36,16 +35,13 @@ object VendorBootInstaller {
 
     private fun outputImageName(): String = "$OUTPUT_PREFIX${randomToken()}$OUTPUT_SUFFIX"
 
-    fun installDir(context: Context): File =
-        File(context.filesDir, "nksu-install").apply { mkdirs() }
+    fun installDir(context: Context): File = File(context.filesDir, "nksu-install").apply { mkdirs() }
 
     /** ncore, the module runtime / su daemon bundled by the manager. */
-    fun ncorePath(context: Context): File =
-        File(context.applicationInfo.nativeLibraryDir, NCORE_LIB_NAME)
+    fun ncorePath(context: Context): File = File(context.applicationInfo.nativeLibraryDir, NCORE_LIB_NAME)
 
     /** bootpatcher, the vendor_boot patcher. */
-    fun bootpatcherPath(context: Context): File =
-        File(context.applicationInfo.nativeLibraryDir, BOOTPATCHER_LIB_NAME)
+    fun bootpatcherPath(context: Context): File = File(context.applicationInfo.nativeLibraryDir, BOOTPATCHER_LIB_NAME)
 
     /**
      * 把内核模块放到安装目录并返回其文件：
@@ -76,7 +72,11 @@ object VendorBootInstaller {
         return null
     }
 
-    private fun copyAsset(context: Context, assetName: String, dest: File) {
+    private fun copyAsset(
+        context: Context,
+        assetName: String,
+        dest: File,
+    ) {
         try {
             // Asset names may contain a directory prefix (e.g. "ko/...");
             // FileOutputStream does not create parents, so make them first.
@@ -152,8 +152,7 @@ object VendorBootInstaller {
                         onOutput(context.getString(R.string.install_log_exported, it.absolutePath))
                         // The Download copy is the deliverable; drop the private one.
                         produced.delete()
-                    }
-                    .onFailure { onOutput(context.getString(R.string.install_log_export_failed, it.message.orEmpty())) }
+                    }.onFailure { onOutput(context.getString(R.string.install_log_export_failed, it.message.orEmpty())) }
                 0
             } finally {
                 // The staged input image is only needed for this run.
@@ -242,7 +241,6 @@ object VendorBootInstaller {
         return Ncore.findVendorBoot(slot, allowSlotless)
             ?: if (RootShell.available()) RootShell.findVendorBoot(slot, allowSlotless) else null
     }
-
 
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
 

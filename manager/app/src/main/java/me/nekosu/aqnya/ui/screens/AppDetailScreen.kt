@@ -93,10 +93,11 @@ private fun CapsSheet(
     onSelectionChange: (Set<LinuxCap>) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
-    )
+    val sheetState =
+        rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        )
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -650,7 +651,14 @@ fun AppDetailScreen(
                     allowed = allowed,
                     onToggle = { value ->
                         haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                        val newCaps = if (!value) emptySet() else if (caps.isEmpty()) DEFAULT_CAPS else caps
+                        val newCaps =
+                            if (!value) {
+                                emptySet()
+                            } else if (caps.isEmpty()) {
+                                DEFAULT_CAPS
+                            } else {
+                                caps
+                            }
                         val newDomain = if (!value) "u:r:nksu:s0" else domain
                         val newNs = if (!value) NksuNamespace.INHERITED else ns
                         allowed = value

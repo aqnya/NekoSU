@@ -1,6 +1,5 @@
 package me.nekosu.aqnya.ui.component
 
-import androidx.compose.material3.Card as MaterialCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -9,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+import androidx.compose.material3.Card as MaterialCard
 
 /** 卡片容器（滑动圆角、自带按压反馈）。 */
 @Composable

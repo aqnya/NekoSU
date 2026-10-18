@@ -3,10 +3,10 @@ package me.nekosu.aqnya.ui.webui
 import android.util.Log
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
+import me.nekosu.aqnya.data.shell.RootShell
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import me.nekosu.aqnya.data.shell.RootShell
 
 /**
  * 以 root 读取模块 `<module>/webroot` 下的文件，作为 WebUI 静态资源返回。
@@ -97,6 +97,5 @@ class ModulePathHandler(
         )
     }
 
-    private fun escapeHtml(s: String): String =
-        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    private fun escapeHtml(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 }

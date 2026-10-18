@@ -50,7 +50,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -66,6 +65,7 @@ import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.SearchAppBar
 import me.nekosu.aqnya.ui.component.groupShape
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+import java.io.File
 
 @Serializable
 data class AppInfo(
@@ -203,18 +203,15 @@ class AppViewModel(
                 .toMap()
     }
 
-    /**
-     * 内核提供 API 返回 profile 表，管理器通过 JNI 获取；它不再自己保存。
-     * 控制 fd 尚不可用时返回空表。
-     */
     private fun readKernelProfiles(): Map<Int, AppConfig> {
         val text =
-            try {
-                Ncore.listProfiles()
-            } catch (_: Throwable) {
-                null
-            } ?: return emptyMap()
-        return parseAllowProfile(text)
+            Ncore.listProfiles()
+                ?: error("listProfiles() returned null: control fd unavailable or ioctl failed")
+        val map = parseAllowProfile(text)
+        if (map.isEmpty() && text.isNotBlank()) {
+            error("listProfiles() returned non-empty data but parsed to empty map: $text")
+        }
+        return map
     }
 
     private suspend fun loadAppConfigs() =

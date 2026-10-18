@@ -68,7 +68,7 @@ class WebViewBridge(
     ) {
         val result = RootShell.execSplit(cmd)
         eval(
-            "javascript:(function(){try{${callbackFunc}(${result.code},${
+            "javascript:(function(){try{$callbackFunc(${result.code},${
                 JSONObject.quote(result.stdout)
             },${JSONObject.quote(result.stderr)});}catch(e){console.error(e);}})();",
         )
@@ -104,13 +104,13 @@ class WebViewBridge(
                         emitStream(callbackFunc, "stderr", line)
                     },
                 )
-            eval("javascript:(function(){try{${callbackFunc}.emit('exit',${code});}catch(e){console.error(e);}})();")
+            eval("javascript:(function(){try{$callbackFunc.emit('exit',$code);}catch(e){console.error(e);}})();")
             if (code != 0) {
                 val quoted = JSONObject.quote(stderr.toString())
                 eval(
                     "javascript:(function(){try{var err=new Error($quoted);" +
-                        "err.exitCode=${code};err.message=$quoted;" +
-                        "${callbackFunc}.emit('error',err);}catch(e){console.error(e);}})();",
+                        "err.exitCode=$code;err.message=$quoted;" +
+                        "$callbackFunc.emit('error',err);}catch(e){console.error(e);}})();",
                 )
             }
         }.start()
@@ -122,7 +122,7 @@ class WebViewBridge(
         line: String,
     ) {
         eval(
-            "javascript:(function(){try{${callbackFunc}.${stream}.emit('data',${
+            "javascript:(function(){try{$callbackFunc.$stream.emit('data',${
                 JSONObject.quote(line)
             });}catch(e){console.error(e);}})();",
         )
@@ -136,7 +136,14 @@ class WebViewBridge(
         val obj = runCatching { JSONObject(options) }.getOrNull() ?: return
         obj.optString("cwd").takeIf { it.isNotBlank() }?.let { sb.append("cd ").append(it).append(";") }
         obj.optJSONObject("env")?.let { env ->
-            env.keys().forEach { key -> sb.append("export ").append(key).append('=').append(env.getString(key)).append(';') }
+            env.keys().forEach { key ->
+                sb
+                    .append("export ")
+                    .append(key)
+                    .append('=')
+                    .append(env.getString(key))
+                    .append(';')
+            }
         }
     }
 
@@ -167,7 +174,8 @@ class WebViewBridge(
     fun listPackages(type: String): String {
         val pm = context.packageManager
         val names =
-            pm.getInstalledPackages(0)
+            pm
+                .getInstalledPackages(0)
                 .filter { pkg ->
                     val flags = pkg.applicationInfo?.flags ?: 0
                     when (type.lowercase()) {

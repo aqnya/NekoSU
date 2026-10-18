@@ -51,13 +51,13 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewAssetLoader
+import me.nekosu.aqnya.R
+import me.nekosu.aqnya.ui.component.AppDialog
+import me.nekosu.aqnya.ui.component.AppTextField
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import me.nekosu.aqnya.R
-import me.nekosu.aqnya.ui.component.AppDialog
-import me.nekosu.aqnya.ui.component.AppTextField
 
 /** WebViewAssetLoader 使用的虚拟域名；模块网页从这里加载。 */
 private const val WEBUI_DOMAIN = "mui.kernelsu.org"
@@ -131,7 +131,8 @@ internal fun WebUIScreen(
                 settings.allowFileAccess = false
 
                 val assetLoader =
-                    WebViewAssetLoader.Builder()
+                    WebViewAssetLoader
+                        .Builder()
                         .setDomain(WEBUI_DOMAIN)
                         .addPathHandler(
                             "/",
@@ -141,8 +142,7 @@ internal fun WebUIScreen(
                                 onInsetsRequested = { insetsEnabled.value = true },
                                 colorsProvider = { MonetColorsProvider.getColorsCss() },
                             ),
-                        )
-                        .build()
+                        ).build()
 
                 webViewClient =
                     object : WebViewClient() {

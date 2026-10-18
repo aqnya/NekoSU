@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.data.installer.VendorBootInstaller
+import java.io.File
 
 object LogUtils {
     // 日志保存 / 导出都是纯文件与进程操作，统一放到后台线程，避免卡住 UI。
@@ -41,17 +41,19 @@ object LogUtils {
             withContext(Dispatchers.Main) {
                 result
                     .onSuccess { dest ->
-                        Toast.makeText(
-                            appContext,
-                            appContext.getString(R.string.modules_log_saved, dest.name),
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        Toast
+                            .makeText(
+                                appContext,
+                                appContext.getString(R.string.modules_log_saved, dest.name),
+                                Toast.LENGTH_SHORT,
+                            ).show()
                     }.onFailure {
-                        Toast.makeText(
-                            appContext,
-                            appContext.getString(R.string.modules_log_save_failed),
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        Toast
+                            .makeText(
+                                appContext,
+                                appContext.getString(R.string.modules_log_save_failed),
+                                Toast.LENGTH_SHORT,
+                            ).show()
                     }
             }
         }

@@ -38,8 +38,7 @@ fun nksuVersion(): String =
                 "^#define\\s+NKSU_VERSION\\s+\"([^\"]+)\"",
                 RegexOption.MULTILINE,
             ).find(it)
-        }
-        ?.groupValues
+        }?.groupValues
         ?.getOrNull(1)
         ?.trim()
         ?.ifEmpty { null }
@@ -77,12 +76,13 @@ android {
         buildConfigField("String", "NKSU_VERSION", "\"${nksuVersion()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        
+
         ndk {
-        abiFilters += listOf(
-            "arm64-v8a"
-        )
-     }
+            abiFilters +=
+                listOf(
+                    "arm64-v8a",
+                )
+        }
     }
 
     signingConfigs {
@@ -135,8 +135,12 @@ android {
 
 // ncore and bootpatcher are produced by :neko:buildRust; merge them with the
 // app's native libraries like any other jniLibs directory.
-android.sourceSets.getByName("main").jniLibs.srcDir(
-    project(":neko").layout.buildDirectory.dir("generated/rust/jniLibs").get().asFile,
+android.sourceSets.getByName("main").jniLibs.directories.add(
+    project(":neko")
+        .layout.buildDirectory
+        .dir("generated/rust/jniLibs")
+        .get()
+        .toString(),
 )
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
     dependsOn(":neko:buildRust")

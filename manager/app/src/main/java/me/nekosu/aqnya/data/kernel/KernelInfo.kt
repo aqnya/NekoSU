@@ -51,6 +51,5 @@ object KernelInfo {
     /**
      * uname release 里的 `-androidNN` 版本号；自定义内核可能没有该标记，返回 null。
      */
-    private fun androidVersion(): String? =
-        Ncore.kernelRelease()?.let { ANDROID_TAG.find(it)?.groupValues?.getOrNull(1) }
+    private fun androidVersion(): String? = Ncore.kernelRelease()?.let { ANDROID_TAG.find(it)?.groupValues?.getOrNull(1) }
 }
