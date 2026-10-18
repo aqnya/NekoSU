@@ -908,16 +908,20 @@ static int nksu_umount_start(void)
 	mutex_unlock(&nksu_umount_init_lock);
 
 	/*
-	 * Arm the mount-id hooks now, before ncore starts.  They stay inert
-	 * until IOC_SET_MNT_LAYOUT supplies the BTF offsets.
+	 * Mount-id probes are registered when the BTF layout arrives, i.e.
+	 * immediately before ncore's first mount, or here if the feature is
+	 * re-enabled after a boot-time disable.  Keeping them out of the
+	 * pre-layout window avoids a kprobe on every ida_alloc_range() call.
 	 */
-	mutex_lock(&nksu_mount_layout_lock);
-	ret = nksu_mount_probes_register_locked();
-	if (!ret && nksu_mount_layout_seen)
-		WRITE_ONCE(nksu_mount_layout_ready, true);
-	mutex_unlock(&nksu_mount_layout_lock);
-	if (ret)
-		pr_warn("[mount-id] probes not ready at early init: %d\n", ret);
+	if (nksu_mount_layout_seen) {
+		mutex_lock(&nksu_mount_layout_lock);
+		ret = nksu_mount_probes_register_locked();
+		if (!ret)
+			WRITE_ONCE(nksu_mount_layout_ready, true);
+		mutex_unlock(&nksu_mount_layout_lock);
+		if (ret)
+			pr_warn("[mount-id] probes not ready: %d\n", ret);
+	}
 
 	pr_info("[umount] sys_enter probe active\n");
 	return 0;

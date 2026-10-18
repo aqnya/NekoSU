@@ -357,6 +357,7 @@ static void nksu_mark_current_ncore(void)
 static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
 {
     struct nksu_mnt_layout layout;
+    int ret;
 
     if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
         return -EPERM;
@@ -364,6 +365,15 @@ static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
         return -EINVAL;
     if (copy_from_user(&layout, data, sizeof(layout)))
         return -EFAULT;
+
+    /*
+     * /data is available by the time ncore sends this.  Apply a persisted
+     * feature-off before installing the layout so a disabled feature does
+     * not leave its mount-id kprobes armed for the whole boot.
+     */
+    ret = nksu_umount_feature_init();
+    if (ret)
+        return ret;
 
     nksu_mark_current_ncore();
 
