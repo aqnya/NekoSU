@@ -65,6 +65,8 @@
     <string name="settings_theme_color">主题色</string>
     <string name="settings_amoled_black">AMOLED 纯黑</string>
     <string name="settings_amoled_black_summary">深色模式下使用纯黑色背景</string>
+    <string name="settings_haze_app_bar">模糊顶栏</string>
+    <string name="settings_haze_app_bar_summary">为滚动内容后的顶栏启用背景模糊</string>
 
     <!-- 设置 — 开发者 -->
     <string name="settings_debug">开发者调试</string>

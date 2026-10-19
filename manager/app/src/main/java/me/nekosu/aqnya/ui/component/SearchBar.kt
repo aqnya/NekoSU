@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -65,6 +67,7 @@ fun SearchAppBar(
     trailingActions: @Composable (() -> Unit)? = null,
     startInSearchMode: Boolean = false,
 ) {
+    val hazeEnabled = rememberHazeAppBarEnabled()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     var onSearch by rememberSaveable { mutableStateOf(startInSearchMode) }
@@ -148,11 +151,18 @@ fun SearchAppBar(
             }
         },
         modifier =
-            Modifier.hazeBlur(
-                input = HazeInput.Sources(hazeState),
-                style = rememberHazeAppBarStyle(),
-                performanceMode = HazePerformanceMode.Default,
-            ),
+            Modifier
+                .background(
+                    if (hazeEnabled) {
+                        Color.Transparent
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    },
+                ).hazeBlur(
+                    input = HazeInput.Sources(hazeState),
+                    style = rememberHazeAppBarStyle(hazeEnabled),
+                    performanceMode = HazePerformanceMode.Default,
+                ),
         colors =
             TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
