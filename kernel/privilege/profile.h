@@ -123,7 +123,7 @@ int nksu_profile_set_domain(uid_t uid, const char *domain);
 int nksu_profile_set_ns(uid_t uid, int ns);
 int nksu_profile_set_default(uid_t uid);
 
-void nksu_profile_clear(uid_t uid);
+int nksu_profile_clear(uid_t uid);
 void nksu_profile_clear_all(void);
 
 int nksu_profile_init(void);

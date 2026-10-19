@@ -187,14 +187,19 @@ int set_domain(const char *domain, struct cred *new_cred)
 
 /* Cached nksu-domain cred, built on first use by nksu_borrow_creds_begin(). */
 static struct cred *nksu_domain_cred;
+static DEFINE_MUTEX(nksu_domain_cred_lock);
 
 const struct cred *nksu_borrow_creds_begin(void)
 {
+	const struct cred *old = NULL;
+
+	mutex_lock(&nksu_domain_cred_lock);
+
 	if (!nksu_domain_cred) {
 		struct cred *cred = prepare_creds();
 
 		if (!cred)
-			return NULL;
+			goto out;
 
 		cred->cap_effective = CAP_FULL_SET;
 		cred->cap_permitted = CAP_FULL_SET;
@@ -203,12 +208,16 @@ const struct cred *nksu_borrow_creds_begin(void)
 
 		if (set_domain(DOMAIN_CTX, cred)) {
 			abort_creds(cred);
-			return NULL;
+			goto out;
 		}
 		nksu_domain_cred = cred;
 	}
 
-	return override_creds(nksu_domain_cred);
+	old = override_creds(nksu_domain_cred);
+
+out:
+	mutex_unlock(&nksu_domain_cred_lock);
+	return old;
 }
 
 void nksu_borrow_creds_end(const struct cred *old)
@@ -219,10 +228,15 @@ void nksu_borrow_creds_end(const struct cred *old)
 
 void nksu_borrow_creds_release(void)
 {
-	if (nksu_domain_cred) {
-		put_cred(nksu_domain_cred);
-		nksu_domain_cred = NULL;
-	}
+	struct cred *cred;
+
+	mutex_lock(&nksu_domain_cred_lock);
+	cred = nksu_domain_cred;
+	nksu_domain_cred = NULL;
+	mutex_unlock(&nksu_domain_cred_lock);
+
+	if (cred)
+		put_cred(cred);
 }
 
 /* SID of DOMAIN_FILE (u:object_r:nksu_file:s0); 0 until policy is loaded. */

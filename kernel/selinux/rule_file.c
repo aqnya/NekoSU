@@ -190,7 +190,7 @@ int sepolicy_apply_batch(const void __user *user_data, size_t data_len)
 {
 	struct nksu_sepol_cursor cursor;
 	u8 *payload;
-	int applied = 0;
+	int applied = 0, first_error = 0, ret = 0;
 
 	if (!user_data || !data_len)
 		return -EINVAL;
@@ -212,15 +212,17 @@ int sepolicy_apply_batch(const void __user *user_data, size_t data_len)
 	while (cursor.cur < cursor.end) {
 		struct nksu_sepol_cmd h;
 		const char *args[NKSU_SEPOLICY_MAX_ARGS] = { 0 };
-		int argc, i, ret;
+		int argc, i;
 
 		ret = read_cmd(&cursor, &h);
 		if (ret)
 			break;
 
 		argc = expected_argc(h.cmd);
-		if (argc < 0 || argc > NKSU_SEPOLICY_MAX_ARGS)
+		if (argc < 0 || argc > NKSU_SEPOLICY_MAX_ARGS) {
+			ret = -EINVAL;
 			break;
+		}
 
 		for (i = 0; i < argc; i++) {
 			ret = read_string(&cursor, &args[i]);
@@ -230,13 +232,22 @@ int sepolicy_apply_batch(const void __user *user_data, size_t data_len)
 		if (ret)
 			break;
 
-		if (apply_one(&h, args) == 0)
+		ret = apply_one(&h, args);
+		if (!ret) {
 			applied++;
-		else
-			pr_info("[selinux]: batch cmd %u/%u skipped\n", h.cmd, h.subcmd);
+		} else {
+			pr_err("[selinux]: batch cmd %u/%u failed: %d\n", h.cmd, h.subcmd, ret);
+			if (!first_error)
+				first_error = ret;
+			ret = 0;
+		}
 	}
 	sepolicy_batch_end();
 
 	kvfree(payload);
+	if (ret)
+		return ret;
+	if (!applied && first_error)
+		return first_error;
 	return applied;
 }

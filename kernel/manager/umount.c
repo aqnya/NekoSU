@@ -19,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/namei.h>
 #include <linux/nsproxy.h>
+#include <linux/module.h>
 #include <linux/path.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
@@ -257,6 +258,11 @@ static void nksu_umount_run(void)
 		return;
 
 	old = nksu_borrow_creds_begin();
+	if (!old) {
+		pr_err_ratelimited("[umount] cannot borrow nksu creds\n");
+		failed = true;
+		goto out;
+	}
 	for (i = 0; i < count; i++) {
 		const char *target = snapshot[i].path;
 		struct path path;
@@ -292,6 +298,7 @@ static void nksu_umount_run(void)
 			pr_info_ratelimited("[umount] removed %s (pid %d)\n", target, current->pid);
 		}
 	}
+out:
 	if (old)
 		nksu_borrow_creds_end(old);
 
@@ -314,6 +321,7 @@ static void nksu_umount_work_fn(struct callback_head *cb)
 
 	nksu_umount_run();
 	kfree(work);
+	module_put(THIS_MODULE);
 }
 
 void nksu_umount_schedule(void)
@@ -327,13 +335,20 @@ void nksu_umount_schedule(void)
 	if (nksu_umount_empty())
 		return;
 
+	if (!try_module_get(THIS_MODULE)) {
+		pr_warn_ratelimited("[umount] cannot pin module for task_work\n");
+		return;
+	}
+
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
 	if (!work) {
+		module_put(THIS_MODULE);
 		pr_warn_ratelimited("[umount] cannot allocate task_work\n");
 		return;
 	}
 	init_task_work(&work->cb, nksu_umount_work_fn);
 	if (task_work_add(current, &work->cb, TWA_RESUME)) {
+		module_put(THIS_MODULE);
 		pr_warn_ratelimited("[umount] cannot queue task_work\n");
 		kfree(work);
 	}

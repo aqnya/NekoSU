@@ -664,11 +664,11 @@ int nksu_profile_set_default(uid_t uid)
 	return nksu_profile_set(uid, 0, caps, "u:r:nksu:s0", NKSU_NS_INHERITED);
 }
 
-void nksu_profile_clear(uid_t uid)
+int nksu_profile_clear(uid_t uid)
 {
 	struct clear_ctx ctx = { .uid = uid };
 
-	blob_update_and_persist(__clear_entry, &ctx);
+	return blob_update_and_persist(__clear_entry, &ctx);
 }
 
 void nksu_profile_clear_all(void)

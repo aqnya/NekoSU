@@ -122,6 +122,7 @@ typedef ssize_t (*write_op_fn)(struct file *, char *, size_t);
 
 static DEFINE_MUTEX(nksu_hide_mutex);
 static bool nksu_hide_running __read_mostly;
+static bool nksu_hide_hooked;
 
 static write_op_fn *context_write_slot;
 static write_op_fn *access_write_slot;
@@ -566,31 +567,62 @@ static ssize_t nksu_read_policy(struct file *filp, char __user *buf, size_t coun
 	return simple_read_from_buffer(buf, count, ppos, clean_policy_data, clean_policy_len);
 }
 
-static void nksu_hide_unhook(void)
+static int nksu_hide_unhook(void)
 {
+	int ret = 0, err;
+
 	if (context_write_slot) {
-		nksu_patch_text(context_write_slot, &orig_context_write,
-				sizeof(orig_context_write));
-		context_write_slot = NULL;
-		orig_context_write = NULL;
+		err = nksu_patch_text(context_write_slot, &orig_context_write,
+				      sizeof(orig_context_write));
+		if (err) {
+			pr_err("[selinux_hide] restore context write: %d\n", err);
+			ret = err;
+		} else {
+			context_write_slot = NULL;
+			orig_context_write = NULL;
+		}
 	}
 	if (access_write_slot) {
-		nksu_patch_text(access_write_slot, &orig_access_write, sizeof(orig_access_write));
-		access_write_slot = NULL;
-		orig_access_write = NULL;
+		err = nksu_patch_text(access_write_slot, &orig_access_write,
+				      sizeof(orig_access_write));
+		if (err) {
+			pr_err("[selinux_hide] restore access write: %d\n", err);
+			ret = ret ? ret : err;
+		} else {
+			access_write_slot = NULL;
+			orig_access_write = NULL;
+		}
 	}
 	if (status_open_slot && orig_status_open) {
-		nksu_patch_text(status_open_slot, &orig_status_open, sizeof(orig_status_open));
-		status_open_slot = NULL;
-		orig_status_open = NULL;
+		err = nksu_patch_text(status_open_slot, &orig_status_open,
+				      sizeof(orig_status_open));
+		if (err) {
+			pr_err("[selinux_hide] restore status open: %d\n", err);
+			ret = ret ? ret : err;
+		} else {
+			status_open_slot = NULL;
+			orig_status_open = NULL;
+		}
 	}
 	if (policy_read_slot && orig_policy_read) {
-		nksu_patch_text(policy_read_slot, &orig_policy_read, sizeof(orig_policy_read));
-		policy_read_slot = NULL;
-		orig_policy_read = NULL;
+		err = nksu_patch_text(policy_read_slot, &orig_policy_read,
+				      sizeof(orig_policy_read));
+		if (err) {
+			pr_err("[selinux_hide] restore policy read: %d\n", err);
+			ret = ret ? ret : err;
+		} else {
+			policy_read_slot = NULL;
+			orig_policy_read = NULL;
+		}
 	}
 
 	nksu_lsm_unhook(&nksu_setprocattr_hook);
+	if (nksu_setprocattr_hook.entry) {
+		pr_err("[selinux_hide] restore setprocattr hook failed\n");
+		ret = ret ? ret : -EIO;
+	}
+
+	return ret;
 }
 
 static int nksu_hide_enable(void)
@@ -633,6 +665,7 @@ static int nksu_hide_enable(void)
 		pr_err("[selinux_hide] cannot prepare the clean policy: %d\n", ret);
 		return ret;
 	}
+	nksu_hide_hooked = true;
 
 	policy_ops = (struct file_operations *)nksu_ksym_lookup("sel_policy_ops");
 	if (policy_ops) {
@@ -705,17 +738,31 @@ static int nksu_hide_enable(void)
 	return 0;
 
 fail:
-	nksu_hide_unhook();
+	if (nksu_hide_unhook())
+		pr_err("[selinux_hide] rollback incomplete\n");
+	else
+		nksu_hide_hooked = false;
 	return ret;
 }
 
-static void nksu_hide_disable(void)
+static int nksu_hide_disable(void)
 {
-	if (!nksu_hide_running)
-		return;
-	static_key_disable(&nksu_fake_status_init_key.key);
-	nksu_hide_unhook();
-	pr_info("[selinux_hide] disabled\n");
+	int ret;
+
+	if (!nksu_hide_running && !nksu_hide_hooked)
+		return 0;
+
+	ret = nksu_hide_unhook();
+	if (ret) {
+		pr_err("[selinux_hide] disable failed, hooks still installed: %d\n", ret);
+		return ret;
+	}
+	nksu_hide_hooked = false;
+	if (nksu_hide_running) {
+		static_key_disable(&nksu_fake_status_init_key.key);
+		pr_info("[selinux_hide] disabled\n");
+	}
+	return 0;
 }
 
 static int nksu_hide_feature_get(u64 *value)
@@ -735,18 +782,29 @@ static int nksu_hide_apply(u64 value, bool persist)
 	mutex_lock(&nksu_hide_mutex);
 	if (value) {
 		if (!nksu_hide_running) {
+			if (nksu_hide_hooked) {
+				ret = nksu_hide_disable();
+				if (ret)
+					goto out;
+			}
 			ret = nksu_hide_enable();
 			if (!ret)
 				nksu_hide_running = true;
 		}
-	} else if (nksu_hide_running) {
-		nksu_hide_disable();
-		nksu_hide_running = false;
+	} else if (nksu_hide_running || nksu_hide_hooked) {
+		ret = nksu_hide_disable();
+		if (!ret)
+			nksu_hide_running = false;
 	}
+out:
 	mutex_unlock(&nksu_hide_mutex);
 
-	if (!ret && persist)
-		nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
+	if (!ret && persist) {
+		int persist_ret = nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
+
+		if (persist_ret)
+			pr_err("[selinux_hide] cannot persist feature state: %d\n", persist_ret);
+	}
 
 	return ret;
 }
@@ -785,10 +843,18 @@ int nksu_selinux_hide_init(void)
 
 void nksu_selinux_hide_exit(void)
 {
+	int ret;
+
 	mutex_lock(&nksu_hide_mutex);
-	nksu_hide_disable();
-	nksu_hide_running = false;
+	ret = nksu_hide_disable();
+	if (!ret)
+		nksu_hide_running = false;
+	else
+		pr_emerg("[selinux_hide] cannot restore hooks, keeping state: %d\n", ret);
 	mutex_unlock(&nksu_hide_mutex);
+
+	if (ret)
+		return;
 
 	nksu_clean_policy_release();
 
