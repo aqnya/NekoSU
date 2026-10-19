@@ -2,9 +2,6 @@ package me.nekosu.aqnya.ui.screens.modules
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseInOutCubic
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
@@ -96,6 +93,7 @@ internal fun ModuleCard(
     onUninstall: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
+    val motionScheme = MaterialTheme.motionScheme
     var expanded by rememberSaveable(module.id) { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -204,8 +202,8 @@ internal fun ModuleCard(
             ) {
                 AnimatedVisibility(
                     visible = actionEnabled,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                    exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (updateInfo != null) {
@@ -367,6 +365,7 @@ private fun ExpandableDescriptionText(
     style: TextStyle = LocalTextStyle.current,
     textDecoration: TextDecoration? = null,
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     val progress = remember(text) { Animatable(if (expanded) 1f else 0f) }
 
     LaunchedEffect(expanded) {
@@ -374,9 +373,9 @@ private fun ExpandableDescriptionText(
         if (progress.targetValue != target) {
             val spec =
                 if (expanded) {
-                    tween<Float>(durationMillis = 280, easing = FastOutSlowInEasing)
+                    motionScheme.defaultSpatialSpec<Float>()
                 } else {
-                    tween<Float>(durationMillis = 320, easing = EaseInOutCubic)
+                    motionScheme.fastSpatialSpec<Float>()
                 }
             progress.animateTo(target, animationSpec = spec)
         }

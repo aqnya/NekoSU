@@ -1,19 +1,19 @@
 package me.nekosu.aqnya.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tune
@@ -35,28 +34,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import kotlinx.coroutines.launch
 import me.nekosu.aqnya.R
-import me.nekosu.aqnya.ui.component.AppCard
-import me.nekosu.aqnya.ui.component.AppCheckbox
 import me.nekosu.aqnya.ui.component.AppDialog
-import me.nekosu.aqnya.ui.component.AppRadioButton
-import me.nekosu.aqnya.ui.component.AppSwitch
+import me.nekosu.aqnya.ui.component.AppListItem
 import me.nekosu.aqnya.ui.component.AppTopAppBar
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.ExpressiveTextField
-import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+import me.nekosu.aqnya.ui.component.ModeLabel
 
 /** Build an [AppConfig] from the screen's draft values (used for live saving). */
 private fun buildConfig(
@@ -74,14 +71,6 @@ private fun buildConfig(
         namespace = ns,
     )
 
-/**
- * Capabilities picker.
- *
- * A Material 3 Expressive [ModalBottomSheet]: a large title with the running
- * count, a search field, connected preset buttons and checkbox rows that tint
- * with the secondary container when selected.  Edits are applied live through
- * [onSelectionChange].
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CapsSheet(
@@ -90,12 +79,7 @@ private fun CapsSheet(
     onSelectionChange: (Set<LinuxCap>) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val sheetState =
-        rememberBottomSheetState(
-            initialValue = SheetValue.Hidden,
-            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-        )
-    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
 
     val filtered =
@@ -111,10 +95,6 @@ private fun CapsSheet(
                 }
             }
         }
-
-    fun dismiss() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -137,7 +117,6 @@ private fun CapsSheet(
                     Text(
                         text = stringResource(R.string.app_capabilities),
                         style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = stringResource(R.string.app_caps_selected, current.size, LinuxCap.entries.size),
@@ -148,10 +127,10 @@ private fun CapsSheet(
                 IconButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                        dismiss()
+                        onDismiss()
                     },
                 ) {
-                    Icon(Icons.Rounded.Close, contentDescription = null)
+                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cd_close))
                 }
             }
 
@@ -165,7 +144,11 @@ private fun CapsSheet(
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.cd_clear),
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 },
@@ -205,7 +188,7 @@ private fun CapsSheet(
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (filtered.isEmpty()) {
                     item {
@@ -219,7 +202,7 @@ private fun CapsSheet(
                     }
                 }
                 items(filtered, key = { it.value }) { cap ->
-                    CapRow(
+                    CapListItem(
                         cap = cap,
                         checked = current.contains(cap),
                         onToggle = {
@@ -241,7 +224,6 @@ private fun CapsPresetButton(
     FilledTonalButton(
         onClick = onClick,
         modifier = modifier.defaultMinSize(minHeight = 40.dp),
-        shape = ContinuousCornerShape(12.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(
@@ -254,65 +236,75 @@ private fun CapsPresetButton(
 }
 
 @Composable
-private fun CapRow(
+private fun CapListItem(
     cap: LinuxCap,
     checked: Boolean,
     onToggle: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val container by
-        animateColorAsState(
-            targetValue = if (checked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-            label = "cap_container",
-        )
+    val containerColor =
+        if (checked) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            Color.Transparent
+        }
     val contentColor =
         if (checked) {
             MaterialTheme.colorScheme.onSecondaryContainer
         } else {
             MaterialTheme.colorScheme.onSurface
         }
+    val supportingColor =
+        if (checked) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
 
-    Row(
+    ListItem(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(ContinuousCornerShape(16.dp))
-                .background(container)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onToggle()
-                }.padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppCheckbox(checked = checked, onCheckedChange = null)
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
+                .clip(MaterialTheme.shapes.medium)
+                .toggleable(
+                    value = checked,
+                    role = Role.Checkbox,
+                    onValueChange = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onToggle()
+                    },
+                ),
+        colors =
+            ListItemDefaults.colors(
+                containerColor = containerColor,
+                contentColor = contentColor,
+                supportingContentColor = supportingColor,
+            ),
+        leadingContent = { Checkbox(checked = checked, onCheckedChange = null) },
+        content = {
             Text(
                 text = "CAP_${cap.label}",
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
-                color = contentColor,
             )
+        },
+        supportingContent = {
             Text(
                 text = stringResource(cap.descriptionRes),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = cap.value.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-        )
-    }
+        },
+        trailingContent = {
+            Text(
+                text = cap.value.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = supportingColor,
+            )
+        },
+    )
 }
 
 @Composable
@@ -334,38 +326,32 @@ private fun UidDialog(
         },
         dismissText = stringResource(R.string.dialog_cancel),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(
-                text = stringResource(R.string.app_root_uid_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ExpressiveTextField(
-                value = draft,
-                onValueChange = { value ->
-                    if (value.length <= 10 && value.all { it.isDigit() }) draft = value
-                },
-                label = stringResource(R.string.app_root_uid_input),
-                placeholder = "0",
-                monospace = true,
-                trailingIcon = {
-                    if (draft.isNotEmpty()) {
-                        IconButton(onClick = { draft = "" }) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.cd_clear),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
+        ExpressiveTextField(
+            value = draft,
+            onValueChange = { value ->
+                if (value.length <= 10 && value.all { it.isDigit() }) draft = value
+            },
+            label = stringResource(R.string.app_root_uid_input),
+            supportingText = stringResource(R.string.app_root_uid_desc),
+            placeholder = "0",
+            monospace = true,
+            trailingIcon = {
+                if (draft.isNotEmpty()) {
+                    IconButton(onClick = { draft = "" }) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.cd_clear),
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
-                },
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done,
-                    ),
-            )
-        }
+                }
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+        )
     }
 }
 
@@ -388,35 +374,33 @@ private fun DomainDialog(
         },
         dismissText = stringResource(R.string.dialog_cancel),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ExpressiveTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                label = stringResource(R.string.app_selinux_domain_input),
-                supportingText = stringResource(R.string.app_selinux_domain_desc),
-                placeholder = "u:r:nksu:s0",
-                monospace = true,
-                leadingIcon = {
-                    Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(20.dp))
-                },
-                trailingIcon = {
-                    if (draft.isNotEmpty()) {
-                        IconButton(onClick = { draft = "" }) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.cd_clear),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
+        ExpressiveTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = stringResource(R.string.app_selinux_domain_input),
+            supportingText = stringResource(R.string.app_selinux_domain_desc),
+            placeholder = "u:r:nksu:s0",
+            monospace = true,
+            leadingIcon = {
+                Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(20.dp))
+            },
+            trailingIcon = {
+                if (draft.isNotEmpty()) {
+                    IconButton(onClick = { draft = "" }) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.cd_clear),
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
-                },
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Done,
-                    ),
-            )
-        }
+                }
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                ),
+        )
     }
 }
 
@@ -441,35 +425,40 @@ private fun NamespaceDialog(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             NksuNamespace.entries.forEach { option ->
-                Row(
+                ListItem(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .clip(ContinuousCornerShape(12.dp))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                draft = option
-                            }.padding(horizontal = 4.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    AppRadioButton(selected = draft == option, onClick = null)
-                    Column(modifier = Modifier.weight(1f)) {
+                            .clip(MaterialTheme.shapes.medium)
+                            .selectable(
+                                selected = draft == option,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    draft = option
+                                },
+                            ),
+                    colors =
+                        ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    leadingContent = { RadioButton(selected = draft == option, onClick = null) },
+                    content = {
                         Text(
                             text = stringResource(option.labelRes),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyLarge,
                         )
+                    },
+                    supportingContent = {
                         Text(
                             text = stringResource(option.descriptionRes),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                }
+                    },
+                )
             }
         }
     }
@@ -486,7 +475,6 @@ fun AppDetailScreen(
     config: AppConfig?,
     onSave: (AppConfig) -> Unit,
     onBack: () -> Unit,
-    navController: NavController,
 ) {
     var allowed by rememberSaveable { mutableStateOf(config?.allowed ?: false) }
 
@@ -522,6 +510,8 @@ fun AppDetailScreen(
     var showDomainDialog by rememberSaveable { mutableStateOf(false) }
     var showNsDialog by rememberSaveable { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val motionScheme = MaterialTheme.motionScheme
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     // 实时保存：任何一处改动都会立即下发，不再需要保存按钮。
     fun save(
@@ -580,7 +570,6 @@ fun AppDetailScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             AppTopAppBar(
                 title = stringResource(R.string.app_profile_title),
@@ -592,96 +581,113 @@ fun AppDetailScreen(
                         )
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets =
+            WindowInsets.safeDrawing
+                .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
     ) { innerPadding ->
         LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            // ── Hero：应用身份 ────────────────────────────────────────────────
             item {
-                AppIdentityCard(app = app, allowed = allowed)
+                AppIdentityHeader(app = app, allowed = allowed)
             }
 
-            // ── Root 开关（重点卡片）────────────────────────────────────────
             item {
-                RootAccessCard(
-                    allowed = allowed,
-                    onToggle = { value ->
-                        haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                        val newCaps =
-                            if (!value) {
-                                emptySet()
-                            } else if (caps.isEmpty()) {
-                                DEFAULT_CAPS
-                            } else {
-                                caps
+                Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle(stringResource(R.string.app_authorization_section))
+                        AuthorizationCard(
+                            allowed = allowed,
+                            onToggle = { value ->
+                                haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                                val newCaps =
+                                    if (!value) {
+                                        emptySet()
+                                    } else if (caps.isEmpty()) {
+                                        DEFAULT_CAPS
+                                    } else {
+                                        caps
+                                    }
+                                val newDomain = if (!value) "u:r:nksu:s0" else domain
+                                val newNs = if (!value) NksuNamespace.INHERITED else ns
+                                allowed = value
+                                caps = newCaps
+                                domain = newDomain
+                                ns = newNs
+                                save(
+                                    allowedValue = value,
+                                    capsValue = newCaps,
+                                    domainValue = newDomain,
+                                    nsValue = newNs,
+                                )
+                            },
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = allowed,
+                        enter =
+                            expandVertically(
+                                animationSpec = motionScheme.defaultSpatialSpec(),
+                                expandFrom = Alignment.Top,
+                            ) + fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                        exit =
+                            shrinkVertically(
+                                animationSpec = motionScheme.fastSpatialSpec(),
+                                shrinkTowards = Alignment.Top,
+                            ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(top = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SectionTitle(stringResource(R.string.app_root_configuration))
+                            CardGroup {
+                                item {
+                                    ConfigurationItem(
+                                        title = stringResource(R.string.app_root_uid),
+                                        summary = rootUidText,
+                                        icon = Icons.Rounded.Badge,
+                                        onClick = { showUidDialog = true },
+                                    )
+                                }
+                                item {
+                                    ConfigurationItem(
+                                        title = stringResource(R.string.app_capabilities),
+                                        summary =
+                                            stringResource(
+                                                R.string.app_caps_selected,
+                                                caps.size,
+                                                LinuxCap.entries.size,
+                                            ),
+                                        icon = Icons.Rounded.Tune,
+                                        onClick = { showCapsSheet = true },
+                                    )
+                                }
+                                item {
+                                    ConfigurationItem(
+                                        title = stringResource(R.string.app_selinux_domain),
+                                        summary = domain,
+                                        icon = Icons.Rounded.Shield,
+                                        onClick = { showDomainDialog = true },
+                                    )
+                                }
+                                item {
+                                    ConfigurationItem(
+                                        title = stringResource(R.string.app_mount_namespace),
+                                        summary = stringResource(ns.labelRes),
+                                        icon = Icons.Rounded.Layers,
+                                        onClick = { showNsDialog = true },
+                                    )
+                                }
                             }
-                        val newDomain = if (!value) "u:r:nksu:s0" else domain
-                        val newNs = if (!value) NksuNamespace.INHERITED else ns
-                        allowed = value
-                        caps = newCaps
-                        domain = newDomain
-                        ns = newNs
-                        save(
-                            allowedValue = value,
-                            capsValue = newCaps,
-                            domainValue = newDomain,
-                            nsValue = newNs,
-                        )
-                    },
-                )
-            }
-
-            // ── 配置（授权后展开）────────────────────────────────────────────
-            item {
-                AnimatedVisibility(
-                    visible = allowed,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = stringResource(R.string.app_root_configuration),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-                        )
-                        ConfigurationCard(
-                            title = stringResource(R.string.app_root_uid),
-                            summary = rootUidText,
-                            icon = { Icon(Icons.Rounded.Badge, contentDescription = null) },
-                            onClick = { showUidDialog = true },
-                        )
-                        ConfigurationCard(
-                            title = stringResource(R.string.app_capabilities),
-                            summary =
-                                stringResource(
-                                    R.string.app_caps_selected,
-                                    caps.size,
-                                    LinuxCap.entries.size,
-                                ),
-                            icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-                            onClick = { showCapsSheet = true },
-                        )
-                        ConfigurationCard(
-                            title = stringResource(R.string.app_selinux_domain),
-                            summary = domain,
-                            icon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
-                            onClick = { showDomainDialog = true },
-                        )
-                        ConfigurationCard(
-                            title = stringResource(R.string.app_mount_namespace),
-                            summary = stringResource(ns.labelRes),
-                            icon = { Icon(Icons.Rounded.Layers, contentDescription = null) },
-                            onClick = { showNsDialog = true },
-                        )
+                        }
                     }
                 }
             }
@@ -690,188 +696,83 @@ fun AppDetailScreen(
 }
 
 @Composable
-private fun AppIdentityCard(
+private fun AppIdentityHeader(
     app: AppInfo,
     allowed: Boolean,
 ) {
-    val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-
-    AppCard(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = ContinuousCornerShape(32.dp),
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = contentColor,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box {
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 52.dp, y = (-64).dp)
-                        .size(176.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), CircleShape),
-            )
-            Column(
-                modifier = Modifier.padding(22.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        modifier = Modifier.size(80.dp),
-                        shape = ContinuousCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                    ) {
-                        AppIcon(
-                            packageName = app.packageName,
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp)
-                                    .clip(ContinuousCornerShape(18.dp)),
-                        )
-                    }
-
-                    Spacer(Modifier.width(18.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = app.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = app.packageName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor.copy(alpha = 0.72f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AppTag(
-                        label = stringResource(R.string.app_uid_tag, app.uid),
-                        color = contentColor,
-                    )
-                    AppTag(
-                        label =
-                            stringResource(
-                                if (allowed) R.string.app_status_granted else R.string.app_status_denied,
-                            ),
-                        color =
-                            if (allowed) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                    )
-                    if (app.isSystem) {
-                        AppTag(
-                            label = stringResource(R.string.app_tag_system),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConfigurationCard(
-    title: String,
-    summary: String,
-    onClick: () -> Unit,
-    icon: @Composable () -> Unit,
-) {
-    AppCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        shape = ContinuousCornerShape(24.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            modifier = Modifier.size(72.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(48.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            ContinuousCornerShape(16.dp),
-                        ),
-                contentAlignment = Alignment.Center,
+            AppIcon(
+                packageName = app.packageName,
+                modifier = Modifier.fillMaxSize().padding(4.dp),
+            )
+        }
+
+        Spacer(Modifier.width(16.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = app.name,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = app.packageName,
+                style =
+                    MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CompositionLocalProvider(
-                    LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    icon()
+                Text(
+                    text = stringResource(R.string.app_uid_tag, app.uid),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (app.isSystem) {
+                    ModeLabel(
+                        label = stringResource(R.string.app_tag_system),
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    )
                 }
             }
-
-            Spacer(Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                )
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
 
-/**
- * Root 授权开关的「重点卡片」：授权后用 tonal 容器上色，形成页面的视觉锚点。
- */
 @Composable
-private fun RootAccessCard(
+private fun AuthorizationCard(
     allowed: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
-    val containerColor =
-        if (allowed) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceBright
-        }
-    val contentColor =
-        if (allowed) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        }
+    val motionScheme = MaterialTheme.motionScheme
 
-    AppCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = ContinuousCornerShape(32.dp),
-        containerColor = containerColor,
-        contentColor = contentColor,
+        shape = MaterialTheme.shapes.large,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceBright,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
     ) {
         Row(
             modifier =
@@ -881,45 +782,123 @@ private fun RootAccessCard(
                         value = allowed,
                         role = Role.Switch,
                         onValueChange = onToggle,
-                    ).padding(22.dp),
+                    ).padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(56.dp)
-                        .background(
-                            if (allowed) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            ContinuousCornerShape(18.dp),
-                        ),
-                contentAlignment = Alignment.Center,
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = MaterialTheme.shapes.medium,
+                color =
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
-                Icon(
-                    imageVector = if (allowed) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    AnimatedContent(
+                        targetState = allowed,
+                        transitionSpec = {
+                            (
+                                fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                    scaleIn(
+                                        initialScale = 0.7f,
+                                        animationSpec = motionScheme.defaultSpatialSpec(),
+                                    )
+                            ).togetherWith(
+                                fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                                    scaleOut(
+                                        targetScale = 0.7f,
+                                        animationSpec = motionScheme.fastSpatialSpec(),
+                                    ),
+                            )
+                        },
+                        label = "authorization_lock",
+                    ) { granted ->
+                        Icon(
+                            imageVector = if (granted) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                            contentDescription = null,
+                        )
+                    }
+                }
             }
+
             Spacer(Modifier.width(16.dp))
+
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = stringResource(R.string.app_allow_root),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
                     text = stringResource(R.string.app_root_access_summary),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            AppSwitch(checked = allowed, onCheckedChange = null)
+
+            Spacer(Modifier.width(12.dp))
+
+            Switch(checked = allowed, onCheckedChange = null)
         }
+    }
+}
+
+@Composable
+private fun ConfigurationItem(
+    title: String,
+    summary: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    AppListItem(
+        title = title,
+        modifier = Modifier.fillMaxWidth(),
+        summary = summary,
+        leading = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+            )
+        },
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp),
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AppDetailScreenPreview() {
+    MaterialTheme {
+        AppDetailScreen(
+            app =
+                AppInfo(
+                    name = "Sample App",
+                    packageName = "com.example.sample",
+                    uid = 10123,
+                    isSystem = false,
+                    isLaunchable = true,
+                ),
+            config = AppConfig(allowed = true),
+            onSave = {},
+            onBack = {},
+        )
     }
 }

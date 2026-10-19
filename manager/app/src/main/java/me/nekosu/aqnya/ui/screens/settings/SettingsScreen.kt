@@ -3,7 +3,6 @@ package me.nekosu.aqnya.ui.screens.settings
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -104,7 +103,6 @@ fun SettingsScreen(navController: NavController) {
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // ── 语言 ──
             LanguageSection(
                 currentLangLabel = currentLangLabel,
                 onLanguageChange = { tag ->
@@ -113,7 +111,6 @@ fun SettingsScreen(navController: NavController) {
                 },
             )
 
-            // ── 外观 ──
             AppearanceSection(
                 currentThemeMode = currentThemeMode,
                 currentThemeColor = currentThemeColor,
@@ -134,20 +131,15 @@ fun SettingsScreen(navController: NavController) {
                 },
             )
 
-            // ── 内核功能 ──
             FeatureSection()
 
-            // ── 工具 ──
             ToolsSection(
                 onExportLog = { LogUtils.exportLogs(mContext) },
             )
 
-            // ── 关于 ──
             AboutSection(
                 onAboutClick = { navController.navigate(AppRoute.About) },
             )
-
-            Spacer(Modifier)
         }
     }
 }

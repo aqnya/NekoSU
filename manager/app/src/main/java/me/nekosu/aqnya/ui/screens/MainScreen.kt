@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,7 +55,10 @@ import me.nekosu.aqnya.ui.screens.settings.SettingsScreen
 
 // 根据 Tab 在 navItems 中的相对位置决定滑入/滑出方向，
 // 非 Tab 路由（about/settings 详情等）一律走 fade，交给 PageTransitions 处理。
-private fun tabTransitionEnter(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
+private fun tabTransitionEnter(
+    navItems: List<BottomNavItem>,
+    motionScheme: MotionScheme,
+): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
     {
         val routes = navItems.map { it.route }
         val initialRoute = initialState.destination.route
@@ -65,16 +68,25 @@ private fun tabTransitionEnter(navItems: List<BottomNavItem>): AnimatedContentTr
             val initialIndex = navItems.indexOfFirst { it.route == initialRoute }
             val targetIndex = navItems.indexOfFirst { it.route == targetRoute }
             if (targetIndex > initialIndex) {
-                slideInHorizontally(animationSpec = tween(280), initialOffsetX = { it / 4 }) + fadeIn(tween(280))
+                slideInHorizontally(
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    initialOffsetX = { it / 4 },
+                ) + fadeIn(animationSpec = motionScheme.defaultEffectsSpec())
             } else {
-                slideInHorizontally(animationSpec = tween(280), initialOffsetX = { -it / 4 }) + fadeIn(tween(280))
+                slideInHorizontally(
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    initialOffsetX = { -it / 4 },
+                ) + fadeIn(animationSpec = motionScheme.defaultEffectsSpec())
             }
         } else {
-            fadeIn(animationSpec = tween(220))
+            fadeIn(animationSpec = motionScheme.defaultEffectsSpec())
         }
     }
 
-private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
+private fun tabTransitionExit(
+    navItems: List<BottomNavItem>,
+    motionScheme: MotionScheme,
+): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     {
         val routes = navItems.map { it.route }
         val initialRoute = initialState.destination.route
@@ -84,12 +96,18 @@ private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTra
             val initialIndex = navItems.indexOfFirst { it.route == initialRoute }
             val targetIndex = navItems.indexOfFirst { it.route == targetRoute }
             if (targetIndex > initialIndex) {
-                slideOutHorizontally(animationSpec = tween(280), targetOffsetX = { -it / 4 }) + fadeOut(tween(280))
+                slideOutHorizontally(
+                    animationSpec = motionScheme.fastSpatialSpec(),
+                    targetOffsetX = { -it / 4 },
+                ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec())
             } else {
-                slideOutHorizontally(animationSpec = tween(280), targetOffsetX = { it / 4 }) + fadeOut(tween(280))
+                slideOutHorizontally(
+                    animationSpec = motionScheme.fastSpatialSpec(),
+                    targetOffsetX = { it / 4 },
+                ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec())
             }
         } else {
-            fadeOut(animationSpec = tween(220))
+            fadeOut(animationSpec = motionScheme.fastEffectsSpec())
         }
     }
 
@@ -98,6 +116,7 @@ private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTra
 fun MainScreen() {
     val navController = rememberNavController()
     val context = LocalContext.current
+    val motionScheme = MaterialTheme.motionScheme
 
     val homeViewModel: HomeViewModel =
         viewModel(
@@ -177,8 +196,8 @@ fun MainScreen() {
             ) {
                 composable(
                     route = BottomNavItem.Home.route,
-                    enterTransition = tabTransitionEnter(navItems),
-                    exitTransition = tabTransitionExit(navItems),
+                    enterTransition = tabTransitionEnter(navItems, motionScheme),
+                    exitTransition = tabTransitionExit(navItems, motionScheme),
                 ) {
                     HomeScreen(
                         viewModel = homeViewModel,
@@ -188,8 +207,8 @@ fun MainScreen() {
 
                 composable(
                     route = BottomNavItem.History.route,
-                    enterTransition = tabTransitionEnter(navItems),
-                    exitTransition = tabTransitionExit(navItems),
+                    enterTransition = tabTransitionEnter(navItems, motionScheme),
+                    exitTransition = tabTransitionExit(navItems, motionScheme),
                 ) {
                     AppListScreen(
                         navController = navController,
@@ -199,40 +218,40 @@ fun MainScreen() {
 
                 composable(
                     route = BottomNavItem.Modules.route,
-                    enterTransition = tabTransitionEnter(navItems),
-                    exitTransition = tabTransitionExit(navItems),
+                    enterTransition = tabTransitionEnter(navItems, motionScheme),
+                    exitTransition = tabTransitionExit(navItems, motionScheme),
                 ) {
                     ModuleScreen()
                 }
 
                 composable(
                     route = BottomNavItem.Settings.route,
-                    enterTransition = tabTransitionEnter(navItems),
-                    exitTransition = tabTransitionExit(navItems),
+                    enterTransition = tabTransitionEnter(navItems, motionScheme),
+                    exitTransition = tabTransitionExit(navItems, motionScheme),
                 ) {
                     SettingsScreen(navController)
                 }
 
                 composable(
                     route = AppRoute.About,
-                    enterTransition = { PageTransitions.defaultEnter },
-                    exitTransition = { PageTransitions.defaultExit },
+                    enterTransition = { PageTransitions.defaultEnter(motionScheme) },
+                    exitTransition = { PageTransitions.defaultExit(motionScheme) },
                 ) {
                     AboutScreen(navController)
                 }
 
                 composable(
                     route = AppRoute.OpenSource,
-                    enterTransition = { PageTransitions.defaultEnter },
-                    exitTransition = { PageTransitions.defaultExit },
+                    enterTransition = { PageTransitions.defaultEnter(motionScheme) },
+                    exitTransition = { PageTransitions.defaultExit(motionScheme) },
                 ) {
                     OpenSourceScreen(navController)
                 }
 
                 composable(
                     route = AppRoute.Install,
-                    enterTransition = { PageTransitions.defaultEnter },
-                    exitTransition = { PageTransitions.defaultExit },
+                    enterTransition = { PageTransitions.defaultEnter(motionScheme) },
+                    exitTransition = { PageTransitions.defaultExit(motionScheme) },
                 ) {
                     InstallScreen(navController)
                 }
@@ -252,7 +271,6 @@ fun MainScreen() {
                             config = appViewModel.appConfigs[pkg],
                             onSave = { appViewModel.setAppConfig(app, it) },
                             onBack = { navController.popBackStack() },
-                            navController = navController,
                         )
                     } else {
                         LaunchedEffect(Unit) {
