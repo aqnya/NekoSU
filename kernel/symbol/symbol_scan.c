@@ -43,6 +43,10 @@
 #define KSYM_BOUNCE_BACK (16u << 20)
 #define KSYM_BOUNCE_FWD (1u << 20)
 
+/* Fallback scan windows around an exported text symbol. */
+#define KSYM_ANCHOR_FWD SZ_1G
+#define KSYM_ANCHOR_BACK SZ_512M
+
 /*
  * Safe memory reads. All external memory access goes through
  * copy_from_kernel_nofault(); failure simply means "no data here".
@@ -264,33 +268,16 @@ void nksu_ksym_scan_memory(void)
      */
 	anchor = (unsigned long)&copy_from_kernel_nofault;
 	if (anchor) {
-		if (anchor <= ULONG_MAX - SZ_256M) {
-			found = scan_region(anchor, anchor + SZ_256M);
+		if (anchor <= ULONG_MAX - KSYM_ANCHOR_FWD) {
+			found = scan_region(anchor, anchor + KSYM_ANCHOR_FWD);
 			if (found)
 				return;
 		}
 
-		if (anchor > SZ_256M) {
-			found = scan_region(anchor - SZ_256M, anchor);
+		if (anchor > KSYM_ANCHOR_BACK) {
+			found = scan_region(anchor - KSYM_ANCHOR_BACK, anchor);
 			if (found)
 				return;
-		}
-	}
-
-	/* Fallback 2: common arm64 KIMAGE bases. */
-	{
-		static const unsigned long bases[] = {
-			0xffffff8000000000UL, /* 39-bit VA */
-			0xffff800000000000UL, /* 48-bit VA */
-		};
-		int i;
-
-		for (i = 0; i < ARRAY_SIZE(bases); i++) {
-			if (bases[i] > ULONG_MAX - SZ_1G)
-				continue;
-			found = scan_region(bases[i], bases[i] + SZ_1G);
-			if (found)
-				break;
 		}
 	}
 }
