@@ -18,9 +18,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.navigation.AppRoute
@@ -53,6 +58,12 @@ fun SettingsScreen(navController: NavController) {
     val currentThemeColor = ThemeColor.fromValue(themeColorValue)
 
     val amoledEnabled by AppPreferences.amoledFlow(mContext).collectAsState(initial = false)
+    var hazeEnabled by remember(mContext) {
+        mutableStateOf(AppPreferences.isHazeAppBarEnabled(mContext))
+    }
+    LaunchedEffect(mContext) {
+        AppPreferences.hazeAppBarFlow(mContext).collect { hazeEnabled = it }
+    }
 
     val currentLang =
         LocaleHelper
@@ -73,6 +84,7 @@ fun SettingsScreen(navController: NavController) {
                 state = hazeState,
                 title = stringResource(R.string.settings_title),
                 scrollBehavior = scrollBehavior,
+                hazeEnabled = hazeEnabled,
             )
         },
         contentWindowInsets =
@@ -106,6 +118,7 @@ fun SettingsScreen(navController: NavController) {
                 currentThemeMode = currentThemeMode,
                 currentThemeColor = currentThemeColor,
                 amoledEnabled = amoledEnabled,
+                hazeEnabled = hazeEnabled,
                 onThemeChange = { mode ->
                     scope.launch { AppPreferences.setThemeMode(mContext, mode.value) }
                 },
@@ -114,6 +127,10 @@ fun SettingsScreen(navController: NavController) {
                 },
                 onAmoledChange = { enabled ->
                     scope.launch { AppPreferences.setAmoled(mContext, enabled) }
+                },
+                onHazeChange = { enabled ->
+                    hazeEnabled = enabled
+                    AppPreferences.setHazeAppBar(mContext, enabled)
                 },
             )
 

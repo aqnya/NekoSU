@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Palette
@@ -36,9 +37,11 @@ fun AppearanceSection(
     currentThemeMode: ThemeMode,
     currentThemeColor: ThemeColor,
     amoledEnabled: Boolean,
+    hazeEnabled: Boolean,
     onThemeChange: (ThemeMode) -> Unit,
     onThemeColorChange: (ThemeColor) -> Unit,
     onAmoledChange: (Boolean) -> Unit,
+    onHazeChange: (Boolean) -> Unit,
 ) {
     var themeMenuExpanded by remember { mutableStateOf(false) }
     var themeColorMenuExpanded by remember { mutableStateOf(false) }
@@ -136,6 +139,20 @@ fun AppearanceSection(
                 },
                 supporting = { Text(stringResource(R.string.settings_amoled_black_summary)) },
                 trailing = { AppSwitch(checked = amoledEnabled, onCheckedChange = onAmoledChange) },
+            )
+        }
+
+        item {
+            ListRow(
+                modifier = Modifier.toggleable(value = hazeEnabled, role = Role.Switch, onValueChange = onHazeChange),
+                icon = { Icon(Icons.Rounded.BlurOn, contentDescription = null) },
+                headline = {
+                    Text(
+                        stringResource(R.string.settings_haze_app_bar),
+                    )
+                },
+                supporting = { Text(stringResource(R.string.settings_haze_app_bar_summary)) },
+                trailing = { AppSwitch(checked = hazeEnabled, onCheckedChange = onHazeChange) },
             )
         }
     }

@@ -19,6 +19,10 @@ object AppPreferences {
 
     fun amoledFlow(context: Context): Flow<Boolean> = context.prefsFlow { getBoolean("amoled_mode", false) }
 
+    fun isHazeAppBarEnabled(context: Context): Boolean = getPrefs(context).getBoolean("haze_app_bar", false)
+
+    fun hazeAppBarFlow(context: Context): Flow<Boolean> = context.prefsFlow { getBoolean("haze_app_bar", false) }
+
     fun setShowRules(
         context: Context,
         value: Boolean,
@@ -45,6 +49,13 @@ object AppPreferences {
         value: Boolean,
     ) {
         getPrefs(context).edit().putBoolean("amoled_mode", value).apply()
+    }
+
+    fun setHazeAppBar(
+        context: Context,
+        value: Boolean,
+    ) {
+        getPrefs(context).edit().putBoolean("haze_app_bar", value).apply()
     }
 
     private fun <T> Context.prefsFlow(getValue: SharedPreferences.() -> T): Flow<T> =
