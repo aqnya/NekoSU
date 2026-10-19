@@ -84,6 +84,10 @@
     <string name="about_repository">仓库</string>
     <string name="about_repository_summary">在 GitHub 仓库查看源码</string>
     <string name="about_open_source">开放源代码许可</string>
+    <string name="about_open_source_summary">查看随应用分发组件的开源许可</string>
+    <string name="about_information">应用信息</string>
+    <string name="about_channel">构建通道</string>
+    <string name="about_license">许可证</string>
     <string name="about_preview_version">预览版</string>
     <string name="about_unknown_version">未知版本</string>
     <string name="cd_back">返回</string>
