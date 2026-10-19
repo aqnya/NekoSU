@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,12 +26,13 @@ import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults.pinnedScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
@@ -39,16 +40,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,7 +64,6 @@ import me.nekosu.aqnya.ui.component.AppListItem
 import me.nekosu.aqnya.ui.component.AppTopAppBar
 import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.ModeLabel
-import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 
 private const val REPOSITORY_URL = "https://github.com/nksu-crew/NekoSU"
 
@@ -206,47 +206,44 @@ private fun AboutHero(modifier: Modifier = Modifier) {
             val sizePx = with(density) { 96.dp.roundToPx() }
             BitmapPainter(drawable.toBitmap(sizePx, sizePx).asImageBitmap())
         }
-    val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-
-    Surface(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        shape = ContinuousCornerShape(32.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = contentColor,
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                modifier = Modifier.size(104.dp),
-                shape = ContinuousCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface,
+            Image(
+                painter = icon,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier =
+                    Modifier
+                        .size(80.dp)
+                        .clip(MaterialTheme.shapes.large),
+            )
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Image(
-                    painter = icon,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = stringResource(R.string.about_tagline),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(R.string.about_tagline),
-                style = MaterialTheme.typography.bodyLarge,
-                color = contentColor.copy(alpha = 0.78f),
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }
