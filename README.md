@@ -1,51 +1,68 @@
-# NekoSU
+<h1 align="center">NekoSU</h1>
 
-[![Build](https://github.com/nksu-crew/NekoSU/actions/workflows/build.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/build.yml)
-[![Build LKM](https://github.com/nksu-crew/NekoSU/actions/workflows/ko.yml/badge.svg)](https://github.com/nksu-crew/NekoSU/actions/workflows/ko.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+<p align="center">
+  <strong>Kernel-level root for Android.</strong><br/>
+  A more aggressive kernel-based root solution compared to KernelSU.
+</p>
 
-## Introduction 
-
-Kernel-level root solution for Android: a kernel module plus a Material 3 manager app.
-KernelSU-compatible module system, WebUI and SELinux rule wire format support.
+<p align="center">
+  <a href="https://github.com/nksu-crew/NekoSU/actions/workflows/build.yml"><img alt="Build" src="https://github.com/nksu-crew/NekoSU/actions/workflows/build.yml/badge.svg"></a>
+  <a href="https://github.com/nksu-crew/NekoSU/actions/workflows/ko.yml"><img alt="Build LKM" src="https://github.com/nksu-crew/NekoSU/actions/workflows/ko.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue.svg"></a>
+  <img alt="Android 12+" src="https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="arm64-v8a" src="https://img.shields.io/badge/ABI-arm64--v8a-6C63FF">
+</p>
 
 ## Features
 
-1.Kernel-based su and root access management.
+- **Kernel-powered root** — `su`, UID profiles and capability grants enforced in kernel space.
+- **Self-contained LKM** — dynamic symbol resolution lets `nksu.ko` load directly with `insmod`.
 
-2.A more aggressive technical choice compared to KernelSU.
+## Architecture
+
+| Path | Description |
+| :--- | :--- |
+| `kernel/` | `nksu.ko`: root enforcement, SELinux, module mounting and manager authentication. |
+| `manager/` | Android manager app built with Kotlin and Jetpack Compose. |
+| `neko/` | Rust runtime: `ncore` daemon plus the `bootpatcher` `vendor_boot` patcher. |
+| `uapi/` | Shared kernel/userspace ABI and version header. |
 
 ## Requirements
 
-- Android 12+ (minSdk 31), **arm64-v8a** only
-- Unlocked bootloader
+| Requirement | Details |
+| :--- | :--- |
+| **Device** | Android 12+ (API 31), `arm64-v8a`, unlocked bootloader |
+| **Build** | JDK 25, Android NDK r29, Rust stable with `aarch64-linux-android`, `cargo-ndk` |
 
-## Building
+Set `ANDROID_NDK_HOME` to the NDK r29 directory before building.
 
-The manager builds its userspace runtime from `neko/` with Gradle: `./gradlew assembleRelease`
-runs `cargo ndk` for the bundled `ncore` daemon and `bootpatcher` vendor_boot patcher. You need
-JDK 25, Android NDK r29 (`ANDROID_NDK_HOME`), Rust stable (`aarch64-linux-android` target) and
-`cargo-ndk`.
+## Build
+
+```sh
+./gradlew assembleRelease
+```
 
 ### Version channels
 
-- `canary` — built automatically for every `main`/pull-request commit.
-  Version: `<uapi version>-canary.<commit count>+<short commit>`.
-- `beta` — pre-release test build, created from a tag like `v1.0.6-beta.1`.
-- `release` — public build, created from the matching tag `v1.0.6`.
+| Channel | Source | Version |
+| :--- | :--- | :--- |
+| `canary` | `main` and pull requests | `<uapi>-canary.<commit-count>+<short-hash>` |
+| `beta` | Tag such as `v1.0.6-beta.1` | Tag version |
+| `release` | Tag matching `uapi/version.h`, such as `v1.0.6` | Tag version |
 
-Local builds select the channel with `-PversionChannel=canary|beta|release` (default: `canary`).
-For tag builds the workflow passes the tag name as the version name and rejects a tag that does not
-match `uapi/version.h`. `versionCode` is `commitCount * 10 + channelCode`, so a release can be
-installed over a beta built from the same commit.
+Local builds default to `canary`; select another channel with:
+
+```sh
+./gradlew assembleRelease -PversionChannel=release
+```
 
 ## Credits
 
-- [KernelSU](https://github.com/tiann/KernelSU) — the SELinux policy/rule engine, LSM hook layout,
-  `init.rc` injection technique, SELinux hiding and the WebUI `window.ksu` interface are ported from or
-  kept compatible with KernelSU, so KernelSU modules and WebUIs work with NekoSU.
-- BusyBox, Material 3 / Jetpack Compose and the open-source libraries listed in the app's *About → Open source* screen.
+- [KernelSU](https://github.com/tiann/KernelSU) — SELinux engine, LSM hooks, `init.rc` injection,
+  SELinux hiding and the WebUI `window.ksu` interface.
+- BusyBox, Material 3, Jetpack Compose and the open-source libraries listed in
+  **About → Open source** inside the app.
 
 ## License
 
-NekoSU is licensed under the **[GNU General Public License v3 (GPL-3)](http://www.gnu.org/copyleft/gpl.html)**.
+NekoSU is licensed under the [GNU General Public License v3.0](LICENSE).
