@@ -279,13 +279,10 @@
     <string name="reboot">Reboot</string>
     <string name="install_method_direct">Direct install (root)</string>
     <string name="install_method_direct_desc">Read this device\'s vendor_boot, patch it and flash it back automatically</string>
-    <string name="install_direct_no_root">Root not available. Install Magisk/KernelSU first.</string>
-    <string name="install_direct_retry">Retry</string>
     <string name="install_direct_confirm_title">Flash vendor_boot directly?</string>
     <string name="install_direct_confirm_message">The patched image will be written to\n%1$s\n\nThe bootloader must be unlocked. Continue?</string>
     <string name="install_direct_confirm_ok">Flash</string>
     <string name="install_direct_success">Installed. Reboot to take effect.</string>
-    <string name="install_root_checking">Checking root…</string>
     <string name="install_method_inactive">Install to inactive slot (root)</string>
     <string name="install_method_inactive_desc">Patch the inactive A/B slot\'s vendor_boot (use right after an OTA)</string>
     <string name="install_inactive_confirm_title">Install to inactive slot?</string>

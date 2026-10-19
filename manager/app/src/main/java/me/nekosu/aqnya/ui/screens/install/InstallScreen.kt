@@ -28,10 +28,8 @@ import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,12 +75,6 @@ import me.nekosu.aqnya.ui.component.currentListItemShapes
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.util.LogUtils
 
-/**
- * vendor_boot 安装界面 —— 参照 KernelSU 的 Material 3 安装页重构。
- *
- * 顶部 AppBar + 内核信息卡片 + 安装方式 + KMI 选择，底部固定安装按钮；
- * 安装过程中整页切换为进度与日志视图。
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InstallScreen(navController: NavController) {
@@ -110,7 +102,6 @@ fun InstallScreen(navController: NavController) {
 
     LaunchedEffect(Unit) { installViewModel.load() }
 
-    // 安装结束后用 Toast 提示结果；日志页顶栏保持固定标题，不再把结果放上去。
     LaunchedEffect(state.done) {
         if (!state.done) return@LaunchedEffect
         val message =
@@ -206,8 +197,6 @@ fun InstallScreen(navController: NavController) {
         },
         floatingActionButton = {
             when {
-                // 直接安装 / 非活动分区安装成功后，用悬浮按钮一键重启；
-                // 选择镜像方式只是产出补丁镜像，不需要重启，保留「完成」。
                 state.done && state.success == true && state.method != InstallMethod.FILE -> {
                     LogDoneFab(
                         label = stringResource(R.string.reboot),
@@ -247,7 +236,6 @@ fun InstallScreen(navController: NavController) {
                     state = state,
                     onPick = { pickVendorBoot.launch(arrayOf("*/*")) },
                     onSelectMethod = installViewModel::selectMethod,
-                    onRetryRoot = installViewModel::checkRoot,
                 )
                 KernelModuleSection(
                     state = state,
@@ -282,59 +270,25 @@ private fun InstallMethodSection(
     state: InstallUiState,
     onPick: () -> Unit,
     onSelectMethod: (InstallMethod) -> Unit,
-    onRetryRoot: () -> Unit,
 ) {
     val options =
         buildList {
             add(InstallMethod.FILE)
-            // NekoSU 直接安装打的是 vendor_boot（不依赖 GKI 标签），只要拿到 root
-            // 并找到分区就可用；不能再要求 isGki，否则自定义内核（无 -androidNN
-            // 标签）的设备会被错误地隐藏这两个选项。
             if (state.rootAvailable) {
                 if (state.directTarget != null) add(InstallMethod.DIRECT)
                 if (state.inactiveTarget != null) add(InstallMethod.INACTIVE)
             }
         }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CardGroup {
-            options.forEach { option ->
-                item {
-                    InstallMethodRow(
-                        state = state,
-                        option = option,
-                        onPick = onPick,
-                        onSelectMethod = onSelectMethod,
-                    )
-                }
-            }
-        }
-
-        when {
-            state.rootChecked && !state.rootAvailable -> {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
-                    Text(
-                        text = stringResource(R.string.install_direct_no_root),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onRetryRoot) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.install_direct_retry))
-                    }
-                }
-            }
-
-            state.rootChecking -> {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.install_root_checking),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+    CardGroup {
+        options.forEach { option ->
+            item {
+                InstallMethodRow(
+                    state = state,
+                    option = option,
+                    onPick = onPick,
+                    onSelectMethod = onSelectMethod,
+                )
             }
         }
     }
