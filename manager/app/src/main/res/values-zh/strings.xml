@@ -271,13 +271,10 @@
     <string name="reboot">重启</string>
     <string name="install_method_direct">直接安装（Root）</string>
     <string name="install_method_direct_desc">自动提取本机 vendor_boot，打补丁后刷回，无需手动 fastboot</string>
-    <string name="install_direct_no_root">未检测到 Root，请先获取 root（Magisk/KernelSU 等）</string>
-    <string name="install_direct_retry">重试</string>
     <string name="install_direct_confirm_title">直接刷入 vendor_boot？</string>
     <string name="install_direct_confirm_message">补丁镜像将写入：\n%1$s\n\n需要设备已解锁 bootloader。是否继续？</string>
     <string name="install_direct_confirm_ok">刷入</string>
     <string name="install_direct_success">安装完成，重启后生效</string>
-    <string name="install_root_checking">正在检测 Root…</string>
     <string name="install_method_inactive">安装到非活动分区（Root）</string>
     <string name="install_method_inactive_desc">给非活动 A/B 分区的 vendor_boot 打补丁（用于 OTA 之后）</string>
     <string name="install_inactive_confirm_title">安装到非活动分区？</string>

@@ -1,7 +1,11 @@
 package me.nekosu.aqnya.data.shell
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import me.nekosu.aqnya.core.Ncore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object RootShell {
     data class Result(
@@ -13,14 +17,22 @@ object RootShell {
 
     private const val SU_PATH = "/system/bin/su"
 
-    @Volatile
-    private var rootConfirmed = false
+    private val _availability = MutableStateFlow<Boolean?>(null)
+    val availability: StateFlow<Boolean?> = _availability.asStateFlow()
+    private val detectionStarted = AtomicBoolean(false)
 
+    /** 在应用启动时后台执行一次 root 检测，供后续页面直接读取结果。 */
+    fun startDetection() {
+        if (!detectionStarted.compareAndSet(false, true)) return
+        Thread({ available() }, "nksu-root-detect").apply { isDaemon = true }.start()
+    }
+
+    @Synchronized
     fun available(): Boolean {
-        if (rootConfirmed) return true
-        val r = runCapture(listOf(SU_PATH, "-c", withPath("id")), timeoutSeconds = 60) ?: return false
-        val ok = r.code == 0 && r.output.contains("uid=0")
-        if (ok) rootConfirmed = true
+        _availability.value?.let { return it }
+        val r = runCapture(listOf(SU_PATH, "-c", withPath("id")), timeoutSeconds = 60)
+        val ok = r != null && r.code == 0 && r.output.contains("uid=0")
+        _availability.value = ok
         return ok
     }
 

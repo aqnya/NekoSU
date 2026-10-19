@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,8 +67,6 @@ data class InstallUiState(
     val method: InstallMethod = InstallMethod.FILE,
     val vendorBootUri: Uri? = null,
     val vendorBootName: String? = null,
-    val rootChecking: Boolean = false,
-    val rootChecked: Boolean = false,
     val rootAvailable: Boolean = false,
     val directTarget: String? = null,
     val inactiveTarget: String? = null,
@@ -101,7 +100,7 @@ data class InstallUiState(
  * 通过 [KernelInfo] 展示 JNI 查询到的内核版本 / KMI，并据此自动选择匹配的
  * nksu.ko；模块不再全部列出，只保留一个「使用本地 LKM」入口（对齐 KernelSU）。
  * 安装方式与 KernelSU 对齐：选择镜像、直接安装、安装到非活动 slot；后两者
- * 只有在检测到 root（且为 GKI 设备）时才显示。
+ * 只有在启动阶段检测到 root 且存在对应 vendor_boot 分区时才显示。
  */
 class InstallViewModel(
     app: Application,
@@ -110,6 +109,14 @@ class InstallViewModel(
     val uiState: StateFlow<InstallUiState> = _uiState.asStateFlow()
 
     private val appContext = app.applicationContext
+
+    init {
+        viewModelScope.launch {
+            RootShell.availability.filterNotNull().collect { hasRoot ->
+                applyRootAvailability(hasRoot)
+            }
+        }
+    }
 
     // 上一次把日志推送到 UI 的时间戳，用于合并高频输出。
     private var lastLogEmit = 0L
@@ -149,38 +156,33 @@ class InstallViewModel(
                     autoKo = loaded.recommendedKo,
                 )
             }
-            checkRoot()
         }
     }
 
-    /** 检测 root 与可用的 vendor_boot 分区（当前 / 非活动 slot）。 */
-    fun checkRoot() {
-        if (_uiState.value.rootChecking) return
-        _uiState.update { it.copy(rootChecking = true) }
-        viewModelScope.launch {
-            val (root, current, inactive) =
-                withContext(Dispatchers.IO) {
-                    val hasRoot = RootShell.available()
-                    val currentPart = if (hasRoot) VendorBootInstaller.detectVendorBootPartition() else null
-                    val inactivePart = if (hasRoot) VendorBootInstaller.detectInactiveVendorBootPartition() else null
-                    Triple(hasRoot, currentPart, inactivePart)
+    /** root 状态由启动阶段检测；这里只静默查找可直接安装的 vendor_boot 分区。 */
+    private suspend fun applyRootAvailability(hasRoot: Boolean) {
+        val (current, inactive) =
+            withContext(Dispatchers.IO) {
+                if (hasRoot) {
+                    VendorBootInstaller.detectVendorBootPartition() to
+                        VendorBootInstaller.detectInactiveVendorBootPartition()
+                } else {
+                    null to null
                 }
-            _uiState.update { state ->
-                val method =
-                    when (state.method) {
-                        InstallMethod.DIRECT -> if (root && current != null) state.method else InstallMethod.FILE
-                        InstallMethod.INACTIVE -> if (root && inactive != null) state.method else InstallMethod.FILE
-                        InstallMethod.FILE -> state.method
-                    }
-                state.copy(
-                    rootChecking = false,
-                    rootChecked = true,
-                    rootAvailable = root,
-                    directTarget = current,
-                    inactiveTarget = inactive,
-                    method = method,
-                )
             }
+        _uiState.update { state ->
+            val method =
+                when (state.method) {
+                    InstallMethod.DIRECT -> if (hasRoot && current != null) state.method else InstallMethod.FILE
+                    InstallMethod.INACTIVE -> if (hasRoot && inactive != null) state.method else InstallMethod.FILE
+                    InstallMethod.FILE -> state.method
+                }
+            state.copy(
+                rootAvailable = hasRoot,
+                directTarget = current,
+                inactiveTarget = inactive,
+                method = method,
+            )
         }
     }
 

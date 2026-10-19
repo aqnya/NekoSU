@@ -3,6 +3,7 @@ package me.nekosu.aqnya
 import android.app.Application
 import android.content.Context
 import me.nekosu.aqnya.core.NcoreLoader
+import me.nekosu.aqnya.data.shell.RootShell
 import me.nekosu.aqnya.util.CrashHandler
 import me.nekosu.aqnya.util.LocaleHelper
 
@@ -15,5 +16,6 @@ class Application : Application() {
         super.onCreate()
         CrashHandler.init(this)
         NcoreLoader.init()
+        RootShell.startDetection()
     }
 }
