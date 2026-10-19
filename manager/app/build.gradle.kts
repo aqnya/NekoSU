@@ -95,6 +95,20 @@ val managerPackage: String =
         ?.takeIf { it.isNotEmpty() }
         ?: "me.aqnya.nekosu"
 
+val releaseKeystore = rootDir.resolve("release.keystore")
+val hasReleaseSigning: Boolean =
+    releaseKeystore.isFile &&
+        releaseKeystore.length() > 0 &&
+        listOf("KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD").all {
+            !System.getenv(it).isNullOrBlank()
+        }
+val requireReleaseSigning: Boolean =
+    (project.findProperty("requireReleaseSigning") as? String)?.toBoolean() ?: false
+
+if (requireReleaseSigning && !hasReleaseSigning) {
+    error("release signing is required but release.keystore or signing environment variables are missing")
+}
+
 android {
     namespace = "me.nekosu.aqnya"
     compileSdk {
@@ -132,10 +146,12 @@ android {
             keyPassword = "android"
         }
         create("releaseKey") {
-            storeFile = file("$rootDir/release.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            if (hasReleaseSigning) {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
         }
     }
 
@@ -145,7 +161,7 @@ android {
         }
         release {
             val withR8 = (project.findProperty("withR8") as? String)?.toBoolean() ?: true
-            signingConfig = signingConfigs.getByName("releaseKey")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("releaseKey") else null
             isMinifyEnabled = withR8
             isShrinkResources = withR8
             proguardFiles(
