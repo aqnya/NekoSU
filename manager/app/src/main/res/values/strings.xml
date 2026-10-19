@@ -86,6 +86,10 @@
     <string name="about_repository">Repository</string>
     <string name="about_repository_summary">View source code on GitHub</string>
     <string name="about_open_source">Open Source Licenses</string>
+    <string name="about_open_source_summary">Licenses for bundled open source software</string>
+    <string name="about_information">App information</string>
+    <string name="about_channel">Build channel</string>
+    <string name="about_license">License</string>
     <string name="about_preview_version">Preview</string>
     <string name="about_unknown_version">Unknown</string>
     <string name="cd_back">Back</string>
