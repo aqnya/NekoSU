@@ -125,9 +125,9 @@ extern typeof(path_umount) *nksu_path_umount;
 
 /*
  * File primitives for the module's own state files (feature registry, profile
- * store, packages.xml, /sys/kernel/vmcoreinfo) and for symbol.c's bootstrap.
- * The target kernel exports these only into its GKI VFS namespace, so a direct
- * reference is invisible to us and the module fails to load.
+ * store, packages.xml, /sys/kernel/vmcoreinfo) and for the symbol resolver's
+ * bootstrap. The target kernel exports these only into its GKI VFS namespace,
+ * so a direct reference is invisible to us and the module fails to load.
  */
 extern typeof(filp_open) *nksu_filp_open;
 extern typeof(kernel_read) *nksu_kernel_read;
