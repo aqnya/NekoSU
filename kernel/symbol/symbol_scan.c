@@ -43,10 +43,6 @@
 #define KSYM_BOUNCE_BACK (16u << 20)
 #define KSYM_BOUNCE_FWD (1u << 20)
 
-/* Fallback scan windows around an exported text symbol. */
-#define KSYM_ANCHOR_FWD SZ_1G
-#define KSYM_ANCHOR_BACK SZ_512M
-
 /*
  * Safe memory reads. All external memory access goes through
  * copy_from_kernel_nofault(); failure simply means "no data here".
@@ -268,14 +264,14 @@ void nksu_ksym_scan_memory(void)
      */
 	anchor = (unsigned long)&copy_from_kernel_nofault;
 	if (anchor) {
-		if (anchor <= ULONG_MAX - KSYM_ANCHOR_FWD) {
-			found = scan_region(anchor, anchor + KSYM_ANCHOR_FWD);
+		if (anchor <= ULONG_MAX - SZ_256M) {
+			found = scan_region(anchor, anchor + SZ_256M);
 			if (found)
 				return;
 		}
 
-		if (anchor > KSYM_ANCHOR_BACK) {
-			found = scan_region(anchor - KSYM_ANCHOR_BACK, anchor);
+		if (anchor > SZ_256M) {
+			found = scan_region(anchor - SZ_256M, anchor);
 			if (found)
 				return;
 		}
