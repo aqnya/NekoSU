@@ -18,6 +18,7 @@
 #include <linux/binfmts.h>
 #include <linux/cred.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/pid.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
@@ -54,9 +55,13 @@ struct nksu_daemon_work {
 static void nksu_daemon_attach(struct callback_head *cb)
 {
 	struct nksu_daemon_work *work = container_of(cb, struct nksu_daemon_work, cb);
+	int ret;
 
-	fmac_ctlfd_get();
+	ret = fmac_ctlfd_get();
+	if (ret < 0)
+		pr_err("[daemon] cannot attach control fd to pid %d: %d\n", current->pid, ret);
 	kfree(work);
+	module_put(THIS_MODULE);
 }
 
 static bool nksu_daemon_path(const char *filename)
@@ -86,12 +91,21 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 	set_tsk_thread_flag(p, NKSU_TIF_NCORE);
 	pr_info("[daemon] marked %s (pid %d) as ncore\n", bprm ? bprm->filename : "?", p->pid);
 
-	work = kzalloc(sizeof(*work), GFP_ATOMIC);
-	if (!work)
+	if (!try_module_get(THIS_MODULE)) {
+		pr_warn("[daemon] cannot pin module for pid %d task_work\n", p->pid);
 		return;
+	}
+
+	work = kzalloc(sizeof(*work), GFP_ATOMIC);
+	if (!work) {
+		module_put(THIS_MODULE);
+		return;
+	}
 	init_task_work(&work->cb, nksu_daemon_attach);
-	if (task_work_add(p, &work->cb, TWA_RESUME))
+	if (task_work_add(p, &work->cb, TWA_RESUME)) {
+		module_put(THIS_MODULE);
 		kfree(work);
+	}
 }
 
 static void nksu_daemon_fork(void *data, struct task_struct *parent, struct task_struct *child)

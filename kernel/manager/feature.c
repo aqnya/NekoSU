@@ -270,7 +270,20 @@ int nksu_feature_persist_set(const char *name, bool enabled)
 		ret = PTR_ERR(wf);
 	} else {
 		pos = 0;
-		kernel_write(wf, out, out_len, &pos);
+		while (pos < (loff_t)out_len) {
+			ssize_t written = kernel_write(wf, out + pos, out_len - (size_t)pos, &pos);
+
+			if (written < 0) {
+				ret = (int)written;
+				break;
+			}
+			if (written == 0) {
+				ret = -EIO;
+				break;
+			}
+		}
+		if (ret)
+			pr_err("[feature] save %s failed: %d\n", NKSU_FEATURE_FILE, ret);
 	}
 
 out:

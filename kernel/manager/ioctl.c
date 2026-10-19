@@ -57,13 +57,15 @@ static long ioc_chk_write(void __user *data, unsigned int size)
 static long ioc_add_uid(const void __user *data, unsigned int size)
 {
 	unsigned int id;
+	int ret;
 
 	if (size < sizeof(id))
 		return -EINVAL;
 	if (copy_from_user(&id, data, sizeof(id)))
 		return -EFAULT;
 
-	return nksu_profile_set_default((uid_t)id) ? -ENOMEM : 0;
+	ret = nksu_profile_set_default((uid_t)id);
+	return ret;
 }
 
 static long ioc_del_uid(const void __user *data, unsigned int size)
@@ -75,8 +77,7 @@ static long ioc_del_uid(const void __user *data, unsigned int size)
 	if (copy_from_user(&id, data, sizeof(id)))
 		return -EFAULT;
 
-	nksu_profile_clear((uid_t)id);
-	return 0;
+	return nksu_profile_clear((uid_t)id);
 }
 
 static long ioc_has_uid(void __user *data, unsigned int size)
@@ -324,9 +325,11 @@ static long ioc_add_try_umount(const void __user *data, unsigned int size)
 
 	if (!data || size == 0 || size > sizeof(path))
 		return -EINVAL;
+	memset(path, 0, sizeof(path));
 	if (copy_from_user(path, data, size))
 		return -EFAULT;
-	path[sizeof(path) - 1] = '\0';
+	if (!memchr(path, '\0', sizeof(path)))
+		return -EINVAL;
 	return nksu_umount_add(path, MNT_DETACH);
 }
 

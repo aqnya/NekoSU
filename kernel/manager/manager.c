@@ -27,6 +27,7 @@
 #include <linux/task_work.h>
 #include <linux/cred.h>
 #include <linux/capability.h>
+#include <linux/workqueue.h>
 #include <fmac.h>
 
 /* Last: redirects vfs_mkdir/lookup_one_len to the resolved-symbol pointers. */
@@ -64,6 +65,28 @@ bool is_manager(void)
 bool is_manager_uid(uid_t uid)
 {
 	return uid_valid(manager_kuid) && __kuid_val(manager_kuid) == uid;
+}
+
+/*
+ * Drop the current manager's kernel identity and its profile entry.  Called
+ * whenever a scan can no longer prove that the same UID still owns a package
+ * signed with the manager certificate, so a reinstall, uninstall or transient
+ * verification failure never leaves the old UID privileged.
+ */
+static void revoke_manager(void)
+{
+	kuid_t old = manager_kuid;
+	int ret;
+
+	if (!uid_valid(old))
+		return;
+
+	manager_kuid = INVALID_UID;
+	ret = nksu_profile_clear(__kuid_val(old));
+	if (ret && ret != -ENOENT)
+		pr_err("[manager] cannot revoke UID %u profile: %d\n", __kuid_val(old), ret);
+	else
+		pr_info("[manager] revoked manager UID %u\n", __kuid_val(old));
 }
 
 /*
@@ -425,9 +448,12 @@ int nksu_kpath_mkdir_p(const char *dir)
 	return kdir_mkdir_p(dir);
 }
 
+static void kfile_remove(struct file *file);
+
 static int kfile_copy(const char *src, const char *dst)
 {
 	loff_t ipos = 0, opos = 0;
+	loff_t src_size, dst_size;
 	ssize_t off;
 	int err = 0;
 	struct file *in __free(nksu_filp) = filp_open(src, O_RDONLY, 0);
@@ -435,13 +461,13 @@ static int kfile_copy(const char *src, const char *dst)
 	if (IS_ERR(in))
 		return PTR_ERR(in);
 
-	struct file *out __free(nksu_filp) = filp_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-	if (IS_ERR(out))
-		return PTR_ERR(out);
-
 	char *buf __free(nksu_kfree) = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
+
+	struct file *out __free(nksu_filp) = filp_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+	if (IS_ERR(out))
+		return PTR_ERR(out);
 
 	for (;;) {
 		ssize_t r = kernel_read(in, buf, PAGE_SIZE, &ipos);
@@ -457,8 +483,8 @@ static int kfile_copy(const char *src, const char *dst)
 		while (off < r) {
 			ssize_t w = kernel_write(out, buf + off, (size_t)(r - off), &opos);
 
-			if (w < 0) {
-				err = (int)w;
+			if (w <= 0) {
+				err = w ? (int)w : -EIO;
 				break;
 			}
 			off += w;
@@ -467,7 +493,62 @@ static int kfile_copy(const char *src, const char *dst)
 			break;
 	}
 
+	if (!err) {
+		src_size = i_size_read(file_inode(in));
+		dst_size = i_size_read(file_inode(out));
+		if (src_size <= 0 || opos != src_size || dst_size != src_size)
+			err = -EIO;
+	}
+
+	if (err)
+		pr_err("[manager] copy %s -> %s failed: %d\n", src, dst, err);
+	if (err)
+		kfile_remove(out);
+
 	return err;
+}
+
+static int kfile_size(const char *path, loff_t *size)
+{
+	struct file *file __free(nksu_filp) = filp_open(path, O_RDONLY, 0);
+
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+	*size = i_size_read(file_inode(file));
+	return 0;
+}
+
+/* A failed copy must not leave a truncated file that the next boot trusts. */
+static void kfile_remove(struct file *file)
+{
+	struct dentry *parent;
+	struct inode *dir;
+	int ret;
+
+	if (!file || !file->f_path.dentry)
+		return;
+
+	parent = dget_parent(file->f_path.dentry);
+	dir = d_inode(parent);
+	if (!dir) {
+		dput(parent);
+		return;
+	}
+
+	inode_lock_nested(dir, I_MUTEX_PARENT);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+	ret = vfs_unlink(mnt_idmap(file->f_path.mnt), dir, file->f_path.dentry, NULL);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+	ret = vfs_unlink(mnt_user_ns(file->f_path.mnt), dir, file->f_path.dentry, NULL);
+#else
+	ret = vfs_unlink(dir, file->f_path.dentry, NULL);
+#endif
+	inode_unlock(dir);
+	dput(parent);
+
+	if (ret && ret != -ENOENT)
+		pr_warn("[manager] cannot remove partial %s: %d\n",
+			file->f_path.dentry->d_name.name, ret);
 }
 
 /* codePath is either the package dir or .../base.apk; reduce it to the dir. */
@@ -524,23 +605,42 @@ static int install_daemon_from_manager(const struct abx_package *paths)
 {
 	char lib_dir[256];
 	char src[320];
+	loff_t src_size, dst_size;
 	int err;
 
-	if (kfile_exists(NKSU_DAEMON_BOOT_PATH)) {
+	if (!resolve_lib_dir(paths, lib_dir, sizeof(lib_dir))) {
 		/*
-         * Already bootstrapped.  Re-assert the label every boot: an older
-         * build created this as adb_data_file, which init cannot execute, and
-         * this also repairs a file whose xattr was lost.
-         */
+		 * The installed copy is still usable when the manager's APK no
+		 * longer ships libncore.so.  Keep it, but only when it exists.
+		 */
+		if (!kfile_exists(NKSU_DAEMON_BOOT_PATH)) {
+			pr_err("[manager] cannot locate %s in the manager install\n",
+			       NKSU_DAEMON_LIB_NAME);
+			return -ENOENT;
+		}
+
+		pr_warn("[manager] cannot verify %s, keeping the installed copy\n",
+			NKSU_DAEMON_BOOT_PATH);
 		nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
 		WRITE_ONCE(daemon_ready, true);
 		return 0;
 	}
 
-	if (!resolve_lib_dir(paths, lib_dir, sizeof(lib_dir))) {
-		pr_err("[manager] cannot locate %s in the manager install\n", NKSU_DAEMON_LIB_NAME);
-		return -ENOENT;
+	snprintf(src, sizeof(src), "%s/%s", lib_dir, NKSU_DAEMON_LIB_NAME);
+	if (!kfile_size(src, &src_size) && !kfile_size(NKSU_DAEMON_BOOT_PATH, &dst_size) &&
+	    src_size > 0 && src_size == dst_size) {
+		/*
+		 * Already bootstrapped and complete.  Re-assert the label every
+		 * boot: an older build created this as adb_data_file, which init
+		 * cannot execute, and this also repairs a lost xattr.
+		 */
+		nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
+		WRITE_ONCE(daemon_ready, true);
+		return 0;
 	}
+
+	if (kfile_exists(NKSU_DAEMON_BOOT_PATH))
+		pr_warn("[manager] %s is incomplete, reinstalling\n", NKSU_DAEMON_BOOT_PATH);
 
 	err = kdir_mkdir_p("/data/adb/nksu");
 	if (err && err != -EEXIST) {
@@ -553,10 +653,8 @@ static int install_daemon_from_manager(const struct abx_package *paths)
 		return err;
 	}
 
-	snprintf(src, sizeof(src), "%s/%s", lib_dir, NKSU_DAEMON_LIB_NAME);
 	err = kfile_copy(src, NKSU_DAEMON_BOOT_PATH);
 	if (err) {
-		pr_err("[manager] copy %s -> %s failed: %d\n", src, NKSU_DAEMON_BOOT_PATH, err);
 		return err;
 	}
 	/* Label it nksu_file so init's injected init.rc can exec it. */
@@ -577,8 +675,9 @@ static DEFINE_MUTEX(appscan_mutex);
 static int scan_and_apply(void)
 {
 	const struct cred *old;
+	kuid_t kuid, previous;
 	uid_t uid;
-	int ret = -1;
+	int install_ret, ret = 0;
 
 	/*
      * Off the stack: abx_package carries several 256-byte path buffers and
@@ -586,13 +685,17 @@ static int scan_and_apply(void)
      * limit.
      */
 	struct abx_package *paths __free(nksu_kfree) = kzalloc(sizeof(*paths), GFP_KERNEL);
-	if (!paths)
+	if (!paths) {
+		revoke_manager();
 		return -ENOMEM;
+	}
 
 	guard(nksu_mutex)(&appscan_mutex);
 	old = nksu_borrow_creds_begin();
-	if (!old)
+	if (!old) {
+		revoke_manager();
 		return -ENOMEM;
+	}
 
 	/*
      * Find the manager by signing certificate -- never by package name -- and
@@ -600,12 +703,25 @@ static int scan_and_apply(void)
      * so the whole shared uid, not a single package, gets manager rights.  Fall
      * back to packages.list if the entry somehow has no uid.
      */
-	if (!verify_package_signature(paths))
+	if (!verify_package_signature(paths)) {
+		ret = -EACCES;
+		revoke_manager();
 		goto out;
+	}
 
 	uid = paths->has_uid ? (uid_t)paths->uid : get_uid_from_packages_list(paths->name);
 	if (uid == (uid_t)-1) {
 		pr_err("[manager] Could not find UID for %s\n", paths->name);
+		ret = -ENOENT;
+		revoke_manager();
+		goto out;
+	}
+
+	kuid = make_kuid(current_user_ns(), uid);
+	if (!uid_valid(kuid)) {
+		pr_err("[manager] invalid manager UID %u\n", uid);
+		ret = -EINVAL;
+		revoke_manager();
 		goto out;
 	}
 
@@ -613,17 +729,47 @@ static int scan_and_apply(void)
 		"Granting privileges to UID %u\n",
 		uid);
 	/*
-     * Record the UID before granting the profile so the store can leave
-     * the manager's own entry out of allow.profile: it is re-created on
-     * every boot from this verified scan, never restored from disk.
-     */
-	manager_kuid = make_kuid(current_user_ns(), uid);
+	 * Record the UID before granting the profile so the store can leave
+	 * the manager's own entry out of allow.profile: it is re-created on
+	 * every boot from this verified scan, never restored from disk.  A
+	 * changed UID also revokes the previous manager's profile first.
+	 */
+	previous = manager_kuid;
+	if (!uid_eq(kuid, previous)) {
+		int clear_ret;
+
+		manager_kuid = INVALID_UID;
+		if (uid_valid(previous)) {
+			clear_ret = nksu_profile_clear(__kuid_val(previous));
+			if (clear_ret && clear_ret != -ENOENT)
+				pr_err("[manager] cannot revoke previous UID %u profile: %d\n",
+				       __kuid_val(previous), clear_ret);
+			else
+				pr_info("[manager] revoked previous manager UID %u\n",
+					__kuid_val(previous));
+		}
+		manager_kuid = kuid;
+	}
+
 	/* Install ncore/busybox before the profile store writes its file so
-     * /data/adb/nksu exists for the first save. */
-	install_daemon_from_manager(paths);
-	nksu_profile_set_default(uid);
-	mark_zygote();
-	ret = 0;
+	 * /data/adb/nksu exists for the first save. */
+	install_ret = install_daemon_from_manager(paths);
+	if (install_ret) {
+		pr_err("[manager] ncore bootstrap failed: %d\n", install_ret);
+		ret = install_ret;
+	}
+
+	install_ret = nksu_profile_set_default(uid);
+	if (install_ret) {
+		pr_err("[manager] cannot grant profile to UID %u: %d\n", uid, install_ret);
+		revoke_manager();
+		ret = install_ret;
+		goto out;
+	}
+
+	install_ret = mark_zygote();
+	if (install_ret)
+		pr_warn("[manager] cannot mark zygote: %d\n", install_ret);
 
 out:
 	nksu_borrow_creds_end(old);
@@ -657,24 +803,46 @@ out:
 
 static struct fsnotify_group *appscan_group;
 static struct fsnotify_mark *appscan_mark;
+static bool appscan_shutdown;
+
+static void appscan_work_fn(struct work_struct *work)
+{
+	if (!READ_ONCE(appscan_shutdown))
+		scan_and_apply();
+	module_put(THIS_MODULE);
+}
+
+static DECLARE_WORK(appscan_work, appscan_work_fn);
 
 static void appscan_task_work(struct callback_head *cb)
 {
-	kfree(cb);
-
 	/* Runs after exit_fs() if the task is exiting; path lookups would oops. */
-	if (current->flags & PF_EXITING)
-		return;
+	if (!READ_ONCE(appscan_shutdown) && !(current->flags & PF_EXITING))
+		scan_and_apply();
 
-	scan_and_apply();
+	kfree(cb);
+	module_put(THIS_MODULE);
 }
 
 static void appscan_defer_scan(void)
 {
 	struct callback_head *cb;
 
+	if (READ_ONCE(appscan_shutdown))
+		return;
+
+	if (!try_module_get(THIS_MODULE)) {
+		pr_warn_ratelimited("[manager] cannot pin module for package scan\n");
+		return;
+	}
+
 	if (!(current->flags & PF_KTHREAD)) {
-		cb = kzalloc(sizeof(*cb), GFP_KERNEL);
+		/*
+		 * The fsnotify callback may run under rename locks.  Allocate
+		 * atomically and never run the sleeping scan inline; on failure
+		 * fall back to the workqueue, which can be cancelled at exit.
+		 */
+		cb = kzalloc(sizeof(*cb), GFP_ATOMIC);
 		if (cb) {
 			init_task_work(cb, appscan_task_work);
 			if (!task_work_add(current, cb, TWA_RESUME))
@@ -683,8 +851,11 @@ static void appscan_defer_scan(void)
 		}
 	}
 
-	/* kthread or allocation failure: run it inline. */
-	scan_and_apply();
+	/* kthread, allocation failure or exiting task: defer off this context. */
+	if (!schedule_work(&appscan_work)) {
+		pr_debug("[manager] package scan already pending\n");
+		module_put(THIS_MODULE);
+	}
 }
 
 static int appscan_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode,
@@ -742,6 +913,10 @@ static int appscan_observer_init(void)
 
 	/* /data/system is only reachable under nksu's domain + full caps. */
 	old = nksu_borrow_creds_begin();
+	if (!old) {
+		ret = -ENOMEM;
+		goto out_group;
+	}
 	ret = kern_path(APPSCAN_WATCH_DIR, LOOKUP_FOLLOW, &kpath);
 	nksu_borrow_creds_end(old);
 	if (ret)
@@ -776,6 +951,8 @@ out_group:
 
 int appscan_init(void)
 {
+	int ret;
+
 	pr_info("[manager] Module starting scan...\n");
 
 	/*
@@ -787,13 +964,18 @@ int appscan_init(void)
 	if (appscan_observer_init())
 		pr_warn("[manager] package observer unavailable, scanning boot only\n");
 
-	scan_and_apply();
+	ret = scan_and_apply();
+	if (ret)
+		pr_err("[manager] initial manager scan failed: %d\n", ret);
 	return 0;
 }
 
 void appscan_exit(void)
 {
+	WRITE_ONCE(appscan_shutdown, true);
 	appscan_observer_exit();
+	if (cancel_work_sync(&appscan_work))
+		module_put(THIS_MODULE);
 	nksu_borrow_creds_release();
 }
 

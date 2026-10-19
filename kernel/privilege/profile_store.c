@@ -174,9 +174,22 @@ void nksu_profile_store_save(void)
 
 	fp = filp_open(NKSU_PROFILE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	if (!IS_ERR(fp)) {
-		kernel_write(fp, buf, (size_t)len, &pos);
+		while (pos < len) {
+			ssize_t written = kernel_write(fp, buf + pos, (size_t)(len - pos), &pos);
+
+			if (written < 0) {
+				pr_err("[profile] save %s failed: %d\n", NKSU_PROFILE_FILE,
+				       (int)written);
+				break;
+			}
+			if (written == 0) {
+				pr_err("[profile] save %s: short write at %lld\n",
+				       NKSU_PROFILE_FILE, pos);
+				break;
+			}
+		}
 	} else if (PTR_ERR(fp) != -ENOENT) {
-		pr_warn("[profile] save %s failed: %ld\n", NKSU_PROFILE_FILE, PTR_ERR(fp));
+		pr_err("[profile] save %s failed: %ld\n", NKSU_PROFILE_FILE, PTR_ERR(fp));
 	}
 
 	nksu_borrow_creds_end(old);

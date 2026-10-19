@@ -147,8 +147,15 @@ static struct cred *privilege_prepare_creds(const struct privilege_desc *desc)
 	if (!cap_isclear(desc->caps_to_raise))
 		cred_raise_caps(new_cred, desc->caps_to_raise);
 
-	if (desc->selinux_domain)
-		set_domain(desc->selinux_domain, new_cred);
+	if (desc->selinux_domain) {
+		int ret = set_domain(desc->selinux_domain, new_cred);
+
+		if (ret) {
+			pr_err("set_domain(%s) failed: %d\n", desc->selinux_domain, ret);
+			abort_creds(new_cred);
+			return ERR_PTR(ret);
+		}
+	}
 
 	return new_cred;
 }
