@@ -151,8 +151,16 @@ jobs:
         ls -la "$KO_OUTPUT_DIR"
 
     - name: Decode Release Keystore
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+        set -euo pipefail
+        if [ -z "${KEYSTORE_BASE64:-}" ]; then
+          echo "release keystore unavailable; this build will be unsigned"
+          rm -f release.keystore
+          exit 0
+        fi
+        printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.keystore
 
     - name: Determine version channel
       id: version
@@ -206,6 +214,9 @@ jobs:
         args=(-PversionChannel="$VERSION_CHANNEL")
         if [ -n "$VERSION_NAME" ]; then
           args+=("-PversionNameOverride=$VERSION_NAME")
+        fi
+        if [ "$VERSION_CHANNEL" != "canary" ]; then
+          args+=("-PrequireReleaseSigning=true")
         fi
         ./gradlew assembleRelease --no-daemon "${args[@]}"
 
