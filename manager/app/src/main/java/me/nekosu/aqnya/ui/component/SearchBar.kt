@@ -70,6 +70,7 @@ fun SearchAppBar(
     val hazeEnabled = rememberHazeAppBarEnabled()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    val motionScheme = MaterialTheme.motionScheme
     var onSearch by rememberSaveable { mutableStateOf(startInSearchMode) }
 
     if (onSearch) {
@@ -97,15 +98,15 @@ fun SearchAppBar(
                 AnimatedVisibility(
                     modifier = Modifier.align(Alignment.CenterStart),
                     visible = !onSearch,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                    exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
                     content = { Text(title) },
                 )
 
                 AnimatedVisibility(
                     visible = onSearch,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                    exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
                 ) {
                     OutlinedTextField(
                         modifier =
@@ -179,6 +180,8 @@ fun SearchAppBar(
         actions = {
             AnimatedVisibility(
                 visible = !onSearch,
+                enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

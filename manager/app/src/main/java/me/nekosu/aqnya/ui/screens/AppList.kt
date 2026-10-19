@@ -60,8 +60,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.protobuf.ProtoBuf
 import me.nekosu.aqnya.R
-import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.core.Ncore
+import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.SearchAppBar
 import me.nekosu.aqnya.ui.component.groupShape
@@ -412,6 +412,7 @@ fun AppListScreen(
     val scope = rememberCoroutineScope()
     val refreshState = rememberPullToRefreshState()
     val hazeState = rememberHazeState()
+    val motionScheme = MaterialTheme.motionScheme
 
     LaunchedEffect(Unit) { viewModel.loadApps() }
 
@@ -560,7 +561,12 @@ fun AppListScreen(
                                 config = viewModel.appConfigs[app.packageName],
                                 onClick = { navController.navigate(AppRoute.appDetail(app.packageName)) },
                                 shape = groupShape(index, allItems.size),
-                                modifier = Modifier.animateItem(),
+                                modifier =
+                                    Modifier.animateItem(
+                                        fadeInSpec = motionScheme.fastEffectsSpec(),
+                                        placementSpec = motionScheme.defaultSpatialSpec(),
+                                        fadeOutSpec = motionScheme.fastEffectsSpec(),
+                                    ),
                             )
                         }
                     }
@@ -701,6 +707,7 @@ fun AppIcon(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val motionScheme = MaterialTheme.motionScheme
     var iconBitmap by remember(packageName) { mutableStateOf(iconCache.get(packageName)) }
 
     LaunchedEffect(packageName) {
@@ -720,7 +727,11 @@ fun AppIcon(
         }
     }
 
-    Crossfade(targetState = iconBitmap, label = "icon_crossfade") { bitmap ->
+    Crossfade(
+        targetState = iconBitmap,
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "icon_crossfade",
+    ) { bitmap ->
         if (bitmap != null) {
             Image(bitmap = bitmap, contentDescription = "App Icon", modifier = modifier)
         } else {
