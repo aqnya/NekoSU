@@ -17,8 +17,8 @@ bool is_daemon_ready(void);
 
 /* True when uid is the currently verified manager's UID.  Used by the profile
  * store to keep the manager's own entry out of allow.profile: it is re-granted
- * each boot after the signature check, so a stale entry must never survive a
- * failed verification (or a reinstall that changes the UID). */
+ * each boot after the signature check, so a stale entry must never survive an
+ * authoritative failed verification (or a reinstall that changes the UID). */
 bool is_manager_uid(uid_t uid);
 
 /* mkdir -p for kernel-internal paths.  Runs with the caller's creds, so callers

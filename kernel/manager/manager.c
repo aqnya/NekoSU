@@ -69,9 +69,9 @@ bool is_manager_uid(uid_t uid)
 
 /*
  * Drop the current manager's kernel identity and its profile entry.  Called
- * whenever a scan can no longer prove that the same UID still owns a package
- * signed with the manager certificate, so a reinstall, uninstall or transient
- * verification failure never leaves the old UID privileged.
+ * when a complete packages.xml scan proves no package is signed with the
+ * manager certificate, or when the verified UID's new profile cannot be
+ * installed.  Transient read/parse failures keep the last verified grant.
  */
 static void revoke_manager(void)
 {
@@ -167,43 +167,65 @@ static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
  *
  * The file and the XML buffer are released by __free() on every exit path.
  */
-static bool verify_package_signature(struct abx_package *paths)
+enum manager_verify_result {
+	MANAGER_VERIFY_OK,
+	MANAGER_VERIFY_ABSENT,
+	MANAGER_VERIFY_ERROR,
+};
+
+static enum manager_verify_result verify_package_signature(struct abx_package *paths)
 {
 	loff_t pos = 0;
 	ssize_t rd;
 	size_t fsize;
 	struct file *fp __free(nksu_filp) = filp_open(PACKAGES_XML_PATH, O_RDONLY, 0);
 	struct sha256_hasher hasher;
-	bool valid = false;
+	enum abx_result abx_ret;
 
-	if (IS_ERR(fp))
-		return false;
+	if (IS_ERR(fp)) {
+		pr_err("[manager] cannot open %s: %ld\n", PACKAGES_XML_PATH, PTR_ERR(fp));
+		return MANAGER_VERIFY_ERROR;
+	}
 
 	fsize = i_size_read(fp->f_inode);
-	if (fsize < 4 || fsize > MAX_PACKAGES_XML_SIZE)
-		return false;
+	if (fsize < 4 || fsize > MAX_PACKAGES_XML_SIZE) {
+		pr_err("[manager] invalid %s size: %zu\n", PACKAGES_XML_PATH, fsize);
+		return MANAGER_VERIFY_ERROR;
+	}
 
 	u8 *buf __free(nksu_kvfree) = kvmalloc(fsize, GFP_KERNEL);
-	if (!buf)
-		return false;
+	if (!buf) {
+		pr_err("[manager] cannot allocate %zu bytes for %s\n", fsize, PACKAGES_XML_PATH);
+		return MANAGER_VERIFY_ERROR;
+	}
 
 	rd = kernel_read(fp, buf, fsize, &pos);
-	if (rd != (ssize_t)fsize)
-		return false;
+	if (rd != (ssize_t)fsize) {
+		pr_err("[manager] short read from %s: %zd of %zu bytes\n", PACKAGES_XML_PATH, rd,
+		       fsize);
+		return MANAGER_VERIFY_ERROR;
+	}
 
-	if (sha256_hasher_init(&hasher))
-		return false;
+	if (sha256_hasher_init(&hasher)) {
+		pr_err("[manager] cannot initialize SHA-256 for manager scan\n");
+		return MANAGER_VERIFY_ERROR;
+	}
 
-	valid = abx_find_package_by_cert(buf, fsize, manager_cert_match, &hasher, paths);
+	abx_ret = abx_find_package_by_cert(buf, fsize, manager_cert_match, &hasher, paths);
 	sha256_hasher_exit(&hasher);
 
-	if (valid)
+	switch (abx_ret) {
+	case ABX_PACKAGE_FOUND:
 		pr_info("[manager] %s (uid %u) has the manager signature\n", paths->name,
 			paths->uid);
-	else
+		return MANAGER_VERIFY_OK;
+	case ABX_PACKAGE_NOT_FOUND:
 		pr_err("[manager] no package signed with the manager certificate\n");
-
-	return valid;
+		return MANAGER_VERIFY_ABSENT;
+	default:
+		pr_err("[manager] cannot parse %s\n", PACKAGES_XML_PATH);
+		return MANAGER_VERIFY_ERROR;
+	}
 }
 
 static uid_t get_uid_from_packages_list(const char *package_name)
@@ -677,7 +699,8 @@ static int scan_and_apply(void)
 	const struct cred *old;
 	kuid_t kuid, previous;
 	uid_t uid;
-	int install_ret, ret = 0;
+	int attempt, install_ret, ret = 0;
+	enum manager_verify_result verify = MANAGER_VERIFY_ERROR;
 
 	/*
      * Off the stack: abx_package carries several 256-byte path buffers and
@@ -686,14 +709,14 @@ static int scan_and_apply(void)
      */
 	struct abx_package *paths __free(nksu_kfree) = kzalloc(sizeof(*paths), GFP_KERNEL);
 	if (!paths) {
-		revoke_manager();
+		pr_err("[manager] cannot allocate manager scan state\n");
 		return -ENOMEM;
 	}
 
 	guard(nksu_mutex)(&appscan_mutex);
 	old = nksu_borrow_creds_begin();
 	if (!old) {
-		revoke_manager();
+		pr_err("[manager] cannot borrow credentials for manager scan\n");
 		return -ENOMEM;
 	}
 
@@ -703,9 +726,26 @@ static int scan_and_apply(void)
      * so the whole shared uid, not a single package, gets manager rights.  Fall
      * back to packages.list if the entry somehow has no uid.
      */
-	if (!verify_package_signature(paths)) {
-		ret = -EACCES;
-		revoke_manager();
+	for (attempt = 0; attempt < 3; attempt++) {
+		verify = verify_package_signature(paths);
+		if (verify != MANAGER_VERIFY_ERROR)
+			break;
+		if (attempt < 2)
+			msleep(20);
+	}
+	if (verify != MANAGER_VERIFY_OK) {
+		if (verify == MANAGER_VERIFY_ABSENT) {
+			ret = -EACCES;
+			revoke_manager();
+		} else {
+			/*
+			 * A transient read failure is not proof that the manager
+			 * disappeared.  Keep the last verified grant and let the
+			 * next packages.xml event retry the scan.
+			 */
+			ret = -EIO;
+			pr_err("[manager] verification unavailable; keeping current authorization\n");
+		}
 		goto out;
 	}
 
@@ -789,17 +829,19 @@ out:
  * packages.xml observer.
  *
  * PackageManagerService republishes /data/system/packages.xml whenever the set
- * of installed packages changes (it writes a reserve copy and renames it into
- * place), so re-run the manager scan on every create/rename instead of polling.
- * The callback runs under the fsnotify SRCU lock and the rename's directory
- * locks, while the scan sleeps and reads files, so the work is deferred with
- * task_work (KernelSU's ksu_defer_track_throne): it then runs in the renamer's
- * context and finishes before the rename returns, so a freshly installed
- * manager is verified and granted before it can be opened.
+ * of installed packages changes.  It normally writes a reserve copy and renames
+ * it into place; some boot paths instead rewrite the file directly.  Watch the
+ * completed rename and close-for-write events rather than FS_CREATE: a create
+ * can fire while the writer still has an empty or partial file.  The callback
+ * runs under the fsnotify SRCU lock and the rename's directory locks, while the
+ * scan sleeps and reads files, so the work is deferred with task_work
+ * (KernelSU's ksu_defer_track_throne): it then runs in the renamer's context and
+ * finishes before the rename returns, so a freshly installed manager is verified
+ * and granted before it can be opened.
  */
 #define APPSCAN_WATCH_DIR "/data/system"
 #define APPSCAN_WATCH_NAME "packages.xml"
-#define APPSCAN_WATCH_MASK (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
+#define APPSCAN_WATCH_MASK (FS_MOVE | FS_CLOSE_WRITE | FS_EVENT_ON_CHILD)
 
 static struct fsnotify_group *appscan_group;
 static struct fsnotify_mark *appscan_mark;

@@ -37,14 +37,25 @@ struct abx_package {
 /* Accept or reject a package by its DER certificate.  Return true to take it. */
 typedef bool (*abx_cert_match)(const u8 *cert, size_t cert_len, void *ctx);
 
+enum abx_result {
+	ABX_PACKAGE_FOUND,
+	/* The document was parsed to its end, but no package matched. */
+	ABX_PACKAGE_NOT_FOUND,
+	/* The document was truncated, malformed or could not be allocated. */
+	ABX_PARSE_ERROR,
+};
+
 /*
  * Find the first <package> whose certificate is accepted by `match` and fill
  * `out` (including its name and user id).  Matching the signing certificate
  * means the manager is recognised no matter what package name it is installed
  * under, and lets the caller read the shared uid straight from the entry.
- * Returns true when such a package and a certificate were found.
+ *
+ * A complete document with no match is reported separately from a parse error:
+ * callers must not treat a transient short read as proof that the manager was
+ * uninstalled.
  */
-bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
-			      struct abx_package *out);
+enum abx_result abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
+					 struct abx_package *out);
 
 #endif /* NKSU_MANAGER_ABX_H */

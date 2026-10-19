@@ -141,8 +141,8 @@ static void copy_path_attr(char *dst, size_t cap, const u8 *src, size_t len)
 	dst[n] = '\0';
 }
 
-bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
-			      struct abx_package *out)
+enum abx_result abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, void *ctx,
+					 struct abx_package *out)
 {
 	struct abx_reader r = { .buf = buf, .len = len, .pos = ABX_MAGIC_LEN };
 	const u8 *name;
@@ -150,7 +150,8 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, v
 	int depth = 0;
 	int pkg_depth = -1;
 	int sigs_depth = -1;
-	bool found = false;
+	enum abx_result result = ABX_PARSE_ERROR;
+	bool document_complete = false;
 	const u8 *cert = NULL;
 	size_t cert_len = 0;
 	/* Whether the current package's certificate has been offered to match().
@@ -160,7 +161,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, v
 	memset(out, 0, sizeof(*out));
 
 	if (!match || len < ABX_MAGIC_LEN || memcmp(buf, ABX_MAGIC, ABX_MAGIC_LEN) != 0)
-		return false;
+		return ABX_PARSE_ERROR;
 
 	r.interned = kvmalloc_array(ABX_MAX_INTERNED_STRINGS, sizeof(*r.interned), GFP_KERNEL);
 	r.interned_len =
@@ -179,6 +180,7 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, v
 		if (tok == ABX_TOKEN_START_DOCUMENT) {
 			continue;
 		} else if (tok == ABX_TOKEN_END_DOCUMENT) {
+			document_complete = (depth == 0);
 			break;
 		} else if (tok == ABX_TOKEN_START_TAG) {
 			bool is_sigs, is_cert, is_pkg;
@@ -368,14 +370,17 @@ bool abx_find_package_by_cert(const u8 *buf, size_t len, abx_cert_match match, v
 			goto out_free;
 		}
 	}
+	goto out_free;
 
 check:
 	out->cert = cert;
 	out->cert_len = cert_len;
-	found = true;
+	result = ABX_PACKAGE_FOUND;
 
 out_free:
 	kvfree(r.interned);
 	kvfree(r.interned_len);
-	return found;
+	if (result == ABX_PARSE_ERROR && document_complete)
+		result = ABX_PACKAGE_NOT_FOUND;
+	return result;
 }
