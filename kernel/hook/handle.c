@@ -31,6 +31,7 @@
 #include "manager/ioctl.h"
 #include <fmac.h>
 #include "klog.h"
+#include "symbol/symbol.h"
 
 /* Last: redirects task_work_add and other unexported symbols. */
 #include "symbol/symbol_compat.h"
@@ -78,8 +79,11 @@ long handle_prctl_hooks(struct pt_regs *regs)
  * into each process that can reach the hook.  sys_enter only locates that
  * mapping.
  *
- * A shmem inode is used instead of a module-owned VMA so existing user
- * mappings keep the inode alive without pinning the module across unload.
+ * A private shmem inode is used instead of a module-owned VMA so existing user
+ * mappings keep the inode alive without pinning the module across unload.  The
+ * inode is created by shmem_kernel_file_setup(), which marks it S_PRIVATE so
+ * SELinux does not perform inode-level FILE__MAP checks against the target
+ * process's domain.
  *
  * The mapping is created from sched_process_exec/sched_process_fork task_work
  * and from profile updates, where sleeping and allocating are allowed.  Fork
@@ -92,6 +96,7 @@ long handle_prctl_hooks(struct pt_regs *regs)
 
 static struct file *nksu_path_file;
 static bool nksu_path_ready;
+static typeof(shmem_kernel_file_setup) *nksu_shmem_kernel_file_setup;
 
 static struct tracepoint *nksu_find_tracepoint(const char *name);
 
@@ -195,7 +200,6 @@ static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
 
 static int nksu_path_map_current(void)
 {
-	const struct cred *old;
 	struct file *file;
 	unsigned long addr;
 	int ret = 0;
@@ -217,21 +221,12 @@ static int nksu_path_map_current(void)
 	 * cannot be turned writable with mprotect(); MAP_PRIVATE would still
 	 * allow a private COW copy and let the process replace the path.
 	 *
-	 * SELinux checks FILE__MAP for the inode against current_cred().  The
-	 * shmem inode was created by the module, so an app domain may not have
-	 * that permission.  Map under the cached nksu credential (unconfined)
-	 * and restore the app's credential before returning to userspace.
+	 * The inode is S_PRIVATE, so SELinux skips FILE__MAP for it.  This is
+	 * required because the mapping is requested while current_cred() still
+	 * belongs to the target process, whose domain is not allowed to map a
+	 * module-created tmpfs file.
 	 */
-	old = nksu_borrow_creds_begin();
-	if (unlikely(!old)) {
-		pr_err_ratelimited(
-			"[hook]: cannot borrow nksu creds to map redirect page (pid %d)\n",
-			current->pid);
-		return -ENOMEM;
-	}
-
 	addr = vm_mmap(file, 0, PAGE_SIZE, PROT_READ, MAP_SHARED, 0);
-	nksu_borrow_creds_end(old);
 	if (IS_ERR_VALUE(addr))
 		ret = (int)addr;
 
@@ -335,13 +330,20 @@ int nksu_path_init(void)
 		return -EINVAL;
 	}
 
+	nksu_shmem_kernel_file_setup =
+		(typeof(nksu_shmem_kernel_file_setup))nksu_ksym_lookup("shmem_kernel_file_setup");
+	if (unlikely(!nksu_shmem_kernel_file_setup)) {
+		pr_err("[hook]: unresolved shmem_kernel_file_setup\n");
+		return -ENOENT;
+	}
+
 	page = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 	memcpy(page + NKSU_PATH_EXEC_OFF, REDIRECT_TARGET, REDIRECT_TARGET_LEN);
 	memcpy(page + NKSU_PATH_SH_OFF, SH_PATH, SH_PATH_LEN);
 
-	file = shmem_file_setup("[nksu_path]", PAGE_SIZE, 0);
+	file = nksu_shmem_kernel_file_setup("[nksu_path]", PAGE_SIZE, 0);
 	if (IS_ERR(file)) {
 		ret = PTR_ERR(file);
 		kfree(page);
@@ -387,7 +389,7 @@ int nksu_path_init(void)
 
 	smp_store_release(&nksu_path_ready, true);
 
-	pr_info("[hook]: staged su redirect paths in a dedicated shmem page\n");
+	pr_info("[hook]: staged su redirect paths in a private shmem page\n");
 	return 0;
 
 err_page:
