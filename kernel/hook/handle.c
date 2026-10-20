@@ -200,6 +200,7 @@ static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
 
 static int nksu_path_map_current(void)
 {
+	const struct cred *old;
 	struct file *file;
 	unsigned long addr;
 	int ret = 0;
@@ -221,12 +222,18 @@ static int nksu_path_map_current(void)
 	 * cannot be turned writable with mprotect(); MAP_PRIVATE would still
 	 * allow a private COW copy and let the process replace the path.
 	 *
-	 * The inode is S_PRIVATE, so SELinux skips FILE__MAP for it.  This is
-	 * required because the mapping is requested while current_cred() still
-	 * belongs to the target process, whose domain is not allowed to map a
-	 * module-created tmpfs file.
+	 * The inode is S_PRIVATE, so SELinux skips the inode permission checks,
+	 * but file_has_perm() still rejects an FD__USE transition from the target
+	 * process's SID to the SID that created the file.  Map under the file's
+	 * own cred for the duration of vm_mmap() and restore the target cred
+	 * before returning to userspace.  This does not depend on resolving the
+	 * nksu domain, so it is safe during early task_work.
 	 */
+	if (unlikely(!file->f_cred))
+		return -EINVAL;
+	old = override_creds(file->f_cred);
 	addr = vm_mmap(file, 0, PAGE_SIZE, PROT_READ, MAP_SHARED, 0);
+	revert_creds(old);
 	if (IS_ERR_VALUE(addr))
 		ret = (int)addr;
 
