@@ -134,7 +134,11 @@ static int context_to_sid(const char *context, u32 *sid)
 {
 	int rc;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	if (!selinux_initialized())
+#else
 	if (!selinux_initialized(&selinux_state))
+#endif
 		return -EAGAIN;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
