@@ -129,11 +129,51 @@ struct nksu_path_work {
  * list; this only happens after the path has matched su.
  * The tracepoint path may only trylock; task_work may block.
  */
-static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
+static bool nksu_path_vma_match(struct vm_area_struct *vma, struct file *file)
+{
+	if (vma->vm_file != file)
+		return false;
+	if (vma->vm_end - vma->vm_start != PAGE_SIZE || vma->vm_pgoff)
+		return false;
+	if (!(vma->vm_flags & VM_READ) || (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)))
+		return false;
+	return true;
+}
+
+/* 6.1 replaced the VMA linked list with the maple tree. */
+static unsigned long nksu_path_scan(struct mm_struct *mm, struct file *file)
 {
 	struct vm_area_struct *vma;
-	struct file *file;
 	unsigned long addr = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+	{
+		VMA_ITERATOR(vmi, mm, 0);
+
+		for_each_vma(vmi, vma)
+		{
+			if (nksu_path_vma_match(vma, file)) {
+				addr = vma->vm_start;
+				break;
+			}
+		}
+	}
+#else
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		if (nksu_path_vma_match(vma, file)) {
+			addr = vma->vm_start;
+			break;
+		}
+	}
+#endif
+
+	return addr;
+}
+
+static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
+{
+	struct file *file;
+	unsigned long addr;
 
 	if (unlikely(!mm || !smp_load_acquire(&nksu_path_ready)))
 		return 0;
@@ -148,17 +188,7 @@ static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
 		mmap_read_lock(mm);
 	}
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
-		if (vma->vm_file != file)
-			continue;
-		if (vma->vm_end - vma->vm_start != PAGE_SIZE || vma->vm_pgoff)
-			continue;
-		if (!(vma->vm_flags & VM_READ) || (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)))
-			continue;
-		addr = vma->vm_start;
-		break;
-	}
-
+	addr = nksu_path_scan(mm, file);
 	mmap_read_unlock(mm);
 	return addr;
 }
