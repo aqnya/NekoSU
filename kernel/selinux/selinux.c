@@ -123,6 +123,32 @@ static struct nksu_domain_entry domain_cache[NKSU_DOMAIN_CACHE];
 static unsigned int domain_cache_next;
 static DEFINE_MUTEX(domain_cache_lock);
 
+/*
+ * The kernel's fallback path before the initial policy load maps every
+ * context to SECINITSID_KERNEL and still reports success.  Calling that from
+ * an early exec/fork task_work used to cache SID 1 for DOMAIN_CTX forever,
+ * making all later manager and profile file accesses run as u:r:kernel:s0.
+ * Refuse to resolve (and therefore cache) anything until the policy is live.
+ */
+static int context_to_sid(const char *context, u32 *sid)
+{
+	int rc;
+
+	if (!selinux_initialized(&selinux_state))
+		return -EAGAIN;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	rc = security_context_to_sid(context, strlen(context), sid, GFP_KERNEL);
+#else
+	rc = security_context_to_sid(&selinux_state, context, strlen(context), sid, GFP_KERNEL);
+#endif
+	if (rc)
+		return rc;
+	if (*sid == SECSID_NULL)
+		return -EINVAL;
+	return 0;
+}
+
 static int resolve_domain_sid(const char *domain, u32 *sid)
 {
 	int i, rc;
@@ -137,11 +163,7 @@ static int resolve_domain_sid(const char *domain, u32 *sid)
 		}
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	rc = security_context_to_sid(domain, strlen(domain), sid, GFP_KERNEL);
-#else
-	rc = security_context_to_sid(&selinux_state, domain, strlen(domain), sid, GFP_KERNEL);
-#endif
+	rc = context_to_sid(domain, sid);
 	if (rc)
 		return rc;
 
@@ -244,13 +266,7 @@ static u32 nksu_file_sid;
 
 static void resolve_file_sid(void)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	int rc = security_context_to_sid(DOMAIN_FILE_CTX, strlen(DOMAIN_FILE_CTX), &nksu_file_sid,
-					 GFP_KERNEL);
-#else
-	int rc = security_context_to_sid(&selinux_state, DOMAIN_FILE_CTX, strlen(DOMAIN_FILE_CTX),
-					 &nksu_file_sid, GFP_KERNEL);
-#endif
+	int rc = context_to_sid(DOMAIN_FILE_CTX, &nksu_file_sid);
 
 	if (rc) {
 		pr_err("nksu: failed to get SID for %s: %d\n", DOMAIN_FILE_CTX, rc);
