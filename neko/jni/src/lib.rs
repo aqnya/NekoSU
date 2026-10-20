@@ -6,6 +6,7 @@ use std::fs;
 use std::os::fd::RawFd;
 use std::ptr;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Mutex, Once};
 
 use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
@@ -13,6 +14,7 @@ use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
 
 const FMAC_MAX_DATA: usize = 64 * 1024;
+const FMAC_STACK_DATA: usize = 264;
 const FMAC_DATA_CAP: usize = 12;
 const FMAC_DATA_SELRULE: usize = 264;
 const FMAC_DATA_PROFILE: usize = 84;
@@ -46,6 +48,9 @@ const IOC_FEATURE_SET: u32 = 17;
 
 const PR_GET_SHM_FD: libc::c_int = 201;
 const PR_GET_CTL_FD: libc::c_int = 203;
+
+const READER_MAX_PATH: usize = 4096;
+const READER_CHUNK: usize = 64 * 1024;
 
 static DRIVER_FD: AtomicI32 = AtomicI32::new(-1);
 static CTL_FD: AtomicI32 = AtomicI32::new(-1);
@@ -90,7 +95,15 @@ fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
     if data.len() > FMAC_MAX_DATA {
         return -1;
     }
-    let mut buffer = vec![0u8; 8 + data.len()];
+    let total = 8 + data.len();
+    let mut stack = [0u8; 8 + FMAC_STACK_DATA];
+    let mut heap = Vec::new();
+    let buffer: &mut [u8] = if total <= stack.len() {
+        &mut stack[..total]
+    } else {
+        heap.resize(total, 0);
+        &mut heap
+    };
     buffer[0..4].copy_from_slice(&flag.to_ne_bytes());
     buffer[4..8].copy_from_slice(&(data.len() as u32).to_ne_bytes());
     buffer[8..].copy_from_slice(data);
@@ -380,6 +393,289 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_listProfiles(
     put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
 }
 
+fn write_all(fd: RawFd, mut buf: &[u8]) -> bool {
+    while !buf.is_empty() {
+        let n = unsafe { libc::write(fd, buf.as_ptr().cast(), buf.len()) };
+        if n > 0 {
+            buf = &buf[n as usize..];
+        } else if n < 0 && unsafe { *libc::__errno() } == libc::EINTR {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+fn read_exact_fd(fd: RawFd, mut buf: &mut [u8]) -> bool {
+    while !buf.is_empty() {
+        let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+        if n > 0 {
+            buf = &mut buf[n as usize..];
+        } else if n == 0 {
+            return false;
+        } else if unsafe { *libc::__errno() } == libc::EINTR {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+fn read_fd_all(fd: RawFd) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    loop {
+        data.reserve(READER_CHUNK);
+        let spare = data.spare_capacity_mut();
+        let n = unsafe { libc::read(fd, spare.as_mut_ptr().cast(), READER_CHUNK) };
+        if n > 0 {
+            unsafe { data.set_len(data.len() + n as usize) };
+        } else if n == 0 {
+            break;
+        } else if unsafe { *libc::__errno() } == libc::EINTR {
+            continue;
+        } else {
+            return None;
+        }
+    }
+    Some(data)
+}
+
+fn wait_child(pid: libc::pid_t) -> bool {
+    let mut status = 0;
+    loop {
+        let ret = unsafe { libc::waitpid(pid, &mut status, 0) };
+        if ret >= 0 {
+            break;
+        }
+        if unsafe { *libc::__errno() } != libc::EINTR {
+            return false;
+        }
+    }
+    libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0
+}
+
+/*
+ * Persistent root reader. One child serves [u32 len][path] -> [u32 status]
+ * -> [u32 len][bytes]... [u32 0], using only async-signal-safe calls after
+ * fork so the multithreaded manager stays safe.
+ */
+#[derive(Clone, Copy)]
+struct RootReader {
+    pid: libc::pid_t,
+    req_fd: RawFd,
+    resp_fd: RawFd,
+}
+
+impl RootReader {
+    const fn new() -> Self {
+        Self {
+            pid: -1,
+            req_fd: -1,
+            resp_fd: -1,
+        }
+    }
+}
+
+static ROOT_READER: Mutex<RootReader> = Mutex::new(RootReader::new());
+static IGNORE_SIGPIPE: Once = Once::new();
+
+fn ignore_sigpipe() {
+    IGNORE_SIGPIPE.call_once(|| unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
+    });
+}
+
+unsafe fn reader_child(req: RawFd, resp: RawFd) -> ! {
+    if unsafe { libc::setresuid(0, 0, 0) } != 0 || unsafe { libc::getuid() } != 0 {
+        unsafe { libc::_exit(1) };
+    }
+
+    let mut path = [0u8; READER_MAX_PATH];
+    let mut buffer = [0u8; READER_CHUNK];
+    loop {
+        let mut plen_buf = [0u8; 4];
+        if !read_exact_fd(req, &mut plen_buf) {
+            unsafe { libc::_exit(0) };
+        }
+        let plen = u32::from_ne_bytes(plen_buf) as usize;
+        if plen == 0 || plen >= READER_MAX_PATH || !read_exact_fd(req, &mut path[..plen]) {
+            unsafe { libc::_exit(0) };
+        }
+        path[plen] = 0;
+
+        let file = unsafe {
+            libc::open(
+                path.as_ptr().cast(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NONBLOCK,
+            )
+        };
+        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+        let regular = file >= 0
+            && unsafe { libc::fstat(file, &mut stat) } == 0
+            && stat.st_mode & libc::S_IFMT == libc::S_IFREG;
+        if !regular {
+            if file >= 0 {
+                unsafe { libc::close(file) };
+            }
+            if !write_all(resp, &1u32.to_ne_bytes()) {
+                unsafe { libc::_exit(2) };
+            }
+            continue;
+        }
+
+        if !write_all(resp, &0u32.to_ne_bytes()) {
+            unsafe { libc::close(file) };
+            unsafe { libc::_exit(2) };
+        }
+        loop {
+            let n = unsafe { libc::read(file, buffer.as_mut_ptr().cast(), buffer.len()) };
+            if n > 0 {
+                let len = (n as u32).to_ne_bytes();
+                if !write_all(resp, &len) || !write_all(resp, &buffer[..n as usize]) {
+                    unsafe { libc::close(file) };
+                    unsafe { libc::_exit(2) };
+                }
+            } else if n == 0 {
+                break;
+            } else if unsafe { *libc::__errno() } == libc::EINTR {
+                continue;
+            } else {
+                break;
+            }
+        }
+        unsafe { libc::close(file) };
+        if !write_all(resp, &0u32.to_ne_bytes()) {
+            unsafe { libc::_exit(2) };
+        }
+    }
+}
+
+fn reader_start_locked(reader: &mut RootReader) -> bool {
+    let mut req = [0; 2];
+    let mut resp = [0; 2];
+    if unsafe { libc::pipe(req.as_mut_ptr()) } != 0 {
+        return false;
+    }
+    if unsafe { libc::pipe(resp.as_mut_ptr()) } != 0 {
+        unsafe {
+            libc::close(req[0]);
+            libc::close(req[1]);
+        }
+        return false;
+    }
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        unsafe {
+            libc::close(req[0]);
+            libc::close(req[1]);
+            libc::close(resp[0]);
+            libc::close(resp[1]);
+        }
+        return false;
+    }
+
+    if pid == 0 {
+        unsafe {
+            libc::close(req[1]);
+            libc::close(resp[0]);
+            reader_child(req[0], resp[1]);
+        }
+    }
+
+    unsafe {
+        libc::close(req[0]);
+        libc::close(resp[1]);
+    }
+    *reader = RootReader {
+        pid,
+        req_fd: req[1],
+        resp_fd: resp[0],
+    };
+    true
+}
+
+fn reader_drop_locked(reader: &mut RootReader) {
+    if reader.req_fd >= 0 {
+        unsafe { libc::close(reader.req_fd) };
+    }
+    if reader.resp_fd >= 0 {
+        unsafe { libc::close(reader.resp_fd) };
+    }
+    if reader.pid > 0 {
+        let _ = wait_child(reader.pid);
+    }
+    *reader = RootReader::new();
+}
+
+fn reader_read_locked(reader: &mut RootReader, path: &[u8]) -> Option<Vec<u8>> {
+    if reader.pid <= 0 && !reader_start_locked(reader) {
+        return None;
+    }
+
+    if !write_all(reader.req_fd, &(path.len() as u32).to_ne_bytes())
+        || !write_all(reader.req_fd, path)
+    {
+        reader_drop_locked(reader);
+        return None;
+    }
+
+    let mut status = [0u8; 4];
+    if !read_exact_fd(reader.resp_fd, &mut status) {
+        reader_drop_locked(reader);
+        return None;
+    }
+    if u32::from_ne_bytes(status) != 0 {
+        return Some(Vec::new());
+    }
+
+    let mut out = Vec::new();
+    loop {
+        let mut chunk_buf = [0u8; 4];
+        if !read_exact_fd(reader.resp_fd, &mut chunk_buf) {
+            reader_drop_locked(reader);
+            return None;
+        }
+        let chunk = u32::from_ne_bytes(chunk_buf) as usize;
+        if chunk == 0 {
+            break;
+        }
+        if chunk > READER_CHUNK {
+            reader_drop_locked(reader);
+            return None;
+        }
+        let Some(new_len) = out.len().checked_add(chunk) else {
+            reader_drop_locked(reader);
+            return None;
+        };
+        out.resize(new_len, 0);
+        if !read_exact_fd(reader.resp_fd, &mut out[new_len - chunk..]) {
+            reader_drop_locked(reader);
+            return None;
+        }
+    }
+    Some(out)
+}
+
+fn read_file_persistent_impl(path: &str) -> Option<Vec<u8>> {
+    let path = path.as_bytes();
+    if path.is_empty() || path.len() >= READER_MAX_PATH || path.contains(&0) {
+        return None;
+    }
+
+    ignore_sigpipe();
+    let mut reader = match ROOT_READER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    match reader_read_locked(&mut reader, path) {
+        Some(data) => Some(data),
+        None => reader_read_locked(&mut reader, path),
+    }
+}
+
 fn read_file_impl(path: &str) -> Option<Vec<u8>> {
     let path = CString::new(path).ok()?;
     let mut pipe = [0; 2];
@@ -438,31 +734,11 @@ fn read_file_impl(path: &str) -> Option<Vec<u8>> {
     unsafe {
         libc::close(pipe[1]);
     }
-    let mut data = Vec::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        let n = unsafe { libc::read(pipe[0], buffer.as_mut_ptr().cast(), buffer.len()) };
-        if n > 0 {
-            data.extend_from_slice(&buffer[..n as usize]);
-        } else if n == 0 {
-            break;
-        } else if unsafe { *libc::__errno() } != libc::EINTR {
-            data.clear();
-            break;
-        }
-    }
+    let data = read_fd_all(pipe[0]);
     unsafe {
         libc::close(pipe[0]);
     }
-    let mut status = 0;
-    while unsafe { libc::waitpid(pid, &mut status, 0) } < 0
-        && unsafe { *libc::__errno() } == libc::EINTR
-    {}
-    if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
-        Some(data)
-    } else {
-        None
-    }
+    if wait_child(pid) { data } else { None }
 }
 
 #[unsafe(no_mangle)]
@@ -492,7 +768,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_readFilePersistent(
     let Some(path) = get_utf(&mut env, &path) else {
         return ptr::null_mut();
     };
-    match read_file_impl(&path) {
+    match read_file_persistent_impl(&path) {
         Some(data) => put_bytes(&mut env, &data),
         None => {
             log::warn!("readFilePersistent({path}) failed");
