@@ -1,9 +1,27 @@
-#include <linux/string.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/uaccess.h>
-#include <asm/ptrace.h>
+#include <linux/binfmts.h>
 #include <linux/compiler.h>
+#include <linux/cred.h>
+#include <linux/err.h>
+#include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/mman.h>
+#include <linux/mm.h>
+#include <linux/mmap_lock.h>
+#include <linux/module.h>
+#include <linux/pid.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+#include <linux/shmem_fs.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/task_work.h>
+#include <linux/trace_events.h>
+#include <linux/tracepoint.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
+#include <asm/barrier.h>
+#include <asm/ptrace.h>
 
 #include "hook/hook.h"
 #include "manager/manager.h"
@@ -14,11 +32,16 @@
 #include <fmac.h>
 #include "klog.h"
 
-#ifndef CONFIG_NKSU_SYSCALL
-#include <linux/pid.h>
-#include <linux/sched/signal.h>
-#include <linux/trace_events.h>
-#include <linux/tracepoint.h>
+/* Last: redirects task_work_add and other unexported symbols. */
+#include "symbol/symbol_compat.h"
+
+/*
+ * task_work_add and kernel_write are reached through kallsyms-resolved
+ * pointers.  The module's CFI type hash for those indirect calls need not
+ * match the running kernel's, so opt this file out like daemon.c does.
+ */
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("cfi"))), apply_to = function)
 #endif
 
 long handle_prctl_hooks(struct pt_regs *regs)
@@ -48,55 +71,334 @@ long handle_prctl_hooks(struct pt_regs *regs)
 }
 
 /*
- * The x86-64 ABI reserves the 128 bytes below the stack pointer as the red
- * zone: live scratch that the kernel preserves across signal delivery, so the
- * staged string has to sit below it or it could clobber a caller's red-zone
- * locals.  aarch64 has no red zone, so there is nothing to skip there.
+ * The sys_enter tracepoint runs in atomic context.  It must not write into the
+ * caller's address space (the stack may contain live data and copy_to_user()
+ * may fault), and it must not allocate or sleep.  The redirect strings are
+ * therefore staged once in a module-created shmem page and mapped read-only
+ * into each process that can reach the hook.  sys_enter only locates that
+ * mapping.
+ *
+ * A shmem inode is used instead of a module-owned VMA so existing user
+ * mappings keep the inode alive without pinning the module across unload.
+ *
+ * The mapping is created from sched_process_exec/sched_process_fork task_work
+ * and from profile updates, where sleeping and allocating are allowed.  Fork
+ * and exec establish it before the task first runs in userspace; a profile
+ * update maps already-running tasks on their next return to userspace.  No
+ * vvar/vdso layout is assumed.
  */
-#if defined(__x86_64__)
-#define NKSU_STACK_REDZONE 128UL
-#else
-#define NKSU_STACK_REDZONE 0UL
-#endif
+#define NKSU_PATH_EXEC_OFF 0UL
+#define NKSU_PATH_SH_OFF 64UL
+
+static struct file *nksu_path_file;
+static bool nksu_path_ready;
+
+static struct tracepoint *nksu_find_tracepoint(const char *name);
+
+struct nksu_tp_find_ctx {
+	const char *name;
+	struct tracepoint **out;
+};
+
+static void nksu_tp_find_cb(struct tracepoint *tp, void *priv)
+{
+	struct nksu_tp_find_ctx *ctx = priv;
+
+	if (*ctx->out)
+		return;
+	if (strcmp(tp->name, ctx->name) == 0)
+		*ctx->out = tp;
+}
+
+static struct tracepoint *nksu_find_tracepoint(const char *name)
+{
+	struct tracepoint *result = NULL;
+	struct nksu_tp_find_ctx ctx = { .name = name, .out = &result };
+
+	for_each_kernel_tracepoint(nksu_tp_find_cb, &ctx);
+	return result;
+}
+
+struct nksu_path_work {
+	struct callback_head cb;
+};
 
 /*
- * Stage a replacement path argument on the user stack and return its address,
- * or 0 on failure.
- *
- * The wrapped syscall reads the string synchronously -- we never return to
- * user mode in between -- so it only has to survive for the duration of the
- * call.  The area below the red zone (see above) is already mapped, needs no
- * allocation and cannot clash with live frames; align it like the ABI stack
- * and keep it clear of the guard page.  copy_to_user() performs its own
- * access_ok() check (a separate call is redundant and discouraged), so an
- * address outside the mapped stack simply fails the copy.
+ * The user mapping is found by its shmem file pointer, not by a magic value or
+ * a fixed address.  A process can move or unmap it, so search the current VMA
+ * list; this only happens after the path has matched su.
+ * The tracepoint path may only trylock; task_work may block.
  */
-static unsigned long push_str(unsigned long sp, const char *str, size_t len)
+static unsigned long nksu_path_user_addr(struct mm_struct *mm, bool trylock)
 {
-	unsigned long size, addr;
+	struct vm_area_struct *vma;
+	struct file *file;
+	unsigned long addr = 0;
 
-	if (unlikely(!len || len > PAGE_SIZE))
+	if (unlikely(!mm || !smp_load_acquire(&nksu_path_ready)))
+		return 0;
+	file = READ_ONCE(nksu_path_file);
+	if (unlikely(!file))
 		return 0;
 
-	size = ALIGN(len, 16);
-	if (unlikely(sp < NKSU_STACK_REDZONE + size))
-		return 0;
+	if (trylock) {
+		if (!mmap_read_trylock(mm))
+			return 0;
+	} else {
+		mmap_read_lock(mm);
+	}
 
-	addr = sp - NKSU_STACK_REDZONE - size;
-	if (unlikely(copy_to_user((void __user *)addr, str, len)))
-		return 0;
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		if (vma->vm_file != file)
+			continue;
+		if (vma->vm_end - vma->vm_start != PAGE_SIZE || vma->vm_pgoff)
+			continue;
+		if (!(vma->vm_flags & VM_READ) || (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)))
+			continue;
+		addr = vma->vm_start;
+		break;
+	}
 
+	mmap_read_unlock(mm);
 	return addr;
 }
 
+static int nksu_path_map_current(void)
+{
+	const struct cred *old;
+	struct file *file;
+	unsigned long addr;
+	int ret = 0;
+
+	if (unlikely(!smp_load_acquire(&nksu_path_ready)))
+		return -ESHUTDOWN;
+	if (unlikely(!current->mm || (current->flags & PF_EXITING)))
+		return -ESRCH;
+	if (nksu_path_user_addr(current->mm, false))
+		return 0;
+
+	file = READ_ONCE(nksu_path_file);
+	if (unlikely(!file))
+		return -ESHUTDOWN;
+
+	/*
+	 * MAP_SHARED plus a file without FMODE_WRITE makes mmap_region clear
+	 * both VM_SHARED and VM_MAYWRITE.  The mapping stays read-only and
+	 * cannot be turned writable with mprotect(); MAP_PRIVATE would still
+	 * allow a private COW copy and let the process replace the path.
+	 *
+	 * SELinux checks FILE__MAP for the inode against current_cred().  The
+	 * shmem inode was created by the module, so an app domain may not have
+	 * that permission.  Map under the cached nksu credential (unconfined)
+	 * and restore the app's credential before returning to userspace.
+	 */
+	old = nksu_borrow_creds_begin();
+	if (unlikely(!old)) {
+		pr_err_ratelimited(
+			"[hook]: cannot borrow nksu creds to map redirect page (pid %d)\n",
+			current->pid);
+		return -ENOMEM;
+	}
+
+	addr = vm_mmap(file, 0, PAGE_SIZE, PROT_READ, MAP_SHARED, 0);
+	nksu_borrow_creds_end(old);
+	if (IS_ERR_VALUE(addr))
+		ret = (int)addr;
+
+	return ret;
+}
+
+static void nksu_path_work_fn(struct callback_head *cb)
+{
+	struct nksu_path_work *work = container_of(cb, struct nksu_path_work, cb);
+	int ret;
+
+	ret = nksu_path_map_current();
+	if (ret && ret != -ESRCH)
+		pr_err_ratelimited("[hook]: cannot map su redirect page for pid %d: %d\n",
+				   current->pid, ret);
+
+	kfree(work);
+	module_put(THIS_MODULE);
+}
+
+static void nksu_path_queue(struct task_struct *task)
+{
+	struct nksu_path_work *work;
+	int ret;
+
+	if (!smp_load_acquire(&nksu_path_ready) || (task->flags & PF_KTHREAD) || !task->mm)
+		return;
+
+	if (!try_module_get(THIS_MODULE)) {
+		pr_warn_ratelimited("[hook]: cannot pin module for path task_work\n");
+		return;
+	}
+
+	work = kzalloc(sizeof(*work), GFP_ATOMIC);
+	if (!work) {
+		module_put(THIS_MODULE);
+		pr_warn_ratelimited("[hook]: cannot allocate path task_work\n");
+		return;
+	}
+
+	init_task_work(&work->cb, nksu_path_work_fn);
+	ret = task_work_add(task, &work->cb, TWA_RESUME);
+	if (ret) {
+		pr_warn_ratelimited("[hook]: cannot queue path task_work for pid %d: %d\n",
+				    task->pid, ret);
+		kfree(work);
+		module_put(THIS_MODULE);
+	}
+}
+
+void nksu_path_install_task(struct task_struct *task)
+{
+	if (task)
+		nksu_path_queue(task);
+}
+
+void nksu_path_sync_all(void)
+{
+	struct task_struct *task;
+
+	rcu_read_lock();
+	for_each_process(task) {
+		if (task->flags & PF_KTHREAD)
+			continue;
+		if (nksu_profile_has_uid(__kuid_val(task_uid(task))) ||
+		    test_tsk_thread_flag(task, TIF_SYSCALL_TRACEPOINT))
+			nksu_path_queue(task);
+	}
+	rcu_read_unlock();
+}
+
+static void nksu_path_exec(void *data, struct task_struct *task, pid_t old_pid,
+			   struct linux_binprm *bprm)
+{
+	if (nksu_profile_has_uid(__kuid_val(task_uid(task))) ||
+	    test_tsk_thread_flag(task, TIF_SYSCALL_TRACEPOINT))
+		nksu_path_queue(task);
+}
+
+static void nksu_path_fork(void *data, struct task_struct *parent, struct task_struct *child)
+{
+	if (nksu_profile_has_uid(__kuid_val(task_uid(child))) ||
+	    test_tsk_thread_flag(parent, TIF_SYSCALL_TRACEPOINT) ||
+	    test_tsk_thread_flag(child, TIF_SYSCALL_TRACEPOINT))
+		nksu_path_queue(child);
+}
+
+static struct tracepoint *tp_path_exec;
+static struct tracepoint *tp_path_fork;
+
+int nksu_path_init(void)
+{
+	char *page;
+	struct file *file;
+	loff_t pos = 0;
+	ssize_t written;
+	int ret;
+
+	if (REDIRECT_TARGET_LEN > NKSU_PATH_SH_OFF || NKSU_PATH_SH_OFF + SH_PATH_LEN > PAGE_SIZE) {
+		pr_err("[hook]: redirect paths do not fit the staging page\n");
+		return -EINVAL;
+	}
+
+	page = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+	memcpy(page + NKSU_PATH_EXEC_OFF, REDIRECT_TARGET, REDIRECT_TARGET_LEN);
+	memcpy(page + NKSU_PATH_SH_OFF, SH_PATH, SH_PATH_LEN);
+
+	file = shmem_file_setup("[nksu_path]", PAGE_SIZE, 0);
+	if (IS_ERR(file)) {
+		ret = PTR_ERR(file);
+		kfree(page);
+		return ret;
+	}
+
+	written = kernel_write(file, page, PAGE_SIZE, &pos);
+	kfree(page);
+	if (written != (ssize_t)PAGE_SIZE) {
+		pr_err("[hook]: cannot stage redirect page: %zd\n", written);
+		fput(file);
+		return written < 0 ? (int)written : -EIO;
+	}
+
+	/*
+	 * Drop write access before the first mapping.  mmap_region consults
+	 * f_mode when it builds the VMA flags, so this is what keeps the
+	 * page shared, read-only and immune to mprotect(PROT_WRITE).
+	 */
+	file->f_mode &= ~FMODE_WRITE;
+	WRITE_ONCE(nksu_path_file, file);
+
+	tp_path_exec = nksu_find_tracepoint("sched_process_exec");
+	tp_path_fork = nksu_find_tracepoint("sched_process_fork");
+	if (!tp_path_exec || !tp_path_fork) {
+		pr_err("[hook]: scheduler tracepoints not found\n");
+		ret = -ENOENT;
+		goto err_page;
+	}
+
+	ret = tracepoint_probe_register(tp_path_exec, nksu_path_exec, NULL);
+	if (ret) {
+		pr_err("[hook]: register path exec probe failed: %d\n", ret);
+		goto err_page;
+	}
+
+	ret = tracepoint_probe_register(tp_path_fork, nksu_path_fork, NULL);
+	if (ret) {
+		pr_err("[hook]: register path fork probe failed: %d\n", ret);
+		tracepoint_probe_unregister(tp_path_exec, nksu_path_exec, NULL);
+		goto err_page;
+	}
+
+	smp_store_release(&nksu_path_ready, true);
+
+	pr_info("[hook]: staged su redirect paths in a dedicated shmem page\n");
+	return 0;
+
+err_page:
+	smp_store_release(&nksu_path_ready, false);
+	tracepoint_synchronize_unregister();
+	tp_path_exec = NULL;
+	tp_path_fork = NULL;
+	WRITE_ONCE(nksu_path_file, NULL);
+	fput(file);
+	return ret;
+}
+
+void nksu_path_exit(void)
+{
+	struct file *file;
+
+	smp_store_release(&nksu_path_ready, false);
+
+	if (tp_path_exec)
+		tracepoint_probe_unregister(tp_path_exec, nksu_path_exec, NULL);
+	if (tp_path_fork)
+		tracepoint_probe_unregister(tp_path_fork, nksu_path_fork, NULL);
+	tp_path_exec = NULL;
+	tp_path_fork = NULL;
+	tracepoint_synchronize_unregister();
+
+	file = READ_ONCE(nksu_path_file);
+	WRITE_ONCE(nksu_path_file, NULL);
+	if (file)
+		fput(file);
+}
+
 static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_index,
-				       const char *target, size_t target_len, bool require_target)
+				       size_t target_off, bool require_target, bool *map_missing)
 {
 	char buf[SU_PATH_LEN];
 	const char __user *upath;
-	unsigned long sp;
+	unsigned long base;
 	ssize_t ulen;
 
+	*map_missing = false;
 	if (unlikely(!current->mm))
 		return 0;
 
@@ -108,7 +410,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
 		return 0;
 #endif
 
-	if (unlikely(!target || !target_len || target_len > PAGE_SIZE))
+	if (unlikely(target_off >= PAGE_SIZE))
 		return 0;
 
 	upath = (const char __user *)regs->regs[arg_index];
@@ -137,16 +439,41 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
 	if (require_target && !is_daemon_ready())
 		return 0;
 
-	sp = user_stack_pointer(regs);
-	if (unlikely(!sp))
+	if (unlikely(!smp_load_acquire(&nksu_path_ready))) {
+		*map_missing = true;
+		pr_err_ratelimited("[hook]: su redirect paths are not staged\n");
 		return 0;
+	}
 
-	return push_str(sp, target, target_len);
+	base = nksu_path_user_addr(current->mm, true);
+	if (unlikely(!base)) {
+		*map_missing = true;
+		pr_warn_ratelimited("[hook]: pid %d has no su redirect mapping\n", current->pid);
+		return 0;
+	}
+
+	return base + target_off;
+}
+
+/*
+ * The hook runs from a tracepoint, so there is no way to return an errno from
+ * the handler itself.  Point the syscall at an unmapped address instead: the
+ * real syscall then fails with -EFAULT.  This is deliberate -- if an exec of
+ * su matched but its redirect page is missing, running the original su would
+ * silently bypass NekoSU's policy and hide the internal failure.
+ */
+static void fail_redirect(struct pt_regs *regs, unsigned int arg_index)
+{
+	pr_err_ratelimited("[hook]: refusing su exec without redirect mapping (pid %d)\n",
+			   current->pid);
+	regs->regs[arg_index] = ~0UL;
 }
 
 long hook_path_at(struct pt_regs *regs)
 {
-	unsigned long new_uaddr = try_redirect_path(regs, 1, SH_PATH, SH_PATH_LEN, false);
+	bool map_missing;
+	unsigned long new_uaddr = try_redirect_path(regs, 1, NKSU_PATH_SH_OFF, false, &map_missing);
+
 	if (new_uaddr > 0) {
 		regs->regs[1] = new_uaddr;
 	}
@@ -155,8 +482,14 @@ long hook_path_at(struct pt_regs *regs)
 
 long hook__NR_execve(struct pt_regs *regs)
 {
+	bool map_missing;
 	unsigned long new_uaddr =
-		try_redirect_path(regs, 0, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
+		try_redirect_path(regs, 0, NKSU_PATH_EXEC_OFF, true, &map_missing);
+
+	if (unlikely(map_missing)) {
+		fail_redirect(regs, 0);
+		return 0;
+	}
 	if (new_uaddr > 0) {
 		regs->regs[0] = new_uaddr;
 		privilege_escalate_from_profile(NULL);
@@ -166,8 +499,14 @@ long hook__NR_execve(struct pt_regs *regs)
 
 long hook__NR_execveat(struct pt_regs *regs)
 {
+	bool map_missing;
 	unsigned long new_uaddr =
-		try_redirect_path(regs, 1, REDIRECT_TARGET, REDIRECT_TARGET_LEN, true);
+		try_redirect_path(regs, 1, NKSU_PATH_EXEC_OFF, true, &map_missing);
+
+	if (unlikely(map_missing)) {
+		fail_redirect(regs, 1);
+		return 0;
+	}
 	if (new_uaddr > 0) {
 		regs->regs[1] = new_uaddr;
 		privilege_escalate_from_profile(NULL);
@@ -314,42 +653,17 @@ static void probe_sched_fork(void *data, struct task_struct *parent, struct task
 	set_tsk_thread_flag(child, TIF_SYSCALL_TRACEPOINT);
 }
 
-struct tp_find_ctx {
-	const char *name;
-	struct tracepoint **out;
-};
-
-static void tp_find_cb(struct tracepoint *tp, void *priv)
-{
-	struct tp_find_ctx *ctx = priv;
-
-	if (*ctx->out)
-		return;
-	if (strcmp(tp->name, ctx->name) == 0)
-		*ctx->out = tp;
-}
-
-/* walk the kernel tracepoint table to find one by name */
-static struct tracepoint *find_tracepoint(const char *name)
-{
-	struct tracepoint *result = NULL;
-	struct tp_find_ctx ctx = { .name = name, .out = &result };
-
-	for_each_kernel_tracepoint(tp_find_cb, &ctx);
-	return result;
-}
-
 int load_tracepoint_hook(void)
 {
 	int ret;
 
-	tp_sys_enter = find_tracepoint("sys_enter");
+	tp_sys_enter = nksu_find_tracepoint("sys_enter");
 	if (!tp_sys_enter) {
 		pr_err("cannot find sys_enter tracepoint\n");
 		return -ENOENT;
 	}
 
-	tp_sched_fork = find_tracepoint("sched_process_fork");
+	tp_sched_fork = nksu_find_tracepoint("sched_process_fork");
 	if (!tp_sched_fork) {
 		pr_err("cannot find sched_process_fork tracepoint\n");
 		return -ENOENT;
@@ -385,3 +699,7 @@ void unload_tracepoint_hook(void)
 }
 
 #endif /* !CONFIG_NKSU_SYSCALL */
+
+#if defined(__clang__)
+#pragma clang attribute pop
+#endif

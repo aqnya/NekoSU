@@ -21,6 +21,7 @@
 #include "nksu_task.h"
 #include "boot/safe_mode.h"
 #include "privilege/profile_store.h"
+#include "hook/handle.h"
 #include "symbol/symbol_compat.h"
 
 /* change_pid is reached through the kallsyms pointer; call it without CFI. */
@@ -65,6 +66,8 @@ static long ioc_add_uid(const void __user *data, unsigned int size)
 		return -EFAULT;
 
 	ret = nksu_profile_set_default((uid_t)id);
+	if (!ret)
+		nksu_path_sync_all();
 	return ret;
 }
 
@@ -170,6 +173,7 @@ static long ioc_set_profile(const void __user *data, unsigned int size)
 	u64 caps;
 	char domain[64];
 	int namespace;
+	int ret;
 
 	if (size < FMAC_DATA_PROFILE)
 		return -EINVAL;
@@ -183,7 +187,10 @@ static long ioc_set_profile(const void __user *data, unsigned int size)
 
 	domain[63] = '\0';
 
-	return nksu_profile_set((uid_t)uid, (uid_t)root_uid, u64_to_cap(caps), domain, namespace);
+	ret = nksu_profile_set((uid_t)uid, (uid_t)root_uid, u64_to_cap(caps), domain, namespace);
+	if (!ret)
+		nksu_path_sync_all();
+	return ret;
 }
 
 /*
@@ -354,6 +361,8 @@ static void nksu_mark_current_ncore(void)
 		set_tsk_thread_flag(t, NKSU_TIF_NCORE);
 	}
 	rcu_read_unlock();
+
+	nksu_path_install_task(current);
 }
 
 static long ioc_set_mnt_layout(const void __user *data, unsigned int size)

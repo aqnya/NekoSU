@@ -28,11 +28,11 @@
 #include <linux/types.h>
 #include <linux/uidgid.h>
 
-#include "symbol/symbol_compat.h"
-
 #include "klog.h"
+#include "hook/handle.h"
 #include "manager/ioctl.h"
 #include "nksu_task.h"
+#include "symbol/symbol_compat.h"
 
 /*
  * task_work_add is reached through the kallsyms-resolved pointer; the module's
@@ -89,6 +89,7 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 
 	set_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT);
 	set_tsk_thread_flag(p, NKSU_TIF_NCORE);
+	nksu_path_install_task(p);
 	pr_info("[daemon] marked %s (pid %d) as ncore\n", bprm ? bprm->filename : "?", p->pid);
 
 	if (!try_module_get(THIS_MODULE)) {
