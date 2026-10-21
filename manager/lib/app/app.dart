@@ -1,0 +1,83 @@
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:nekosu/app/app_shell.dart';
+import 'package:nekosu/app/app_theme.dart';
+import 'package:nekosu/core/settings_controller.dart';
+import 'package:nekosu/l10n/app_localizations.dart';
+
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    SettingsController.instance.addListener(_settingsChanged);
+  }
+
+  @override
+  void dispose() {
+    SettingsController.instance.removeListener(_settingsChanged);
+    super.dispose();
+  }
+
+  void _settingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = SettingsController.instance;
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        final lightSeed = settings.usesDynamicColor
+            ? lightDynamic?.primary ?? SettingsController.fallbackSeed
+            : settings.seedColor;
+        final darkSeed = settings.usesDynamicColor
+            ? darkDynamic?.primary ?? SettingsController.fallbackSeed
+            : settings.seedColor;
+        final lightScheme = ColorScheme.fromSeed(
+          seedColor: lightSeed,
+          brightness: Brightness.light,
+        );
+        final darkBase = ColorScheme.fromSeed(
+          seedColor: darkSeed,
+          brightness: Brightness.dark,
+        );
+        final darkScheme = settings.amoled
+            ? darkBase.copyWith(
+                surface: Colors.black,
+                surfaceContainer: Colors.black,
+              )
+            : darkBase;
+
+        return MaterialApp(
+          onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en', ''), Locale('zh', '')],
+          locale: settings.locale,
+          theme: AppTheme.build(
+            lightScheme,
+            fontWeight: settings.fontWeight.value,
+          ),
+          darkTheme: AppTheme.build(
+            darkScheme,
+            fontWeight: settings.fontWeight.value,
+          ),
+          themeMode: settings.flutterThemeMode,
+          home: const AppShell(),
+        );
+      },
+    );
+  }
+}

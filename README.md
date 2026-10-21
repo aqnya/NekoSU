@@ -23,7 +23,7 @@
 | Path | Description |
 | :--- | :--- |
 | `kernel/` | `nksu.ko`: root enforcement, SELinux, module mounting and manager authentication. |
-| `manager/` | Android manager app built with Kotlin and Jetpack Compose. |
+| `manager/` | Flutter manager app, with the Android host and native bridges under `manager/android/`. |
 | `neko/` | Rust runtime: `ncore` daemon plus the `bootpatcher` `vendor_boot` patcher. |
 | `uapi/` | Shared kernel/userspace ABI and version header. |
 
@@ -32,15 +32,20 @@
 | Requirement | Details |
 | :--- | :--- |
 | **Device** | Android 12+ (API 31), `arm64-v8a`, unlocked bootloader |
-| **Build** | JDK 25, Android NDK r29, Rust stable with `aarch64-linux-android`, `cargo-ndk` |
+| **Build** | Flutter 3.47.7, JDK 25, Android NDK r29, Rust stable with `aarch64-linux-android`, `cargo-ndk` |
 
 Set `ANDROID_NDK_HOME` to the NDK r29 directory before building.
 
 ## Build
 
 ```sh
-./gradlew assembleRelease
+cd manager
+flutter pub get
+flutter build apk --release --target-platform android-arm64
 ```
+
+The generated APK is written to
+`manager/build/app/outputs/flutter-apk/app-release.apk`.
 
 ### Version channels
 
@@ -50,17 +55,17 @@ Set `ANDROID_NDK_HOME` to the NDK r29 directory before building.
 | `beta` | Tag such as `v1.0.6-beta.1` | Tag version |
 | `release` | Tag matching `uapi/version.h`, such as `v1.0.6` | Tag version |
 
-Local builds default to `canary`; select another channel with:
+Local builds default to `canary`. Select another channel with:
 
 ```sh
-./gradlew assembleRelease -PversionChannel=release
+VERSION_CHANNEL=release flutter build apk --release --target-platform android-arm64
 ```
 
 ## Credits
 
 - [KernelSU](https://github.com/tiann/KernelSU) — SELinux engine, LSM hooks, `init.rc` injection,
   SELinux hiding and the WebUI `window.ksu` interface.
-- BusyBox, Material 3, Jetpack Compose and the open-source libraries listed in
+- BusyBox, Material 3, Flutter and the open-source libraries listed in
   **About → Open source** inside the app.
 
 ## License

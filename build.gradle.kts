@@ -9,9 +9,9 @@ plugins {
  * Whole-repository formatting:
  *   ./gradlew formatAll
  *
- * Kotlin is handled by the app's ktlint plugin, Rust by rustfmt and the
- * kernel/uapi C sources by clang-format.  Android XML is deliberately left
- * out: there is no lossless, project-independent XML formatter in this setup.
+ * Rust is handled by rustfmt and the kernel/uapi C sources by clang-format.
+ * Android XML is deliberately left out: there is no lossless,
+ * project-independent XML formatter in this setup.
  */
 tasks.register("formatRust") {
     group = "formatting"
@@ -26,6 +26,8 @@ tasks.register("formatRust") {
                 "ncore",
                 "--package",
                 "bootpatcher",
+                "--package",
+                "ffi",
                 "--package",
                 "jni",
             )
@@ -58,6 +60,6 @@ tasks.register("formatKernel") {
 
 tasks.register("formatAll") {
     group = "formatting"
-    description = "Format Kotlin, Rust, C and C++ sources"
-    dependsOn(":app:ktlintFormat", "formatRust", "formatKernel")
+    description = "Format Rust, C and C++ sources"
+    dependsOn("formatRust", "formatKernel")
 }

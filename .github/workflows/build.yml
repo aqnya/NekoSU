@@ -26,7 +26,7 @@ on:
       - ".github/workflows/ko.yml"
       - "kernel/**"
       - "uapi/**"
-      - "manager/app/**"
+      - "manager/**"
       - "neko/**"
       - "*.gradle.kts"
       - "gradle.properties"
@@ -41,7 +41,7 @@ on:
       - ".github/workflows/ko.yml"
       - "kernel/**"
       - "uapi/**"
-      - "manager/app/**"
+      - "manager/**"
       - "neko/**"
       - "*.gradle.kts"
       - "gradle.properties"
@@ -59,9 +59,9 @@ permissions:
   actions: read
 
 jobs:
-  # The KO matrix runs in parallel, one Docker image per KMI.  Its modules are
-  # downloaded into the manager's assets below, so Gradle still packages the
-  # files produced by this run.
+  # The KO matrix runs in parallel, one Docker image per KMI. Its modules are
+  # downloaded into the Flutter manager's Android assets below, so the APK
+  # always packages the files produced by this run.
   ko:
     uses: ./.github/workflows/ko.yml
     with:
@@ -74,7 +74,7 @@ jobs:
       NDK_VERSION: r29
       ANDROID_NDK_API_LEVEL: "28"
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      KO_OUTPUT_DIR: manager/app/src/main/assets/ko
+      KO_OUTPUT_DIR: manager/android/app/src/main/assets/ko
 
     steps:
     - uses: actions/checkout@v7
@@ -109,6 +109,19 @@ jobs:
         java-version: '25'
         distribution: 'temurin'
         cache: gradle
+
+    - name: Cache Flutter Pub
+      uses: actions/cache@v6
+      with:
+        path: ~/.pub-cache
+        key: flutter-pub-${{ hashFiles('manager/pubspec.lock') }}
+        restore-keys: flutter-pub-
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.47.7'
+        cache: true
 
     - name: Cache Android NDK
       id: ndk-cache
@@ -147,7 +160,7 @@ jobs:
 
     - name: List packaged assets
       run: |
-        ls -la manager/app/src/main/assets/
+        ls -la manager/android/app/src/main/assets/
         ls -la "$KO_OUTPUT_DIR"
 
     - name: Decode Release Keystore
@@ -156,7 +169,7 @@ jobs:
       run: |
         set -euo pipefail
         if [ -z "${KEYSTORE_BASE64:-}" ]; then
-          echo "release keystore unavailable; this build will be unsigned"
+          echo "release keystore unavailable; this build will use the debug signing key"
           rm -f release.keystore
           exit 0
         fi
@@ -202,7 +215,7 @@ jobs:
         echo "version channel: $channel"
         echo "version name: ${version_name:-generated}"
 
-    - name: Build with Gradle
+    - name: Build manager APK
       env:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -211,18 +224,16 @@ jobs:
         VERSION_NAME: ${{ steps.version.outputs.version_name }}
       run: |
         set -euo pipefail
-        args=(-PversionChannel="$VERSION_CHANNEL")
-        if [ -n "$VERSION_NAME" ]; then
-          args+=("-PversionNameOverride=$VERSION_NAME")
-        fi
         if [ "$VERSION_CHANNEL" != "canary" ]; then
-          args+=("-PrequireReleaseSigning=true")
+          export REQUIRE_RELEASE_SIGNING=true
         fi
-        ./gradlew assembleRelease --no-daemon "${args[@]}"
+        cd manager
+        flutter pub get
+        flutter build apk --release --target-platform android-arm64
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v7
       with:
         name: release-${{ steps.version.outputs.channel }}
-        path: manager/app/build/outputs/apk/release/*.apk
+        path: manager/build/app/outputs/flutter-apk/app-release.apk
         archive: false

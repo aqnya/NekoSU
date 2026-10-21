@@ -2,6 +2,7 @@
 members = [
     "ncore",
     "bootpatcher",
+    "ffi",
     "jni",
     "third_party/android-bootimg",
     "third_party/ksu_props/crates/prop-rs",
@@ -10,7 +11,7 @@ members = [
 default-members = [
     "ncore",
     "bootpatcher",
-    "jni",
+    "ffi",
 ]
 resolver = "3"
 
