@@ -44,6 +44,24 @@ typedef _StringArgDart = int Function(
   Pointer<Uint8> buffer,
   int capacity,
 );
+typedef _InstallProgressNative = Void Function(
+  Pointer<Uint8> text,
+  Size length,
+);
+typedef _DirectInstallNative = IntPtr Function(
+  Pointer<Uint8> ko,
+  Size koLength,
+  Pointer<NativeFunction<_InstallProgressNative>> progress,
+  Pointer<Uint8> buffer,
+  Size capacity,
+);
+typedef _DirectInstallDart = int Function(
+  Pointer<Uint8> ko,
+  int koLength,
+  Pointer<NativeFunction<_InstallProgressNative>> progress,
+  Pointer<Uint8> buffer,
+  int capacity,
+);
 typedef _ModuleControlNative = IntPtr Function(
   Pointer<Uint8> id,
   Size idLength,
@@ -104,8 +122,8 @@ class NcoreFfi {
   static final _StringArgDart? _webUiExec = _lookupStringArg(
     'ncore_webui_exec',
   );
-  static final _StringArgDart? _directInstall = _lookupStringArg(
-    'ncore_direct_install',
+  static final _DirectInstallDart? _directInstall = _lookupDirectInstall(
+    'ncore_direct_install_stream',
   );
 
   static final bool available = _ctl != null;
@@ -215,6 +233,18 @@ class NcoreFfi {
     }
   }
 
+  static _DirectInstallDart? _lookupDirectInstall(String name) {
+    final library = _library;
+    if (library == null) return null;
+    try {
+      return library.lookupFunction<_DirectInstallNative, _DirectInstallDart>(
+        name,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static _ModuleControlDart? _lookupModuleControl(String name) {
     final library = _library;
     if (library == null) return null;
@@ -307,8 +337,42 @@ class NcoreFfi {
       _readModuleStringArg(_webUiExec, command, retry: false);
 
   /// Reads the active vendor_boot, patches it with [koPath] and writes it back.
-  static String? directInstall(String koPath) =>
-      _readModuleStringArg(_directInstall, koPath, retry: false);
+  ///
+  /// [onProgress] is called from the calling isolate with each command output
+  /// line as it arrives.
+  static String? directInstall(
+    String koPath, {
+    void Function(String text)? onProgress,
+  }) {
+    final function = _directInstall;
+    if (function == null) return null;
+    final bytes = utf8.encode(koPath);
+    final argument = calloc<Uint8>(bytes.isEmpty ? 1 : bytes.length);
+    NativeCallable<_InstallProgressNative>? callable;
+    try {
+      if (bytes.isNotEmpty) {
+        argument.asTypedList(bytes.length).setAll(0, bytes);
+      }
+      if (onProgress != null) {
+        callable = NativeCallable<_InstallProgressNative>.isolateLocal((
+          text,
+          length,
+        ) {
+          onProgress(utf8.decode(text.asTypedList(length)));
+        });
+      }
+      final Pointer<NativeFunction<_InstallProgressNative>> progress =
+          callable?.nativeFunction ?? nullptr;
+      return _readModuleString(
+        (buffer, capacity) =>
+            function(argument, bytes.length, progress, buffer, capacity),
+        retry: false,
+      );
+    } finally {
+      callable?.close();
+      calloc.free(argument);
+    }
+  }
 
   static bool setProfile({
     required int uid,

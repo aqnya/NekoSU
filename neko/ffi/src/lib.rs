@@ -2,13 +2,16 @@
 
 use std::ffi::CStr;
 use std::fs;
+use std::io::{BufRead, BufReader, Read};
 use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::ptr;
 use std::slice;
 use std::sync::Once;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::mpsc;
+use std::thread;
 
 const FMAC_MAX_DATA: usize = 64 * 1024;
 const FMAC_STACK_DATA: usize = 264;
@@ -817,24 +820,63 @@ fn install_error(message: String, buffer: *mut u8, capacity: usize) -> isize {
     copy_module_result(module_result(-1, message), buffer, capacity)
 }
 
-fn append_output(output: &mut String, extra: &str) {
-    if extra.is_empty() {
-        return;
+type ProgressFn = extern "C" fn(*const u8, usize);
+
+fn emit(progress: Option<ProgressFn>, text: &str) {
+    if let Some(callback) = progress {
+        callback(text.as_ptr(), text.len());
     }
-    if !output.is_empty() && !output.ends_with('\n') {
-        output.push('\n');
-    }
-    output.push_str(extra);
 }
 
-fn install_fail(mut output: String, message: &str) -> (i32, String) {
-    if !output.is_empty() && !output.ends_with('\n') {
-        output.push('\n');
+fn read_lines<R: Read>(stream: Option<R>, sender: mpsc::Sender<String>) {
+    let Some(stream) = stream else {
+        return;
+    };
+    let reader = BufReader::new(stream);
+    for line in reader.lines().map_while(Result::ok) {
+        if sender.send(format!("{line}\n")).is_err() {
+            break;
+        }
     }
-    output.push_str("ERROR: ");
-    output.push_str(message);
-    output.push('\n');
-    (-1, output)
+}
+
+/*
+ * Run a command and forward each output line as it arrives.  The lines are
+ * collected by helper threads and emitted from this thread only: the Dart
+ * progress callback is isolate-local and must not be invoked concurrently
+ * from arbitrary native threads.
+ */
+fn command_streaming(mut command: Command, progress: Option<ProgressFn>) -> std::io::Result<i32> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let (sender, receiver) = mpsc::channel::<String>();
+    let stdout_sender = sender.clone();
+    let stdout_thread = thread::spawn(move || read_lines(stdout, stdout_sender));
+    let stderr_thread = thread::spawn(move || read_lines(stderr, sender));
+    for line in receiver {
+        emit(progress, &line);
+    }
+    let _ = stdout_thread.join();
+    let _ = stderr_thread.join();
+    Ok(child.wait()?.code().unwrap_or(-1))
+}
+
+fn root_command_streaming(
+    command_text: &str,
+    progress: Option<ProgressFn>,
+) -> std::io::Result<i32> {
+    let su = if Path::new("/system/bin/su").is_file() {
+        "/system/bin/su"
+    } else {
+        "su"
+    };
+    let command =
+        format!("PATH=/sbin:/system/sbin:/system/bin:/system/xbin; export PATH; {command_text}");
+    let mut process = Command::new(su);
+    process.args(["-c", command.as_str()]);
+    command_streaming(process, progress)
 }
 
 fn resolve_vendor_boot(slot: &str) -> Option<String> {
@@ -871,34 +913,52 @@ fn run_direct_install(
     ko: &str,
     source: &Path,
     patched: &Path,
-) -> (i32, String) {
+    progress: Option<ProgressFn>,
+) -> i32 {
     let source_text = source.to_string_lossy().into_owned();
-    let mut output =
-        format!("[nekosu] vendor_boot: {partition}\n[nekosu] reading the active vendor_boot...\n");
+    emit(
+        progress,
+        &format!("[nekosu] vendor_boot: {partition}\n[nekosu] reading the active vendor_boot...\n"),
+    );
 
-    let (code, text) = root_command(&format!(
-        "/system/bin/dd if={} of={} bs=4M 2>&1",
+    let read_command = format!(
+        "/system/bin/dd if={} of={} bs=4M",
         shell_quote(partition),
         shell_quote(&source_text),
-    ));
-    append_output(&mut output, &text);
-    let source_size = fs::metadata(source).map(|meta| meta.len()).unwrap_or(0);
-    if code != 0 || source_size == 0 {
-        return install_fail(output, "failed to read vendor_boot");
-    }
-
-    output.push_str("[nekosu] patching vendor_boot image...\n");
-    let patch = match Command::new(patcher).arg("-p").arg(source).arg(ko).output() {
-        Ok(result) => result,
+    );
+    let code = match root_command_streaming(&read_command, progress) {
+        Ok(code) => code,
         Err(error) => {
-            return install_fail(output, &format!("failed to run libbootpatcher: {error}"));
+            emit(
+                progress,
+                &format!("ERROR: failed to start the root shell: {error}\n"),
+            );
+            return -1;
         }
     };
-    append_output(&mut output, &String::from_utf8_lossy(&patch.stdout));
-    append_output(&mut output, &String::from_utf8_lossy(&patch.stderr));
+    let source_size = fs::metadata(source).map(|meta| meta.len()).unwrap_or(0);
+    if code != 0 || source_size == 0 {
+        emit(progress, "ERROR: failed to read vendor_boot\n");
+        return -1;
+    }
+
+    emit(progress, "[nekosu] patching vendor_boot image...\n");
+    let mut patch_command = Command::new(patcher);
+    patch_command.arg("-p").arg(source).arg(ko);
+    let code = match command_streaming(patch_command, progress) {
+        Ok(code) => code,
+        Err(error) => {
+            emit(
+                progress,
+                &format!("ERROR: failed to run libbootpatcher: {error}\n"),
+            );
+            return -1;
+        }
+    };
     let patched_size = fs::metadata(patched).map(|meta| meta.len()).unwrap_or(0);
-    if patch.status.code().unwrap_or(-1) != 0 || patched_size == 0 {
-        return install_fail(output, "patched image was not produced");
+    if code != 0 || patched_size == 0 {
+        emit(progress, "ERROR: patched image was not produced\n");
+        return -1;
     }
 
     let (size_code, size_text) = root_command(&format!(
@@ -909,49 +969,72 @@ fn run_direct_install(
         && let Ok(capacity) = size_text.trim().parse::<u64>()
         && patched_size > capacity
     {
-        return install_fail(
-            output,
+        emit(
+            progress,
             &format!(
-                "patched image ({patched_size} bytes) exceeds partition capacity ({capacity} bytes)"
+                "ERROR: patched image ({patched_size} bytes) exceeds partition capacity ({capacity} bytes)\n"
             ),
         );
+        return -1;
     }
 
-    output.push_str("[nekosu] writing the patched image...\n");
-    let (code, text) = root_command(&format!(
-        "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
+    emit(progress, "[nekosu] writing the patched image...\n");
+    let write_command = format!(
+        "/system/bin/dd if={} of={} bs=4M conv=fsync",
         shell_quote(&patched.to_string_lossy()),
         shell_quote(partition),
-    ));
-    append_output(&mut output, &text);
+    );
+    let code = match root_command_streaming(&write_command, progress) {
+        Ok(code) => code,
+        Err(error) => {
+            emit(
+                progress,
+                &format!("ERROR: failed to start the root shell: {error}\n"),
+            );
+            return -1;
+        }
+    };
     if code != 0 {
-        output.push_str("[nekosu] write failed, restoring the original image...\n");
-        let (restore_code, restore_text) = root_command(&format!(
-            "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
+        emit(
+            progress,
+            "[nekosu] write failed, restoring the original image...\n",
+        );
+        let restore_command = format!(
+            "/system/bin/dd if={} of={} bs=4M conv=fsync",
             shell_quote(&source_text),
             shell_quote(partition),
-        ));
-        append_output(&mut output, &restore_text);
-        if restore_code != 0 {
-            return install_fail(
-                output,
-                "failed to flash vendor_boot and the original image could not be restored",
-            );
-        }
-        return install_fail(
-            output,
-            "failed to flash vendor_boot; the original image was restored",
         );
+        match root_command_streaming(&restore_command, progress) {
+            Ok(0) => emit(
+                progress,
+                "ERROR: failed to flash vendor_boot; the original image was restored\n",
+            ),
+            Ok(_) => emit(
+                progress,
+                "ERROR: failed to flash vendor_boot and the original image could not be restored\n",
+            ),
+            Err(error) => emit(
+                progress,
+                &format!(
+                    "ERROR: failed to flash vendor_boot and the restore shell failed: {error}\n"
+                ),
+            ),
+        }
+        return -1;
     }
 
-    output.push_str("[nekosu] direct install complete; reboot to take effect\n");
-    (0, output)
+    emit(
+        progress,
+        "[nekosu] direct install complete; reboot to take effect\n",
+    );
+    0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ncore_direct_install(
+pub extern "C" fn ncore_direct_install_stream(
     ko: *const u8,
     ko_length: usize,
+    progress: Option<ProgressFn>,
     buffer: *mut u8,
     capacity: usize,
 ) -> isize {
@@ -1004,8 +1087,8 @@ pub extern "C" fn ncore_direct_install(
         );
     }
 
-    let (code, output) = run_direct_install(&partition, &patcher, &ko, &source, &patched);
+    let code = run_direct_install(&partition, &patcher, &ko, &source, &patched, progress);
     let _ = fs::remove_file(&source);
     let _ = fs::remove_file(&patched);
-    copy_module_result(module_result(code, output), buffer, capacity)
+    copy_module_result(module_result(code, String::new()), buffer, capacity)
 }

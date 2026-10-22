@@ -398,13 +398,33 @@ class _InstallPageState extends State<InstallPage> {
       }
       final koFile = ko;
 
-      final result = ModuleCommandResult.fromEnvelope(
-        await Isolate.run(() => NcoreFfi.directInstall(koFile)),
-      );
-      if (result.output.isNotEmpty) {
-        yield OutputChunk(result.output);
+      final port = ReceivePort();
+      final sendPort = port.sendPort;
+      final resultFuture = Isolate.run(() {
+        try {
+          return NcoreFfi.directInstall(
+            koFile,
+            onProgress: (text) => sendPort.send(text),
+          );
+        } finally {
+          sendPort.send(null);
+        }
+      });
+      try {
+        await for (final message in port) {
+          if (message == null) break;
+          if (message is String && message.isNotEmpty) {
+            yield OutputChunk(message);
+          }
+        }
+        final result = ModuleCommandResult.fromEnvelope(await resultFuture);
+        if (result.output.isNotEmpty) {
+          yield OutputChunk(result.output);
+        }
+        yield OutputFinished(result.code);
+      } finally {
+        port.close();
       }
-      yield OutputFinished(result.code);
     } catch (error) {
       yield OutputChunk('ERROR: $error\n');
       yield const OutputFinished(-1);
