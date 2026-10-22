@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/method_channel_shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 enum AppThemeMode { system, light, dark }
 
@@ -40,7 +42,7 @@ class SettingsController extends ChangeNotifier {
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
 
-  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+  SharedPreferences? _preferences;
 
   AppThemeMode themeMode = AppThemeMode.system;
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
@@ -69,21 +71,21 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      themeMode = _themeModeFromIndex(await _preferences.getInt(_themeModeKey));
-      themeAccent = _accentFromIndex(
-        await _preferences.getInt(_themeAccentKey),
-      );
-      fontWeight = _fontWeightFromIndex(
-        await _preferences.getInt(_fontWeightKey),
-      );
-      amoled = await _preferences.getBool(_amoledKey) == true;
-      final savedNavBarStyle = await _preferences.getString(_navBarStyleKey);
+      _useLegacyStore();
+      final preferences = await SharedPreferences.getInstance();
+      _preferences = preferences;
+
+      themeMode = _themeModeFromIndex(preferences.getInt(_themeModeKey));
+      themeAccent = _accentFromIndex(preferences.getInt(_themeAccentKey));
+      fontWeight = _fontWeightFromIndex(preferences.getInt(_fontWeightKey));
+      amoled = preferences.getBool(_amoledKey) == true;
+      final savedNavBarStyle = preferences.getString(_navBarStyleKey);
       navBarStyle = NavBarStyle.values.firstWhere(
         (style) => style.name == savedNavBarStyle,
         orElse: () => NavBarStyle.standard,
       );
-      displayMode = await _preferences.getString(_displayModeKey);
-      final savedLanguage = await _preferences.getString(_languageKey);
+      displayMode = preferences.getString(_displayModeKey);
+      final savedLanguage = preferences.getString(_languageKey);
       if (savedLanguage == 'en' || savedLanguage == 'zh') {
         language = savedLanguage!;
       }
@@ -95,6 +97,18 @@ class SettingsController extends ChangeNotifier {
     } catch (error) {
       debugPrint('Unable to load settings: $error');
     }
+  }
+
+  /// The Android plugin registers a Pigeon-backed store.  Some builds mix a
+  /// newer Dart Pigeon API with an older native plugin, which fails at runtime;
+  /// force the method-channel store that the legacy native plugin still serves.
+  static void _useLegacyStore() {
+    if (SharedPreferencesStorePlatform.instance
+        is MethodChannelSharedPreferencesStore) {
+      return;
+    }
+    SharedPreferencesStorePlatform.instance =
+        MethodChannelSharedPreferencesStore();
   }
 
   Future<void> setThemeMode(AppThemeMode value) async {
@@ -148,13 +162,16 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> _save(String key, Object value) async {
     try {
+      _useLegacyStore();
+      final preferences = _preferences ??=
+          await SharedPreferences.getInstance();
       switch (value) {
         case final bool typed:
-          await _preferences.setBool(key, typed);
+          await preferences.setBool(key, typed);
         case final int typed:
-          await _preferences.setInt(key, typed);
+          await preferences.setInt(key, typed);
         case final String typed:
-          await _preferences.setString(key, typed);
+          await preferences.setString(key, typed);
         default:
           throw ArgumentError.value(value, 'value', 'Unsupported setting type');
       }
