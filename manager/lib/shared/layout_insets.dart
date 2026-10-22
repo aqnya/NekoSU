@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-const floatingNavBarHeight = 68.0;
-const floatingNavBarBottomGap = 16.0;
+const floatingNavBarHeight = 64.0;
+const floatingNavBarVerticalPadding = 16.0;
 const floatingNavBarContentGap = 32.0;
 
 class AppNavBarScope extends InheritedWidget {
@@ -26,6 +26,6 @@ double appNavBarClearance(BuildContext context) {
   if (!floating) return 16;
   return MediaQuery.viewPaddingOf(context).bottom +
       floatingNavBarHeight +
-      floatingNavBarBottomGap +
+      floatingNavBarVerticalPadding * 2 +
       floatingNavBarContentGap;
 }

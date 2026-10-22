@@ -75,6 +75,10 @@ class _MyAppState extends State<MyApp> {
             fontWeight: settings.fontWeight.value,
           ),
           themeMode: settings.flutterThemeMode,
+          builder: (context, child) => Material(
+            type: MaterialType.transparency,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: const AppShell(),
         );
       },

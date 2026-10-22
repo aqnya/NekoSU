@@ -65,7 +65,7 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         bottomNavigationBar: settings.floatingNavBar
-            ? ModernCapsuleNavBar(
+            ? GlassFloatingNavBar(
                 selectedIndex: _selectedIndex,
                 onTabSelected: _selectTab,
                 tabs: tabs,
