@@ -78,15 +78,17 @@ fn ensure_ctl_fd() -> Option<RawFd> {
     if cached >= 0 {
         return Some(cached);
     }
-    unsafe {
-        libc::prctl(PR_GET_CTL_FD, 0, 0, 0, 0);
-    }
+    let ret = unsafe { libc::prctl(PR_GET_CTL_FD, 0, 0, 0, 0) };
+    let error = std::io::Error::last_os_error();
     let fd = scan_fd("[fmac_ctl]");
     if fd >= 0 {
         CTL_FD.store(fd, Ordering::Relaxed);
         Some(fd)
     } else {
-        log::error!("control fd not found after prctl({PR_GET_CTL_FD})");
+        log::error!(
+            "control fd not found after prctl({PR_GET_CTL_FD}): ret={ret}, error={error}, uid={}",
+            unsafe { libc::getuid() }
+        );
         None
     }
 }
@@ -129,12 +131,16 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
     log::info!("ctl({value})");
     match value {
         1 => {
-            unsafe {
-                libc::prctl(PR_GET_SHM_FD, 0, 0, 0, 0);
-            }
+            let ret = unsafe { libc::prctl(PR_GET_SHM_FD, 0, 0, 0, 0) };
+            let error = std::io::Error::last_os_error();
             let fd = scan_fd("[fmac_shm]");
             if fd >= 0 {
                 DRIVER_FD.store(fd, Ordering::Relaxed);
+            } else {
+                log::error!(
+                    "shared-memory fd not found after prctl({PR_GET_SHM_FD}): ret={ret}, error={error}, uid={}",
+                    unsafe { libc::getuid() }
+                );
             }
         }
         3 => {
