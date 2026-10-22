@@ -105,7 +105,7 @@ class NcoreFfi {
     'ncore_webui_exec',
   );
 
-  static final bool available = _ctl != null && _isGki != null;
+  static final bool available = _ctl != null;
   static final bool profileApiAvailable =
       _setProfile != null &&
       _deleteProfile != null &&
