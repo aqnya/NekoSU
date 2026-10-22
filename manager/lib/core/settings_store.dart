@@ -42,4 +42,15 @@ class SettingsStore {
     // compacting here keeps the file bounded instead of growing forever.
     await box.compact();
   }
+
+  /// Drops keys that no longer belong to the settings model.
+  static Future<void> prune(Set<String> keep) async {
+    final box = _box;
+    if (box == null) return;
+    final stale = box.keys.where((key) => !keep.contains(key)).toList();
+    if (stale.isEmpty) return;
+    await box.deleteAll(stale);
+    await box.flush();
+    await box.compact();
+  }
 }

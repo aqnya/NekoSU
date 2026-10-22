@@ -39,6 +39,17 @@ class SettingsController extends ChangeNotifier {
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
 
+  /// Keys owned by this controller; anything else in the Hive box is stale.
+  static const persistedKeys = <String>{
+    _themeModeKey,
+    _themeAccentKey,
+    _fontWeightKey,
+    _amoledKey,
+    _navBarStyleKey,
+    _languageKey,
+    _displayModeKey,
+  };
+
   AppThemeMode themeMode = AppThemeMode.system;
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
   AppFontWeight fontWeight = AppFontWeight.regular;
@@ -66,6 +77,7 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
+      await SettingsStore.prune(persistedKeys);
       themeMode = _themeModeFromIndex(SettingsStore.read<int>(_themeModeKey));
       themeAccent = _accentFromIndex(SettingsStore.read<int>(_themeAccentKey));
       fontWeight = _fontWeightFromIndex(
