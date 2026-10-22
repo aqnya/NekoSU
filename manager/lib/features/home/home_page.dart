@@ -21,18 +21,47 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   InstallStatus _installStatus = InstallStatus.unknown;
   bool _isGki = false;
 
   @override
   void initState() {
     super.initState();
-    if (!NcoreFfi.available) return;
-    _installStatus = NcoreFfi.isInstalled
+    WidgetsBinding.instance.addObserver(this);
+    _installStatus = _currentInstallStatus();
+    _isGki = NcoreFfi.available && NcoreFfi.isGki;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshStatus();
+    }
+  }
+
+  InstallStatus _currentInstallStatus() {
+    if (!NcoreFfi.available) return InstallStatus.unknown;
+    return NcoreFfi.isInstalled
         ? InstallStatus.installed
         : InstallStatus.notInstalled;
-    _isGki = NcoreFfi.isGki;
+  }
+
+  void _refreshStatus() {
+    if (!mounted) return;
+    final installStatus = _currentInstallStatus();
+    final isGki = NcoreFfi.available && NcoreFfi.isGki;
+    if (installStatus == _installStatus && isGki == _isGki) return;
+    setState(() {
+      _installStatus = installStatus;
+      _isGki = isGki;
+    });
   }
 
   @override
@@ -49,16 +78,7 @@ class _HomePageState extends State<HomePage> {
       context,
     ).push<bool>(MaterialPageRoute(builder: (context) => const InstallPage()));
     if (!mounted) return;
-    setState(() {
-      if (!NcoreFfi.available) {
-        _installStatus = InstallStatus.unknown;
-        return;
-      }
-      _installStatus = NcoreFfi.isInstalled
-          ? InstallStatus.installed
-          : InstallStatus.notInstalled;
-      _isGki = NcoreFfi.isGki;
-    });
+    _refreshStatus();
   }
 }
 

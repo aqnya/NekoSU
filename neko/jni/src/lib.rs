@@ -52,7 +52,6 @@ const PR_GET_CTL_FD: libc::c_int = 203;
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
 
-static DRIVER_FD: AtomicI32 = AtomicI32::new(-1);
 static CTL_FD: AtomicI32 = AtomicI32::new(-1);
 
 fn scan_fd(target: &str) -> RawFd {
@@ -134,24 +133,17 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
             let ret = unsafe { libc::prctl(PR_GET_SHM_FD, 0, 0, 0, 0) };
             let error = std::io::Error::last_os_error();
             let fd = scan_fd("[fmac_shm]");
-            if fd >= 0 {
-                DRIVER_FD.store(fd, Ordering::Relaxed);
-            } else {
+            if fd < 0 {
                 log::error!(
                     "shared-memory fd not found after prctl({PR_GET_SHM_FD}): ret={ret}, error={error}, uid={}",
                     unsafe { libc::getuid() }
                 );
+                return -1;
             }
+            0
         }
-        3 => {
-            ensure_ctl_fd();
-        }
-        _ => return -1,
-    }
-    if DRIVER_FD.load(Ordering::Relaxed) >= 0 {
-        0
-    } else {
-        -1
+        3 => ensure_ctl_fd().map_or(-1, |_| 0),
+        _ => -1,
     }
 }
 

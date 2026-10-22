@@ -234,7 +234,7 @@ class NcoreFfi {
     return _ctl?.call(value) ?? -1;
   }
 
-  static bool get isInstalled => ctl(1) == 0;
+  static bool get isInstalled => ctl(3) == 0;
 
   static bool get isGki {
     _ensureInitialized();
