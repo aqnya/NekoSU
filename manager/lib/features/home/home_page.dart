@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:nekosu/core/ncore_ffi.dart';
-import 'package:nekosu/core/settings_controller.dart';
+import 'package:nekosu/data/install_status.dart';
 import 'package:nekosu/features/about/about_page.dart';
 import 'package:nekosu/features/install/install_page.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
@@ -11,8 +11,6 @@ import 'package:nekosu/shared/layout_insets.dart';
 import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
 import 'package:nekosu/shared/widgets/section_card.dart';
-
-enum InstallStatus { installed, needUpdate, needReboot, notInstalled, unknown }
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,15 +20,15 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
-  InstallStatus _installStatus = InstallStatus.unknown;
-  bool _isGki = false;
+  static const _statusRepository = InstallStatusRepository();
+
+  late InstallationState _installation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _installStatus = _currentInstallStatus();
-    _isGki = NcoreFfi.available && NcoreFfi.isGki;
+    _installation = _loadInstallation();
   }
 
   @override
@@ -46,29 +44,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  InstallStatus _currentInstallStatus() {
-    if (!NcoreFfi.available) return InstallStatus.unknown;
-    return NcoreFfi.isInstalled
-        ? InstallStatus.installed
-        : InstallStatus.notInstalled;
+  void _refreshStatus() {
+    final installation = _loadInstallation();
+    if (!mounted || _installation == installation) return;
+    setState(() => _installation = installation);
   }
 
-  void _refreshStatus() {
-    if (!mounted) return;
-    final installStatus = _currentInstallStatus();
-    final isGki = NcoreFfi.available && NcoreFfi.isGki;
-    if (installStatus == _installStatus && isGki == _isGki) return;
-    setState(() {
-      _installStatus = installStatus;
-      _isGki = isGki;
-    });
+  InstallationState _loadInstallation() {
+    try {
+      return _statusRepository.load();
+    } catch (error) {
+      debugPrint('Unable to refresh NekoSU installation state: $error');
+      return const InstallationState.unknown();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return _HomeScreenContent(
-      installStatus: _installStatus,
-      isGki: _isGki,
+      installation: _installation,
       onInstall: _openInstaller,
     );
   }
@@ -84,13 +78,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 class _HomeScreenContent extends StatelessWidget {
   const _HomeScreenContent({
-    required this.installStatus,
-    required this.isGki,
+    required this.installation,
     required this.onInstall,
   });
 
-  final InstallStatus installStatus;
-  final bool isGki;
+  final InstallationState installation;
   final VoidCallback onInstall;
 
   @override
@@ -113,8 +105,7 @@ class _HomeScreenContent extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _StatusCard(
-                      status: installStatus,
-                      isGki: isGki,
+                      installation: installation,
                       onTap: onInstall,
                     ),
                   ),
@@ -143,14 +134,9 @@ class _HomeScreenContent extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({
-    required this.status,
-    required this.isGki,
-    required this.onTap,
-  });
+  const _StatusCard({required this.installation, required this.onTap});
 
-  final InstallStatus status;
-  final bool isGki;
+  final InstallationState installation;
   final VoidCallback onTap;
 
   @override
@@ -159,31 +145,45 @@ class _StatusCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final l10n = AppLocalizations.of(context)!;
 
-    final isWorking = status == InstallStatus.installed;
-    final isUpdate =
-        status == InstallStatus.needUpdate ||
-        status == InstallStatus.needReboot;
+    final status = installation.status;
+    final isWorking = installation.isRunning;
+    final isUpdate = status == InstallStatus.needUpdate;
 
-    final containerColor = isWorking
+    final containerColor = status == InstallStatus.unknown
+        ? scheme.surfaceContainerHighest
+        : isWorking
         ? scheme.secondaryContainer
         : isUpdate
         ? scheme.tertiaryContainer
         : scheme.errorContainer;
-    final contentColor = isWorking
+    final contentColor = status == InstallStatus.unknown
+        ? scheme.onSurfaceVariant
+        : isWorking
         ? scheme.onSecondaryContainer
         : isUpdate
         ? scheme.onTertiaryContainer
         : scheme.onErrorContainer;
-    final icon = isWorking
+    final icon = status == InstallStatus.unknown
+        ? Icons.help_outline_rounded
+        : isWorking
         ? Icons.check_circle_rounded
         : isUpdate
         ? Icons.system_update_rounded
         : Icons.warning_rounded;
-    final title = isWorking
+    final title = status == InstallStatus.unknown
+        ? l10n.unknownStatus
+        : isWorking
         ? l10n.running
         : isUpdate
         ? l10n.needUpdate
         : l10n.notInstalled;
+    final supportingText = isWorking
+        ? installation.managerVersion
+        : isUpdate
+        ? l10n.clickToUpdate
+        : status == InstallStatus.notInstalled
+        ? l10n.clickToInstall
+        : null;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -214,23 +214,24 @@ class _StatusCard extends StatelessWidget {
                           color: contentColor,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        isWorking
-                            ? SettingsController.managerVersion
-                            : l10n.clickToInstall,
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: contentColor.withValues(alpha: 0.8),
+                      if (supportingText != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          supportingText,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: contentColor.withValues(alpha: 0.8),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                _ModeLabel(
-                  label: isGki ? 'GKI' : 'LKM',
-                  color: contentColor,
-                  containerColor: contentColor.withValues(alpha: 0.16),
-                ),
+                if (status != InstallStatus.unknown)
+                  _ModeLabel(
+                    label: installation.isGki ? 'GKI' : 'LKM',
+                    color: contentColor,
+                    containerColor: contentColor.withValues(alpha: 0.16),
+                  ),
               ],
             ),
           ),

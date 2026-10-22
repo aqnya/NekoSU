@@ -86,20 +86,6 @@ fn ensure_ctl_fd() -> Option<RawFd> {
     }
 }
 
-/*
- * Dart's main() loads this library before the first frame.  Trigger the
- * control-fd grant here so the fd is already cached when module state is first
- * queried; ensure_ctl_fd() retries on a later call if the kernel is not ready.
- */
-extern "C" fn ncore_early_init() {
-    init_logging();
-    let _ = ensure_ctl_fd();
-}
-
-#[used]
-#[unsafe(link_section = ".init_array")]
-static NCORE_EARLY_INIT: extern "C" fn() = ncore_early_init;
-
 fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
     if data.len() > FMAC_MAX_DATA {
         return -1;

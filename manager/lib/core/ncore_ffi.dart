@@ -231,6 +231,7 @@ class NcoreFfi {
 
   static void initialize() {
     _ensureInitialized();
+    ctl(3);
   }
 
   static int ctl(int value) {

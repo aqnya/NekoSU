@@ -51,9 +51,17 @@
   "@running": {
     "description": "Status indicating the software is running"
   },
+  "unknownStatus": "Status Unknown",
+  "@unknownStatus": {
+    "description": "Status shown when the installation state cannot be determined"
+  },
   "clickToInstall": "Tap to Install",
   "@clickToInstall": {
     "description": "Instruction to tap for installation"
+  },
+  "clickToUpdate": "Tap to Update",
+  "@clickToUpdate": {
+    "description": "Instruction to tap to update an installed version"
   },
   "needUpdate": "Update Required",
   "@needUpdate": {
