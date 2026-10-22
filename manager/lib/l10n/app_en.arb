@@ -360,8 +360,6 @@
   "installMethodSection": "Installation method",
   "installMethodFile": "Select vendor_boot image",
   "installMethodFileDescription": "Patch an image and export it to Download",
-  "installMethodFileDirect": "Patch and flash (root)",
-  "installMethodFileDirectDescription": "Patch the selected image and write it to this device's vendor_boot",
   "installMethodDirect": "Direct install (root)",
   "installMethodDirectDescription": "Patch this device's vendor_boot and flash it back",
   "installMethodInactive": "Install to inactive slot (root)",

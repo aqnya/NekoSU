@@ -223,8 +223,6 @@
   "installMethodSection": "安装方式",
   "installMethodFile": "选择 vendor_boot 镜像",
   "installMethodFileDescription": "修补镜像并导出到 Download 目录",
-  "installMethodFileDirect": "修补并直接写入（Root）",
-  "installMethodFileDirectDescription": "修补所选镜像后直接写入当前 vendor_boot",
   "installMethodDirect": "直接安装（Root）",
   "installMethodDirectDescription": "读取本机 vendor_boot，修补后自动写回",
   "installMethodInactive": "安装到非活动分区（Root）",

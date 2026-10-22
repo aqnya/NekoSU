@@ -817,122 +817,27 @@ fn install_error(message: String, buffer: *mut u8, capacity: usize) -> isize {
     copy_module_result(module_result(-1, message), buffer, capacity)
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn ncore_patch_image(
-    image: *const u8,
-    image_length: usize,
-    ko: *const u8,
-    ko_length: usize,
-    buffer: *mut u8,
-    capacity: usize,
-) -> isize {
-    init_logging();
-    let Some(image) = required_argument(image, image_length) else {
-        return install_error(
-            "Invalid vendor_boot image path".to_owned(),
-            buffer,
-            capacity,
-        );
-    };
-    let Some(ko) = required_argument(ko, ko_length) else {
-        return install_error("Invalid kernel module path".to_owned(), buffer, capacity);
-    };
-    if !Path::new(&image).is_file() {
-        return install_error(
-            format!("vendor_boot image not found: {image}"),
-            buffer,
-            capacity,
-        );
+fn append_output(output: &mut String, extra: &str) {
+    if extra.is_empty() {
+        return;
     }
-    if !Path::new(&ko).is_file() {
-        return install_error(format!("kernel module not found: {ko}"), buffer, capacity);
+    if !output.is_empty() && !output.ends_with('\n') {
+        output.push('\n');
     }
-    let Some(patcher) = bootpatcher_path() else {
-        return install_error("libbootpatcher.so not found".to_owned(), buffer, capacity);
-    };
-    if !executable_file(&patcher) {
-        return install_error(
-            "libbootpatcher.so is not executable".to_owned(),
-            buffer,
-            capacity,
-        );
-    }
-
-    match Command::new(&patcher)
-        .arg("-p")
-        .arg(&image)
-        .arg(&ko)
-        .output()
-    {
-        Ok(result) => {
-            let mut output = String::from_utf8_lossy(&result.stdout).into_owned();
-            let stderr = String::from_utf8_lossy(&result.stderr);
-            if !stderr.is_empty() {
-                if !output.is_empty() && !output.ends_with('\n') {
-                    output.push('\n');
-                }
-                output.push_str(&stderr);
-            }
-            let code = result.status.code().unwrap_or(-1);
-            let patched = PathBuf::from(format!("{image}.new"));
-            let patched_size = fs::metadata(&patched).map(|meta| meta.len()).unwrap_or(0);
-            if code != 0 || patched_size == 0 {
-                if !output.is_empty() && !output.ends_with('\n') {
-                    output.push('\n');
-                }
-                output.push_str("patched image was not produced");
-                return copy_module_result(module_result(-1, output), buffer, capacity);
-            }
-            copy_module_result(module_result(code, output), buffer, capacity)
-        }
-        Err(error) => install_error(
-            format!("failed to run libbootpatcher: {error}"),
-            buffer,
-            capacity,
-        ),
-    }
+    output.push_str(extra);
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn ncore_flash_image(
-    image: *const u8,
-    image_length: usize,
-    partition: *const u8,
-    partition_length: usize,
-    buffer: *mut u8,
-    capacity: usize,
-) -> isize {
-    init_logging();
-    let Some(image) = required_argument(image, image_length) else {
-        return install_error("Invalid image path".to_owned(), buffer, capacity);
-    };
-    let Some(partition) = required_argument(partition, partition_length) else {
-        return install_error("Invalid partition path".to_owned(), buffer, capacity);
-    };
-    if !Path::new(&image).is_file() {
-        return install_error(format!("image not found: {image}"), buffer, capacity);
+fn install_fail(mut output: String, message: &str) -> (i32, String) {
+    if !output.is_empty() && !output.ends_with('\n') {
+        output.push('\n');
     }
-    if !partition.starts_with("/dev/block/") {
-        return install_error(
-            format!("refusing to write to {partition}"),
-            buffer,
-            capacity,
-        );
-    }
-
-    let command = format!(
-        "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
-        shell_quote(&image),
-        shell_quote(&partition),
-    );
-    let (code, output) = root_command(&command);
-    copy_module_result(module_result(code, output), buffer, capacity)
+    output.push_str("ERROR: ");
+    output.push_str(message);
+    output.push('\n');
+    (-1, output)
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn ncore_vendor_boot(buffer: *mut u8, capacity: usize) -> isize {
-    init_logging();
-    let slot = slot_suffix();
+fn resolve_vendor_boot(slot: &str) -> Option<String> {
     let mut names = Vec::new();
     if !slot.is_empty() {
         names.push(format!("vendor_boot{slot}"));
@@ -956,11 +861,151 @@ pub extern "C" fn ncore_vendor_boot(buffer: *mut u8, capacity: usize) -> isize {
     let path = output
         .lines()
         .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or_default();
-    if code == 0 && path.starts_with("/dev/block/") {
-        copy_string(Some(path.to_owned()), buffer, capacity)
-    } else {
-        -1
+        .find(|line| !line.is_empty())?;
+    (code == 0 && path.starts_with("/dev/block/")).then(|| path.to_owned())
+}
+
+fn run_direct_install(
+    partition: &str,
+    patcher: &Path,
+    ko: &str,
+    source: &Path,
+    patched: &Path,
+) -> (i32, String) {
+    let source_text = source.to_string_lossy().into_owned();
+    let mut output =
+        format!("[nekosu] vendor_boot: {partition}\n[nekosu] reading the active vendor_boot...\n");
+
+    let (code, text) = root_command(&format!(
+        "/system/bin/dd if={} of={} bs=4M 2>&1",
+        shell_quote(partition),
+        shell_quote(&source_text),
+    ));
+    append_output(&mut output, &text);
+    let source_size = fs::metadata(source).map(|meta| meta.len()).unwrap_or(0);
+    if code != 0 || source_size == 0 {
+        return install_fail(output, "failed to read vendor_boot");
     }
+
+    output.push_str("[nekosu] patching vendor_boot image...\n");
+    let patch = match Command::new(patcher).arg("-p").arg(source).arg(ko).output() {
+        Ok(result) => result,
+        Err(error) => {
+            return install_fail(output, &format!("failed to run libbootpatcher: {error}"));
+        }
+    };
+    append_output(&mut output, &String::from_utf8_lossy(&patch.stdout));
+    append_output(&mut output, &String::from_utf8_lossy(&patch.stderr));
+    let patched_size = fs::metadata(patched).map(|meta| meta.len()).unwrap_or(0);
+    if patch.status.code().unwrap_or(-1) != 0 || patched_size == 0 {
+        return install_fail(output, "patched image was not produced");
+    }
+
+    let (size_code, size_text) = root_command(&format!(
+        "/system/bin/blockdev --getsize64 {} 2>/dev/null",
+        shell_quote(partition),
+    ));
+    if size_code == 0
+        && let Ok(capacity) = size_text.trim().parse::<u64>()
+        && patched_size > capacity
+    {
+        return install_fail(
+            output,
+            &format!(
+                "patched image ({patched_size} bytes) exceeds partition capacity ({capacity} bytes)"
+            ),
+        );
+    }
+
+    output.push_str("[nekosu] writing the patched image...\n");
+    let (code, text) = root_command(&format!(
+        "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
+        shell_quote(&patched.to_string_lossy()),
+        shell_quote(partition),
+    ));
+    append_output(&mut output, &text);
+    if code != 0 {
+        output.push_str("[nekosu] write failed, restoring the original image...\n");
+        let (restore_code, restore_text) = root_command(&format!(
+            "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
+            shell_quote(&source_text),
+            shell_quote(partition),
+        ));
+        append_output(&mut output, &restore_text);
+        if restore_code != 0 {
+            return install_fail(
+                output,
+                "failed to flash vendor_boot and the original image could not be restored",
+            );
+        }
+        return install_fail(
+            output,
+            "failed to flash vendor_boot; the original image was restored",
+        );
+    }
+
+    output.push_str("[nekosu] direct install complete; reboot to take effect\n");
+    (0, output)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ncore_direct_install(
+    ko: *const u8,
+    ko_length: usize,
+    buffer: *mut u8,
+    capacity: usize,
+) -> isize {
+    init_logging();
+    let Some(ko) = required_argument(ko, ko_length) else {
+        return install_error("Invalid kernel module path".to_owned(), buffer, capacity);
+    };
+    if !Path::new(&ko).is_file() {
+        return install_error(format!("kernel module not found: {ko}"), buffer, capacity);
+    }
+    let Some(patcher) = bootpatcher_path() else {
+        return install_error("libbootpatcher.so not found".to_owned(), buffer, capacity);
+    };
+    if !executable_file(&patcher) {
+        return install_error(
+            "libbootpatcher.so is not executable".to_owned(),
+            buffer,
+            capacity,
+        );
+    }
+    let Some(partition) = resolve_vendor_boot(&slot_suffix()) else {
+        return install_error(
+            "vendor_boot partition not found".to_owned(),
+            buffer,
+            capacity,
+        );
+    };
+    let Some(cache) = app_cache_dir() else {
+        return install_error("app cache directory not found".to_owned(), buffer, capacity);
+    };
+
+    let work = cache.join("nksu-install");
+    if let Err(error) = fs::create_dir_all(&work) {
+        return install_error(
+            format!("cannot create {}: {error}", work.display()),
+            buffer,
+            capacity,
+        );
+    }
+    let source = work.join("vendor_boot.img");
+    let patched = work.join("vendor_boot.img.new");
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&patched);
+    // Create the file as the app first so root's dd writes into an app-owned file.
+    if let Err(error) = fs::File::create(&source) {
+        return install_error(
+            format!("cannot create {}: {error}", source.display()),
+            buffer,
+            capacity,
+        );
+    }
+
+    let (code, output) = run_direct_install(&partition, &patcher, &ko, &source, &patched);
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&patched);
+    copy_module_result(module_result(code, output), buffer, capacity)
 }

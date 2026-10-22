@@ -44,22 +44,6 @@ typedef _StringArgDart = int Function(
   Pointer<Uint8> buffer,
   int capacity,
 );
-typedef _TwoStringArgNative = IntPtr Function(
-  Pointer<Uint8> first,
-  Size firstLength,
-  Pointer<Uint8> second,
-  Size secondLength,
-  Pointer<Uint8> buffer,
-  Size capacity,
-);
-typedef _TwoStringArgDart = int Function(
-  Pointer<Uint8> first,
-  int firstLength,
-  Pointer<Uint8> second,
-  int secondLength,
-  Pointer<Uint8> buffer,
-  int capacity,
-);
 typedef _ModuleControlNative = IntPtr Function(
   Pointer<Uint8> id,
   Size idLength,
@@ -120,13 +104,9 @@ class NcoreFfi {
   static final _StringArgDart? _webUiExec = _lookupStringArg(
     'ncore_webui_exec',
   );
-  static final _TwoStringArgDart? _patchImage = _lookupTwoStringArg(
-    'ncore_patch_image',
+  static final _StringArgDart? _directInstall = _lookupStringArg(
+    'ncore_direct_install',
   );
-  static final _TwoStringArgDart? _flashImage = _lookupTwoStringArg(
-    'ncore_flash_image',
-  );
-  static final _StringDart? _vendorBoot = _lookupString('ncore_vendor_boot');
 
   static final bool available = _ctl != null;
   static final bool profileApiAvailable =
@@ -142,8 +122,7 @@ class NcoreFfi {
       _moduleAction != null &&
       _moduleControl != null &&
       _moduleWebUi != null;
-  static final bool installApiAvailable =
-      _patchImage != null && _flashImage != null && _vendorBoot != null;
+  static final bool installApiAvailable = _directInstall != null;
 
   static bool _initialized = false;
 
@@ -231,18 +210,6 @@ class NcoreFfi {
     if (library == null) return null;
     try {
       return library.lookupFunction<_StringArgNative, _StringArgDart>(name);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static _TwoStringArgDart? _lookupTwoStringArg(String name) {
-    final library = _library;
-    if (library == null) return null;
-    try {
-      return library.lookupFunction<_TwoStringArgNative, _TwoStringArgDart>(
-        name,
-      );
     } catch (_) {
       return null;
     }
@@ -339,13 +306,9 @@ class NcoreFfi {
   static String? webUiExec(String command) =>
       _readModuleStringArg(_webUiExec, command, retry: false);
 
-  static String? patchImage(String imagePath, String koPath) =>
-      _readTwoStringArg(_patchImage, imagePath, koPath);
-
-  static String? flashImage(String imagePath, String partition) =>
-      _readTwoStringArg(_flashImage, imagePath, partition);
-
-  static String? vendorBoot() => _readString(_vendorBoot);
+  /// Reads the active vendor_boot, patches it with [koPath] and writes it back.
+  static String? directInstall(String koPath) =>
+      _readModuleStringArg(_directInstall, koPath, retry: false);
 
   static bool setProfile({
     required int uid,
@@ -415,44 +378,6 @@ class NcoreFfi {
       );
     } finally {
       calloc.free(argument);
-    }
-  }
-
-  static String? _readTwoStringArg(
-    _TwoStringArgDart? function,
-    String first,
-    String second,
-  ) {
-    if (function == null) return null;
-    final firstBytes = utf8.encode(first);
-    final secondBytes = utf8.encode(second);
-    final firstArgument = calloc<Uint8>(
-      firstBytes.isEmpty ? 1 : firstBytes.length,
-    );
-    final secondArgument = calloc<Uint8>(
-      secondBytes.isEmpty ? 1 : secondBytes.length,
-    );
-    try {
-      if (firstBytes.isNotEmpty) {
-        firstArgument.asTypedList(firstBytes.length).setAll(0, firstBytes);
-      }
-      if (secondBytes.isNotEmpty) {
-        secondArgument.asTypedList(secondBytes.length).setAll(0, secondBytes);
-      }
-      return _readModuleString(
-        (buffer, capacity) => function(
-          firstArgument,
-          firstBytes.length,
-          secondArgument,
-          secondBytes.length,
-          buffer,
-          capacity,
-        ),
-        retry: false,
-      );
-    } finally {
-      calloc.free(firstArgument);
-      calloc.free(secondArgument);
     }
   }
 
