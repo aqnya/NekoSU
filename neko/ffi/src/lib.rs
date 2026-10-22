@@ -243,6 +243,10 @@ fn uid_ioctl(uid: i32, flag: u32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn ncore_init() -> i32 {
     init_logging();
+    let Some(_) = ensure_ctl_fd() else {
+        log::error!("can't load control fd!");
+        return -1;
+    };
     0
 }
 
