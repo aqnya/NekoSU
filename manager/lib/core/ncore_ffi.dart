@@ -358,7 +358,8 @@ class NcoreFfi {
           text,
           length,
         ) {
-          onProgress(utf8.decode(text.asTypedList(length)));
+          final bytes = Pointer<Uint8>.fromAddress(text.address);
+          onProgress(utf8.decode(bytes.asTypedList(length)));
         });
       }
       final Pointer<NativeFunction<_InstallProgressNative>> progress =
