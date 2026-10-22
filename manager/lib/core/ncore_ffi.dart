@@ -229,6 +229,10 @@ class NcoreFfi {
     _init?.call();
   }
 
+  static void initialize() {
+    _ensureInitialized();
+  }
+
   static int ctl(int value) {
     _ensureInitialized();
     return _ctl?.call(value) ?? -1;
