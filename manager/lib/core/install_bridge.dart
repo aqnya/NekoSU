@@ -159,6 +159,14 @@ class InstallBridge {
     return module.path.isEmpty ? null : module;
   }
 
+  /// Extracts a module bundled in the APK and returns its staged path.
+  static Future<String?> stageKo(String koName) async {
+    final path = await _platform.invokeMethod<String>('stageKo', {
+      'koName': koName,
+    });
+    return path == null || path.isEmpty ? null : path;
+  }
+
   static Stream<OutputEvent> output(InstallRequest request) {
     final raw = _outputChannel.receiveBroadcastStream(request.toMap());
     return decodeOutputEvents(raw);

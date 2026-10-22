@@ -1,5 +1,11 @@
+import 'dart:io';
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:nekosu/core/install_bridge.dart';
+import 'package:nekosu/core/ncore_ffi.dart';
+import 'package:nekosu/core/output_events.dart';
+import 'package:nekosu/data/modules.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
 import 'package:nekosu/shared/app_feedback.dart';
 import 'package:nekosu/shared/widgets/app_status_view.dart';
@@ -58,7 +64,8 @@ class _InstallPageState extends State<InstallPage> {
   List<InstallOperation> _operationsFor(InstallEnvironment environment) {
     return [
       InstallOperation.file,
-      if (environment.rootAvailable) InstallOperation.fileDirect,
+      if (environment.rootAvailable && NcoreFfi.installApiAvailable)
+        InstallOperation.fileDirect,
       if (environment.rootAvailable && environment.currentVendorBoot != null)
         InstallOperation.direct,
       if (environment.rootAvailable && environment.inactiveVendorBoot != null)
@@ -235,17 +242,20 @@ class _InstallPageState extends State<InstallPage> {
       return;
     }
 
+    if (_operation == InstallOperation.fileDirect) {
+      await _startFileDirect(environment);
+      return;
+    }
+
     final partition = switch (_operation) {
       InstallOperation.file => null,
-      InstallOperation.fileDirect => environment.currentVendorBoot,
+      InstallOperation.fileDirect => null,
       InstallOperation.direct => environment.currentVendorBoot,
       InstallOperation.inactive => environment.inactiveVendorBoot,
     };
     if (_operation != InstallOperation.file) {
       final partitionLabel = partition ?? l10n.installPartitionAuto;
-      final directFlash =
-          _operation == InstallOperation.direct ||
-          _operation == InstallOperation.fileDirect;
+      final directFlash = _operation == InstallOperation.direct;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -276,9 +286,7 @@ class _InstallPageState extends State<InstallPage> {
 
     final request = InstallRequest(
       operation: _operation,
-      vendorBootPath:
-          _operation == InstallOperation.file ||
-              _operation == InstallOperation.fileDirect
+      vendorBootPath: _operation == InstallOperation.file
           ? _vendorBoot?.path
           : null,
       koName: _localKo == null ? _selectedKoName : null,
@@ -318,6 +326,166 @@ class _InstallPageState extends State<InstallPage> {
       return;
     }
     await _loadEnvironment();
+  }
+
+  Future<void> _startFileDirect(InstallEnvironment environment) async {
+    final image = _vendorBoot;
+    final l10n = AppLocalizations.of(context)!;
+    if (image == null) {
+      showAppSnackBar(context, l10n.installBootImageRequired);
+      return;
+    }
+    if (!NcoreFfi.installApiAvailable) {
+      showAppSnackBar(context, l10n.installBootpatcherMissing);
+      return;
+    }
+    final koPath = _localKo?.path;
+    final koName = koPath == null ? _selectedKoName : null;
+    if (koPath == null && koName == null) {
+      showAppSnackBar(context, l10n.installKoRequired);
+      return;
+    }
+
+    final partition = environment.currentVendorBoot;
+    final partitionLabel = partition ?? l10n.installPartitionAuto;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.installDirectConfirmTitle),
+        content: Text(l10n.installDirectConfirmMessage(partitionLabel)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.dialogCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.installConfirmFlash),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() => _starting = true);
+    var succeeded = false;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (context) => OutputPage(
+            task: () => _fileDirectTask(
+              imagePath: image.path,
+              koPath: koPath,
+              koName: koName,
+              partition: partition,
+            ),
+            runningTitle: l10n.installRunning,
+            successTitle: l10n.installSucceeded,
+            failureTitle: l10n.installFailed,
+            logFileName: 'nekosu-install',
+            onFinished: (status) {
+              succeeded = status == OutputStatus.succeeded;
+            },
+            completionAction: OutputAction(
+              label: l10n.dialogDone,
+              icon: Icons.check_rounded,
+              onPressed: (context) => Navigator.of(context).pop(),
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+
+    if (!mounted) return;
+    if (succeeded) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    await _loadEnvironment();
+  }
+
+  Stream<OutputEvent> _fileDirectTask({
+    required String imagePath,
+    required String? koPath,
+    required String? koName,
+    required String? partition,
+  }) async* {
+    var flashed = false;
+    try {
+      var ko = koPath;
+      if (ko == null) {
+        final name = koName;
+        if (name == null) {
+          yield const OutputChunk('ERROR: kernel module not found\n');
+          yield const OutputFinished(-1);
+          return;
+        }
+        yield const OutputChunk('[nekosu] staging kernel module...\n');
+        ko = await InstallBridge.stageKo(name);
+        if (ko == null) {
+          yield const OutputChunk('ERROR: unable to stage the kernel module\n');
+          yield const OutputFinished(-1);
+          return;
+        }
+      }
+      final koFile = ko;
+
+      yield const OutputChunk('[nekosu] patching vendor_boot image...\n');
+      final patched = ModuleCommandResult.fromEnvelope(
+        await Isolate.run(() => NcoreFfi.patchImage(imagePath, koFile)),
+      );
+      if (patched.output.isNotEmpty) {
+        yield OutputChunk(patched.output);
+      }
+      if (!patched.ok) {
+        yield OutputFinished(patched.code);
+        return;
+      }
+
+      var target = partition;
+      if (target == null || target.isEmpty) {
+        target = await Isolate.run(NcoreFfi.vendorBoot);
+      }
+      if (target == null || target.isEmpty) {
+        yield const OutputChunk('ERROR: vendor_boot partition not found\n');
+        yield const OutputFinished(-1);
+        return;
+      }
+      final targetDevice = target;
+
+      yield OutputChunk(
+        '[nekosu] writing the patched image to $targetDevice...\n',
+      );
+      final result = ModuleCommandResult.fromEnvelope(
+        await Isolate.run(
+          () => NcoreFfi.flashImage('$imagePath.new', targetDevice),
+        ),
+      );
+      if (result.output.isNotEmpty) {
+        yield OutputChunk(result.output);
+      }
+      flashed = result.ok;
+      if (flashed) {
+        yield const OutputChunk(
+          '[nekosu] direct install complete; reboot to take effect\n',
+        );
+      }
+      yield OutputFinished(result.code);
+    } catch (error) {
+      yield OutputChunk('ERROR: $error\n');
+      yield const OutputFinished(-1);
+    } finally {
+      try {
+        await File('$imagePath.new').delete();
+      } catch (_) {}
+      if (flashed) {
+        try {
+          await File(imagePath).delete();
+        } catch (_) {}
+      }
+    }
   }
 
   @override

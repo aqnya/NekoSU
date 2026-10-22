@@ -136,6 +136,27 @@ class InstallBridge(
             "getEnvironment" -> executor.execute { loadEnvironment(result) }
             "pickVendorBoot" -> pickFile(PickerKind.VENDOR_BOOT, result)
             "pickLocalKo" -> pickFile(PickerKind.LOCAL_KO, result)
+            "stageKo" -> {
+                val name = call.argument<String>("koName")
+                if (name.isNullOrBlank()) {
+                    result.error("invalid_argument", "koName is required", null)
+                } else {
+                    executor.execute {
+                        val ko = runCatching { stageAssetKo(name) }.getOrNull()
+                        activity.runOnUiThread {
+                            if (ko != null) {
+                                result.success(ko.absolutePath)
+                            } else {
+                                result.error(
+                                    "stage_ko_failed",
+                                    "Unable to stage the kernel module",
+                                    null,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             else -> result.notImplemented()
         }
     }
@@ -143,18 +164,17 @@ class InstallBridge(
     private fun loadEnvironment(result: MethodChannel.Result) {
         try {
             val slot = currentSlotSuffix()
-            val su = resolveSu()
             val environment =
                 mapOf<String, Any?>(
                     "kernelRelease" to System.getProperty("os.version").orEmpty(),
                     "androidVersion" to Build.VERSION.RELEASE.orEmpty(),
                     "koAssets" to koAssets(),
-                    "rootAvailable" to (su != null),
+                    "rootAvailable" to (resolveSu() != null),
                     "bootpatcherAvailable" to bootpatcherFile().canExecute(),
                     "currentSlot" to slot,
-                    "currentVendorBoot" to findVendorBoot(slot, allowSlotless = true, su = su),
+                    "currentVendorBoot" to findVendorBoot(slot, allowSlotless = true),
                     "inactiveVendorBoot" to
-                        inactiveSlotSuffix(slot)?.let { findVendorBoot(it, allowSlotless = false, su = su) },
+                        inactiveSlotSuffix(slot)?.let { findVendorBoot(it, allowSlotless = false) },
                 )
             activity.runOnUiThread { result.success(environment) }
         } catch (error: Exception) {
@@ -252,7 +272,7 @@ class InstallBridge(
                 koPath = payload?.get("koPath")?.toString(),
                 partition = payload?.get("partition")?.toString(),
             )
-        if (request.operation !in setOf("file", "fileDirect", "direct", "inactive")) {
+        if (request.operation !in setOf("file", "direct", "inactive")) {
             failOutput("Unsupported install operation", releaseBusy = false)
             return
         }
@@ -286,7 +306,6 @@ class InstallBridge(
             exitCode =
                 when (request.operation) {
                     "file" -> installFromFile(tool, request, ko)
-                    "fileDirect" -> installFromFile(tool, request, ko, flash = true)
                     "direct" -> directInstall(tool, request, ko, inactive = false)
                     "inactive" -> directInstall(tool, request, ko, inactive = true)
                     else -> -1
@@ -306,6 +325,10 @@ class InstallBridge(
         }
 
         val name = request.koName?.takeIf { it.isNotBlank() } ?: return null
+        return stageAssetKo(name)
+    }
+
+    private fun stageAssetKo(name: String): File? {
         if (name != File(name).name || !name.endsWith("_nksu.ko")) return null
         val dest = File(installDir, name)
         dest.delete()
@@ -328,7 +351,6 @@ class InstallBridge(
         tool: File,
         request: InstallRequest,
         ko: File,
-        flash: Boolean = false,
     ): Int {
         val source = request.vendorBootPath?.takeIf { it.isNotBlank() }?.let(::File)
         if (source == null || !source.isFile || source.length() == 0L) {
@@ -338,40 +360,6 @@ class InstallBridge(
 
         emitOutputLine("[nekosu] patching vendor_boot image...\n")
         val patched = patchImage(tool, source, ko) ?: return -1
-
-        if (flash) {
-            val partition =
-                request.partition?.takeIf { it.isNotBlank() }
-                    ?: findVendorBoot(currentSlotSuffix(), allowSlotless = true, su = resolveSu())
-            if (partition.isNullOrBlank()) {
-                source.delete()
-                patched.delete()
-                emitOutputLine("ERROR: vendor_boot partition not found\n")
-                return -1
-            }
-            val capacity = partitionSize(partition)
-            if (capacity != null && patched.length() > capacity) {
-                emitOutputLine(
-                    "ERROR: patched image (${patched.length()} bytes) exceeds partition capacity ($capacity bytes)\n",
-                )
-                source.delete()
-                patched.delete()
-                return -1
-            }
-
-            emitOutputLine("[nekosu] writing the patched image to $partition...\n")
-            if (!copyFileToPartition(patched, partition)) {
-                source.delete()
-                patched.delete()
-                emitOutputLine("ERROR: failed to flash vendor_boot\n")
-                return -1
-            }
-
-            source.delete()
-            patched.delete()
-            emitOutputLine("[nekosu] direct install complete; reboot to take effect\n")
-            return 0
-        }
 
         val outputName = outputImageName()
         val output = File(installDir, outputName)
@@ -402,12 +390,11 @@ class InstallBridge(
 
         val slot = currentSlotSuffix()
         val partition =
-            request.partition?.takeIf { it.isNotBlank() }
-                ?: if (inactive) {
-                    inactiveSlotSuffix(slot)?.let { findVendorBoot(it, allowSlotless = false, su = resolveSu()) }
-                } else {
-                    findVendorBoot(slot, allowSlotless = true, su = resolveSu())
-                }
+            if (inactive) {
+                inactiveSlotSuffix(slot)?.let { findVendorBoot(it, allowSlotless = false) }
+            } else {
+                findVendorBoot(slot, allowSlotless = true)
+            }
         if (partition.isNullOrBlank()) {
             emitOutputLine("ERROR: vendor_boot partition not found\n")
             return -1
@@ -593,7 +580,6 @@ class InstallBridge(
     private fun findVendorBoot(
         slot: String?,
         allowSlotless: Boolean,
-        su: String? = null,
     ): String? {
         val names = buildList {
             if (!slot.isNullOrBlank()) add("vendor_boot$slot")
@@ -605,23 +591,7 @@ class InstallBridge(
                 if (path.exists()) return path.absolutePath
             }
         }
-        if (su == null) return null
-
-        /*
-         * The app sandbox cannot stat /dev/block, so a rooted device would
-         * otherwise never offer the direct-install methods.  Resolve the same
-         * candidates through su and hand the resulting block device back.
-         */
-        val candidates =
-            BLOCK_DIRECTORIES.flatMap { directory ->
-                names.map { name -> quote("$directory/$name") }
-            }
-        val command =
-            "for p in ${candidates.joinToString(" ")}; " +
-                "do if [ -e \"\$p\" ]; then readlink -f \"\$p\"; break; fi; done"
-        val (code, output) = runRootCommandCapture(command)
-        if (code != 0) return null
-        return output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+        return null
     }
 
     private fun getProperty(name: String): String =

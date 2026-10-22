@@ -760,3 +760,207 @@ pub extern "C" fn ncore_webui_exec(
     );
     copy_module_result(result, buffer, capacity)
 }
+
+const BLOCK_DIRECTORIES: [&str; 3] = [
+    "/dev/block/by-name",
+    "/dev/block/bootdevice/by-name",
+    "/dev/block/platform/soc/1d84000.ufshc/by-name",
+];
+
+fn get_prop(name: &str) -> String {
+    Command::new("/system/bin/getprop")
+        .arg(name)
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default()
+}
+
+fn slot_suffix() -> String {
+    let suffix = get_prop("ro.boot.slot_suffix");
+    let raw = if suffix.is_empty() {
+        get_prop("ro.boot.slot")
+    } else {
+        suffix
+    };
+    match raw.as_str() {
+        "_a" | "_b" => raw,
+        "a" => "_a".to_owned(),
+        "b" => "_b".to_owned(),
+        _ => String::new(),
+    }
+}
+
+fn executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    let mode = metadata.permissions().mode();
+    if mode & 0o111 == 0 {
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(mode | 0o755);
+        let _ = fs::set_permissions(path, permissions);
+    }
+    true
+}
+
+fn bootpatcher_path() -> Option<PathBuf> {
+    let candidate = native_library_dir()?.join("libbootpatcher.so");
+    candidate.is_file().then_some(candidate)
+}
+
+fn install_error(message: String, buffer: *mut u8, capacity: usize) -> isize {
+    copy_module_result(module_result(-1, message), buffer, capacity)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ncore_patch_image(
+    image: *const u8,
+    image_length: usize,
+    ko: *const u8,
+    ko_length: usize,
+    buffer: *mut u8,
+    capacity: usize,
+) -> isize {
+    init_logging();
+    let Some(image) = required_argument(image, image_length) else {
+        return install_error(
+            "Invalid vendor_boot image path".to_owned(),
+            buffer,
+            capacity,
+        );
+    };
+    let Some(ko) = required_argument(ko, ko_length) else {
+        return install_error("Invalid kernel module path".to_owned(), buffer, capacity);
+    };
+    if !Path::new(&image).is_file() {
+        return install_error(
+            format!("vendor_boot image not found: {image}"),
+            buffer,
+            capacity,
+        );
+    }
+    if !Path::new(&ko).is_file() {
+        return install_error(format!("kernel module not found: {ko}"), buffer, capacity);
+    }
+    let Some(patcher) = bootpatcher_path() else {
+        return install_error("libbootpatcher.so not found".to_owned(), buffer, capacity);
+    };
+    if !executable_file(&patcher) {
+        return install_error(
+            "libbootpatcher.so is not executable".to_owned(),
+            buffer,
+            capacity,
+        );
+    }
+
+    match Command::new(&patcher)
+        .arg("-p")
+        .arg(&image)
+        .arg(&ko)
+        .output()
+    {
+        Ok(result) => {
+            let mut output = String::from_utf8_lossy(&result.stdout).into_owned();
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            if !stderr.is_empty() {
+                if !output.is_empty() && !output.ends_with('\n') {
+                    output.push('\n');
+                }
+                output.push_str(&stderr);
+            }
+            let code = result.status.code().unwrap_or(-1);
+            let patched = PathBuf::from(format!("{image}.new"));
+            let patched_size = fs::metadata(&patched).map(|meta| meta.len()).unwrap_or(0);
+            if code != 0 || patched_size == 0 {
+                if !output.is_empty() && !output.ends_with('\n') {
+                    output.push('\n');
+                }
+                output.push_str("patched image was not produced");
+                return copy_module_result(module_result(-1, output), buffer, capacity);
+            }
+            copy_module_result(module_result(code, output), buffer, capacity)
+        }
+        Err(error) => install_error(
+            format!("failed to run libbootpatcher: {error}"),
+            buffer,
+            capacity,
+        ),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ncore_flash_image(
+    image: *const u8,
+    image_length: usize,
+    partition: *const u8,
+    partition_length: usize,
+    buffer: *mut u8,
+    capacity: usize,
+) -> isize {
+    init_logging();
+    let Some(image) = required_argument(image, image_length) else {
+        return install_error("Invalid image path".to_owned(), buffer, capacity);
+    };
+    let Some(partition) = required_argument(partition, partition_length) else {
+        return install_error("Invalid partition path".to_owned(), buffer, capacity);
+    };
+    if !Path::new(&image).is_file() {
+        return install_error(format!("image not found: {image}"), buffer, capacity);
+    }
+    if !partition.starts_with("/dev/block/") {
+        return install_error(
+            format!("refusing to write to {partition}"),
+            buffer,
+            capacity,
+        );
+    }
+
+    let command = format!(
+        "/system/bin/dd if={} of={} bs=4M conv=fsync 2>&1",
+        shell_quote(&image),
+        shell_quote(&partition),
+    );
+    let (code, output) = root_command(&command);
+    copy_module_result(module_result(code, output), buffer, capacity)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ncore_vendor_boot(buffer: *mut u8, capacity: usize) -> isize {
+    init_logging();
+    let slot = slot_suffix();
+    let mut names = Vec::new();
+    if !slot.is_empty() {
+        names.push(format!("vendor_boot{slot}"));
+    }
+    names.push("vendor_boot".to_owned());
+
+    let mut candidates = Vec::new();
+    for directory in BLOCK_DIRECTORIES {
+        for name in &names {
+            candidates.push(format!("{directory}/{name}"));
+        }
+    }
+    let list = candidates
+        .iter()
+        .map(|path| shell_quote(path))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let command =
+        format!("for p in {list}; do if [ -e \"$p\" ]; then readlink -f \"$p\"; break; fi; done");
+    let (code, output) = root_command(&command);
+    let path = output
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    if code == 0 && path.starts_with("/dev/block/") {
+        copy_string(Some(path.to_owned()), buffer, capacity)
+    } else {
+        -1
+    }
+}
