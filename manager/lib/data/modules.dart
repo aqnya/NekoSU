@@ -191,33 +191,7 @@ class ModuleBridge {
       'operation': operation,
       'argument': argument,
     });
-    return _decodeOutputEvents(events);
-  }
-
-  static Stream<OutputEvent> _decodeOutputEvents(
-    Stream<dynamic> events,
-  ) async* {
-    await for (final raw in events) {
-      final event = _decodeOutput(raw);
-      if (event == null) continue;
-      yield event;
-      if (event is OutputFinished) return;
-    }
-  }
-
-  static OutputEvent? _decodeOutput(Object? raw) {
-    if (raw is! Map) return null;
-    switch (raw['type']) {
-      case 'line':
-        final text = raw['text']?.toString();
-        if (text == null || text.isEmpty) return null;
-        return OutputChunk(text);
-      case 'done':
-        final parsed = int.tryParse(raw['code']?.toString() ?? '');
-        return OutputFinished(parsed ?? -1);
-      default:
-        return null;
-    }
+    return decodeOutputEvents(events);
   }
 
   static Future<ModuleCommandResult> prepareWebUi(String id) async {

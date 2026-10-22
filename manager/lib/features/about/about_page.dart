@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:nekosu/core/ncore_ffi.dart';
 import 'package:nekosu/core/settings_controller.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
+import 'package:nekosu/shared/widgets/section_card.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -49,9 +52,7 @@ class _AboutPageState extends State<AboutPage> {
       if (!opened) throw StateError('Unable to launch repository URL');
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.aboutOpenLinkFailed)));
+      showAppSnackBar(context, l10n.aboutOpenLinkFailed);
     }
   }
 
@@ -77,15 +78,7 @@ class _AboutPageState extends State<AboutPage> {
       backgroundColor: scheme.surfaceContainer,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            backgroundColor: scheme.surfaceContainer,
-            surfaceTintColor: Colors.transparent,
-            scrolledUnderElevation: 0,
-            elevation: 0,
-            leading: const BackButton(),
-            title: Text(l10n.about),
-          ),
+          AppSliverAppBar(leading: const BackButton(), title: Text(l10n.about)),
           SliverPadding(
             padding: EdgeInsets.only(
               bottom: 32 + MediaQuery.viewPaddingOf(context).bottom,
@@ -94,7 +87,7 @@ class _AboutPageState extends State<AboutPage> {
               delegate: SliverChildListDelegate([
                 const _AboutHero(),
                 const SizedBox(height: 16),
-                _AboutSection(
+                SectionCard(
                   title: l10n.aboutInformation,
                   children: [
                     _AboutInfoRow(
@@ -115,7 +108,7 @@ class _AboutPageState extends State<AboutPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                _AboutSection(
+                SectionCard(
                   title: l10n.aboutRuntime,
                   children: [
                     _AboutInfoRow(
@@ -131,7 +124,7 @@ class _AboutPageState extends State<AboutPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                _AboutSection(
+                SectionCard(
                   title: l10n.aboutProject,
                   children: [
                     ListRow(
@@ -181,31 +174,6 @@ class _AboutHero extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AboutSection extends StatelessWidget {
-  const _AboutSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall
-                ?.copyWith(color: Theme.of(context).colorScheme.primary),
-          ),
-        ),
-        CardGroup(children: children),
-      ],
     );
   }
 }

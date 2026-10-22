@@ -3,8 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:nekosu/data/modules.dart';
 import 'package:nekosu/features/modules/webui_page.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
 import 'package:nekosu/shared/layout_insets.dart';
 import 'package:nekosu/shared/widgets/app_popup_menu.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
+import 'package:nekosu/shared/widgets/app_status_view.dart';
+import 'package:nekosu/shared/widgets/app_tag.dart';
 import 'package:nekosu/shared/widgets/output_page.dart';
 
 class ModulesPage extends StatefulWidget {
@@ -59,11 +63,11 @@ class _ModulesPageState extends State<ModulesPage> {
       );
       if (mounted) await _load();
     } on PlatformException catch (error) {
-      _showMessage(error.message ?? error.code);
+      showAppSnackBar(context, error.message ?? error.code);
     } on MissingPluginException {
-      _showMessage(l10n.modulesInstallFailed);
+      showAppSnackBar(context, l10n.modulesInstallFailed);
     } catch (error) {
-      _showMessage(error.toString());
+      showAppSnackBar(context, error.toString());
     } finally {
       if (mounted) setState(() => _installing = false);
     }
@@ -120,7 +124,8 @@ class _ModulesPageState extends State<ModulesPage> {
     if (!mounted) return result.ok;
     setState(() => _busyModules.remove(module.id));
     if (!result.ok) {
-      _showMessage(
+      showAppSnackBar(
+        context,
         result.output.trim().isEmpty
             ? 'Operation failed'
             : result.output.trim(),
@@ -140,7 +145,7 @@ class _ModulesPageState extends State<ModulesPage> {
     final succeeded = await _runModuleOperation(module, 'remove');
     if (mounted && succeeded) {
       final l10n = AppLocalizations.of(context)!;
-      _showMessage(l10n.modulesRemoveHint);
+      showAppSnackBar(context, l10n.modulesRemoveHint);
     }
   }
 
@@ -176,7 +181,8 @@ class _ModulesPageState extends State<ModulesPage> {
     final result = await ModuleBridge.prepareWebUi(module.id);
     if (!mounted) return;
     if (!result.ok) {
-      _showMessage(
+      showAppSnackBar(
+        context,
         result.output.trim().isEmpty
             ? 'Unable to open WebUI'
             : result.output.trim(),
@@ -185,7 +191,7 @@ class _ModulesPageState extends State<ModulesPage> {
     }
     final entryPath = result.output.trim();
     if (entryPath.isEmpty) {
-      _showMessage('Unable to open WebUI');
+      showAppSnackBar(context, 'Unable to open WebUI');
       return;
     }
     await Navigator.of(context).push(
@@ -193,13 +199,6 @@ class _ModulesPageState extends State<ModulesPage> {
         builder: (context) => WebUiPage(entryPath: entryPath, module: module),
       ),
     );
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -226,12 +225,7 @@ class _ModulesPageState extends State<ModulesPage> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              backgroundColor: scheme.surfaceContainer,
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-              elevation: 0,
+            AppSliverAppBar(
               title: Text(l10n.modulesLabel),
               actions: [
                 IconButton(
@@ -246,7 +240,7 @@ class _ModulesPageState extends State<ModulesPage> {
                 hasScrollBody: false,
                 child: Padding(
                   padding: EdgeInsets.only(bottom: navBarClearance),
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: const AppLoadingView(),
                 ),
               )
             else if (_modules.isEmpty)
@@ -436,13 +430,13 @@ class _ModuleCardState extends State<_ModuleCard> {
                       runSpacing: 6,
                       children: [
                         if (module.metamodule)
-                          _ModuleTag(
-                            text: l10n.modulesMetamodule,
+                          AppTag(
+                            label: l10n.modulesMetamodule,
                             color: scheme.primary,
                           ),
                         if (module.update)
-                          _ModuleTag(
-                            text: l10n.modulesUpdate,
+                          AppTag(
+                            label: l10n.modulesUpdate,
                             color: scheme.tertiary,
                           ),
                       ],
@@ -543,28 +537,6 @@ class _ModuleCardButton extends StatelessWidget {
           Icon(icon, size: 20),
           if (label != null) ...[const SizedBox(width: 7), Text(label!)],
         ],
-      ),
-    );
-  }
-}
-
-class _ModuleTag extends StatelessWidget {
-  const _ModuleTag({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
       ),
     );
   }

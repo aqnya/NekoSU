@@ -8,8 +8,8 @@ class NavBarTab {
   final Widget? activeIcon;
 }
 
-class ModernCapsuleNavBar extends StatelessWidget {
-  const ModernCapsuleNavBar({
+abstract class _NavigationBarBase extends StatelessWidget {
+  const _NavigationBarBase({
     super.key,
     required this.tabs,
     required this.selectedIndex,
@@ -19,6 +19,20 @@ class ModernCapsuleNavBar extends StatelessWidget {
   final List<NavBarTab> tabs;
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
+
+  void _selectTab(int index) {
+    HapticFeedback.lightImpact();
+    onTabSelected(index);
+  }
+}
+
+class ModernCapsuleNavBar extends _NavigationBarBase {
+  const ModernCapsuleNavBar({
+    super.key,
+    required super.tabs,
+    required super.selectedIndex,
+    required super.onTabSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -72,10 +86,7 @@ class ModernCapsuleNavBar extends StatelessWidget {
                       tab: tabs[index],
                       selected: selectedIndex == index,
                       scheme: scheme,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        onTabSelected(index);
-                      },
+                      onTap: () => _selectTab(index),
                     ),
                   ),
                 ),
@@ -88,27 +99,20 @@ class ModernCapsuleNavBar extends StatelessWidget {
   }
 }
 
-class ModernNavigationBar extends StatelessWidget {
+class ModernNavigationBar extends _NavigationBarBase {
   const ModernNavigationBar({
     super.key,
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onTabSelected,
+    required super.tabs,
+    required super.selectedIndex,
+    required super.onTabSelected,
   });
-
-  final List<NavBarTab> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onTabSelected;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return NavigationBar(
       selectedIndex: selectedIndex,
-      onDestinationSelected: (index) {
-        HapticFeedback.lightImpact();
-        onTabSelected(index);
-      },
+      onDestinationSelected: _selectTab,
       backgroundColor: scheme.surfaceContainer,
       surfaceTintColor: Colors.transparent,
       indicatorColor: scheme.primaryContainer,

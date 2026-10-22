@@ -160,7 +160,7 @@ class InstallBridge {
 
   static Stream<OutputEvent> output(InstallRequest request) {
     final raw = _outputChannel.receiveBroadcastStream(request.toMap());
-    return _decodeOutput(raw);
+    return decodeOutputEvents(raw);
   }
 
   static String? kmiOf(String koName) {
@@ -206,30 +206,6 @@ class InstallBridge {
     final minor = int.tryParse(parts[1]);
     if (major == null || minor == null) return null;
     return '$major.$minor';
-  }
-
-  static Stream<OutputEvent> _decodeOutput(Stream<dynamic> events) async* {
-    await for (final raw in events) {
-      final event = _decodeOutputEvent(raw);
-      if (event == null) continue;
-      yield event;
-      if (event is OutputFinished) return;
-    }
-  }
-
-  static OutputEvent? _decodeOutputEvent(Object? raw) {
-    if (raw is! Map) return null;
-    switch (raw['type']) {
-      case 'line':
-        final text = raw['text']?.toString();
-        if (text == null || text.isEmpty) return null;
-        return OutputChunk(text);
-      case 'done':
-        final code = int.tryParse(raw['code']?.toString() ?? '');
-        return OutputFinished(code ?? -1);
-      default:
-        return null;
-    }
   }
 }
 

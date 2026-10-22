@@ -8,6 +8,9 @@ import 'package:nekosu/l10n/app_localizations.dart';
 import 'package:nekosu/shared/layout_insets.dart';
 import 'package:nekosu/shared/widgets/app_icon.dart';
 import 'package:nekosu/shared/widgets/app_popup_menu.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
+import 'package:nekosu/shared/widgets/app_status_view.dart';
+import 'package:nekosu/shared/widgets/app_tag.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
 
 class AppListPage extends StatefulWidget {
@@ -183,12 +186,7 @@ class _AppListPageState extends State<AppListPage> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              backgroundColor: scheme.surfaceContainer,
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-              elevation: 0,
+            AppSliverAppBar(
               leading: _searching
                   ? IconButton(
                       onPressed: _stopSearch,
@@ -244,7 +242,7 @@ class _AppListPageState extends State<AppListPage> {
                 hasScrollBody: false,
                 child: Padding(
                   padding: EdgeInsets.only(bottom: navBarClearance),
-                  child: _LoadingState(label: l10n.loadingApps),
+                  child: AppLoadingView(label: l10n.loadingApps),
                 ),
               )
             else if (_error != null && !_loaded)
@@ -252,7 +250,7 @@ class _AppListPageState extends State<AppListPage> {
                 hasScrollBody: false,
                 child: Padding(
                   padding: EdgeInsets.only(bottom: navBarClearance),
-                  child: _ErrorState(
+                  child: AppErrorView(
                     message: l10n.loadAppsFailed,
                     retryLabel: l10n.retry,
                     onRetry: () => _load(),
@@ -358,9 +356,17 @@ class _AppRow extends StatelessWidget {
                     spacing: 4,
                     children: [
                       if (allowed)
-                        _AppTag(label: l10n.tagAllowed, color: scheme.primary),
+                        AppTag(
+                          label: l10n.tagAllowed,
+                          color: scheme.primary,
+                          backgroundOpacity: 0.12,
+                        ),
                       if (app.isSystem)
-                        _AppTag(label: l10n.tagSystem, color: scheme.secondary),
+                        AppTag(
+                          label: l10n.tagSystem,
+                          color: scheme.secondary,
+                          backgroundOpacity: 0.12,
+                        ),
                     ],
                   ),
                 ],
@@ -368,92 +374,6 @@ class _AppRow extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AppTag extends StatelessWidget {
-  const _AppTag({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadingState extends StatelessWidget {
-  const _LoadingState({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox.square(
-            dimension: 36,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String message;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.error_outline_rounded,
-            size: 40,
-            color: scheme.error.withValues(alpha: 0.55),
-          ),
-          const SizedBox(height: 12),
-          Text(message, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 12),
-          FilledButton.tonal(onPressed: onRetry, child: Text(retryLabel)),
-        ],
       ),
     );
   }

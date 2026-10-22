@@ -3,11 +3,14 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:nekosu/core/ncore_ffi.dart';
+import 'package:nekosu/core/settings_controller.dart';
 import 'package:nekosu/features/about/about_page.dart';
 import 'package:nekosu/features/install/install_page.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
 import 'package:nekosu/shared/layout_insets.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
+import 'package:nekosu/shared/widgets/section_card.dart';
 
 enum InstallStatus { installed, needUpdate, needReboot, notInstalled, unknown }
 
@@ -19,8 +22,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const _managerVersion = '1.0.0';
-
   InstallStatus _installStatus = InstallStatus.unknown;
   bool _isGki = false;
 
@@ -39,7 +40,6 @@ class _HomePageState extends State<HomePage> {
     return _HomeScreenContent(
       installStatus: _installStatus,
       isGki: _isGki,
-      managerVersion: _managerVersion,
       onInstall: _openInstaller,
     );
   }
@@ -66,13 +66,11 @@ class _HomeScreenContent extends StatelessWidget {
   const _HomeScreenContent({
     required this.installStatus,
     required this.isGki,
-    required this.managerVersion,
     required this.onInstall,
   });
 
   final InstallStatus installStatus;
   final bool isGki;
-  final String managerVersion;
   final VoidCallback onInstall;
 
   @override
@@ -85,14 +83,7 @@ class _HomeScreenContent extends StatelessWidget {
       backgroundColor: scheme.surfaceContainer,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: Text(l10n.appTitle),
-            backgroundColor: scheme.surfaceContainer,
-            surfaceTintColor: Colors.transparent,
-            scrolledUnderElevation: 0,
-            elevation: 0,
-          ),
+          AppSliverAppBar(title: Text(l10n.appTitle)),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(0, 12, 0, navBarClearance),
             sliver: SliverToBoxAdapter(
@@ -104,16 +95,21 @@ class _HomeScreenContent extends StatelessWidget {
                     child: _StatusCard(
                       status: installStatus,
                       isGki: isGki,
-                      managerVersion: managerVersion,
                       onTap: onInstall,
                     ),
                   ),
                   const SizedBox(height: 13),
-                  _SectionLabel(text: l10n.deviceAndKernel),
+                  SectionLabel(
+                    text: l10n.deviceAndKernel,
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                  ),
                   const SizedBox(height: 13),
                   const _DeviceInfoList(),
                   const SizedBox(height: 13),
-                  _SectionLabel(text: l10n.about),
+                  SectionLabel(
+                    text: l10n.about,
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                  ),
                   const SizedBox(height: 13),
                   const _AboutItem(),
                 ],
@@ -130,13 +126,11 @@ class _StatusCard extends StatelessWidget {
   const _StatusCard({
     required this.status,
     required this.isGki,
-    required this.managerVersion,
     required this.onTap,
   });
 
   final InstallStatus status;
   final bool isGki;
-  final String managerVersion;
   final VoidCallback onTap;
 
   @override
@@ -202,7 +196,9 @@ class _StatusCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        isWorking ? managerVersion : l10n.clickToInstall,
+                        isWorking
+                            ? SettingsController.managerVersion
+                            : l10n.clickToInstall,
                         style: textTheme.bodyMedium?.copyWith(
                           color: contentColor.withValues(alpha: 0.8),
                         ),
@@ -247,24 +243,6 @@ class _ModeLabel extends StatelessWidget {
         label,
         maxLines: 1,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 4),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }

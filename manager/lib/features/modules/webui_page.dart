@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:nekosu/core/ncore_ffi.dart';
 import 'package:nekosu/data/modules.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
 
 const _webUiViewType = 'nekosu/webui';
 const _webUiChannelPrefix = 'nekosu/webui/';
@@ -71,7 +72,7 @@ class _WebUiPageState extends State<WebUiPage> {
       case 'exec':
         return _runRootCommand(_asStringMap(call.arguments));
       case 'toast':
-        _showToast(call.arguments?.toString() ?? '');
+        showAppSnackBar(context, call.arguments?.toString() ?? '');
         return null;
       case 'exit':
         _closeWebUi();
@@ -135,38 +136,26 @@ class _WebUiPageState extends State<WebUiPage> {
   }
 
   static Map<String, dynamic> _decodeOptions(Object? raw) {
-    Object? decoded = raw;
-    if (raw is String && raw.trim().isNotEmpty) {
-      try {
-        decoded = jsonDecode(raw);
-      } catch (_) {
-        decoded = null;
-      }
-    }
+    final decoded = _decodeJson(raw);
     return decoded is Map ? decoded.cast<String, dynamic>() : const {};
   }
 
   static List<dynamic> _decodeArguments(Object? raw) {
-    Object? decoded = raw;
-    if (raw is String && raw.trim().isNotEmpty) {
-      try {
-        decoded = jsonDecode(raw);
-      } catch (_) {
-        decoded = null;
-      }
-    }
+    final decoded = _decodeJson(raw);
     return decoded is List ? decoded : const [];
+  }
+
+  static Object? _decodeJson(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) return raw;
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   static String _shellQuote(String value) {
     return "'${value.replaceAll("'", "'\\''")}'";
-  }
-
-  void _showToast(String message) {
-    if (!mounted || message.isEmpty) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _closeWebUi() {

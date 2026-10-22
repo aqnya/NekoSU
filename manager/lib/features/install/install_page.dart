@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nekosu/core/install_bridge.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
+import 'package:nekosu/shared/widgets/app_status_view.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
 import 'package:nekosu/shared/widgets/output_page.dart';
+import 'package:nekosu/shared/widgets/section_card.dart';
 
 class InstallPage extends StatefulWidget {
   const InstallPage({super.key});
@@ -99,44 +102,33 @@ class _InstallPageState extends State<InstallPage> {
     };
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+  Future<T?> _pick<T>(Future<T?> Function() picker) async {
+    if (_picking || _starting) return null;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() => _picking = true);
+    try {
+      return await picker();
+    } catch (_) {
+      if (mounted) showAppSnackBar(context, l10n.installPickerFailed);
+      return null;
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
   }
 
   Future<void> _pickVendorBoot() async {
-    if (_picking || _starting) return;
-    final l10n = AppLocalizations.of(context)!;
-    setState(() => _picking = true);
-    try {
-      final image = await InstallBridge.pickVendorBoot();
-      if (!mounted || image == null) return;
-      setState(() {
-        _vendorBoot = image;
-        _operation = InstallOperation.file;
-      });
-    } catch (_) {
-      if (mounted) _showMessage(l10n.installPickerFailed);
-    } finally {
-      if (mounted) setState(() => _picking = false);
-    }
+    final image = await _pick(InstallBridge.pickVendorBoot);
+    if (!mounted || image == null) return;
+    setState(() {
+      _vendorBoot = image;
+      _operation = InstallOperation.file;
+    });
   }
 
   Future<void> _pickLocalKo() async {
-    if (_picking || _starting) return;
-    final l10n = AppLocalizations.of(context)!;
-    setState(() => _picking = true);
-    try {
-      final module = await InstallBridge.pickLocalKo();
-      if (!mounted || module == null) return;
-      setState(() => _localKo = module);
-    } catch (_) {
-      if (mounted) _showMessage(l10n.installPickerFailed);
-    } finally {
-      if (mounted) setState(() => _picking = false);
-    }
+    final module = await _pick(InstallBridge.pickLocalKo);
+    if (!mounted || module == null) return;
+    setState(() => _localKo = module);
   }
 
   Future<void> _selectKmi() async {
@@ -225,15 +217,15 @@ class _InstallPageState extends State<InstallPage> {
     final l10n = AppLocalizations.of(context)!;
     if (environment == null) return;
     if (!environment.bootpatcherAvailable) {
-      _showMessage(l10n.installBootpatcherMissing);
+      showAppSnackBar(context, l10n.installBootpatcherMissing);
       return;
     }
     if (_operation == InstallOperation.file && _vendorBoot == null) {
-      _showMessage(l10n.installBootImageRequired);
+      showAppSnackBar(context, l10n.installBootImageRequired);
       return;
     }
     if (_localKo == null && _selectedKoName == null) {
-      _showMessage(l10n.installKoRequired);
+      showAppSnackBar(context, l10n.installKoRequired);
       return;
     }
 
@@ -358,13 +350,15 @@ class _InstallPageState extends State<InstallPage> {
   ) {
     if (environment == null) {
       if (_loading) {
-        return const Center(child: CircularProgressIndicator());
+        return const AppLoadingView();
       }
-      return _LoadErrorView(
+      return AppErrorView(
         message: l10n.installLoadFailed,
         detail: _loadError,
         retryLabel: l10n.retry,
         onRetry: _loadEnvironment,
+        padding: const EdgeInsets.all(32),
+        tonalAction: false,
       );
     }
 
@@ -373,7 +367,10 @@ class _InstallPageState extends State<InstallPage> {
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
       children: [
-        _SectionLabel(text: l10n.installDeviceInfoSection),
+        SectionLabel(
+          text: l10n.installDeviceInfoSection,
+          padding: const EdgeInsets.only(left: 16, top: 4),
+        ),
         const SizedBox(height: 10),
         CardGroup(
           children: [
@@ -399,7 +396,10 @@ class _InstallPageState extends State<InstallPage> {
           ],
         ),
         const SizedBox(height: 18),
-        _SectionLabel(text: l10n.installMethodSection),
+        SectionLabel(
+          text: l10n.installMethodSection,
+          padding: const EdgeInsets.only(left: 16, top: 4),
+        ),
         const SizedBox(height: 10),
         CardGroup(
           children: [
@@ -422,7 +422,10 @@ class _InstallPageState extends State<InstallPage> {
           ],
         ),
         const SizedBox(height: 18),
-        _SectionLabel(text: l10n.installKernelModuleSection),
+        SectionLabel(
+          text: l10n.installKernelModuleSection,
+          padding: const EdgeInsets.only(left: 16, top: 4),
+        ),
         const SizedBox(height: 10),
         CardGroup(
           children: [
@@ -533,24 +536,6 @@ class _OperationRow extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 4),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
-      ),
-    );
-  }
-}
-
 class _Notice extends StatelessWidget {
   const _Notice({
     required this.text,
@@ -584,49 +569,6 @@ class _Notice extends StatelessWidget {
                     ?.copyWith(color: contentColor),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadErrorView extends StatelessWidget {
-  const _LoadErrorView({
-    required this.message,
-    required this.detail,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String message;
-  final String? detail;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded, color: scheme.error, size: 40),
-            const SizedBox(height: 16),
-            Text(message, style: Theme.of(context).textTheme.titleMedium),
-            if (detail != null && detail!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                detail!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
-            const SizedBox(height: 20),
-            FilledButton(onPressed: onRetry, child: Text(retryLabel)),
           ],
         ),
       ),

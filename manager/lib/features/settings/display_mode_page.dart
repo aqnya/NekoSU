@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:nekosu/core/display_mode_controller.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
+import 'package:nekosu/shared/widgets/app_status_view.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
 
 class DisplayModePage extends StatefulWidget {
@@ -46,10 +48,6 @@ class _DisplayModePageState extends State<DisplayModePage> {
         _active = active;
         _loading = false;
       });
-    } on PlatformException {
-      _showLoadError();
-    } on MissingPluginException {
-      _showLoadError();
     } catch (_) {
       _showLoadError();
     }
@@ -84,9 +82,7 @@ class _DisplayModePageState extends State<DisplayModePage> {
         _applying = false;
         _applyingModeId = null;
       });
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.displayModeApplyFailed)));
+      showAppSnackBar(context, l10n.displayModeApplyFailed);
       return;
     }
 
@@ -117,32 +113,22 @@ class _DisplayModePageState extends State<DisplayModePage> {
       backgroundColor: scheme.surfaceContainer,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            backgroundColor: scheme.surfaceContainer,
-            surfaceTintColor: Colors.transparent,
-            scrolledUnderElevation: 0,
-            elevation: 0,
+          AppSliverAppBar(
             leading: const BackButton(),
             title: Text(l10n.settingsDisplayMode),
           ),
           if (_loading)
             const SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
+              child: AppLoadingView(),
             )
           else if (_error != null)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error!),
-                    const SizedBox(height: 12),
-                    FilledButton(onPressed: _load, child: Text(l10n.retry)),
-                  ],
-                ),
+              child: AppErrorView(
+                message: _error!,
+                retryLabel: l10n.retry,
+                onRetry: _load,
               ),
             )
           else

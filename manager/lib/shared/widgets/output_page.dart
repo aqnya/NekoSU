@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nekosu/core/output_events.dart';
 import 'package:nekosu/core/output_log.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
 
 typedef OutputTask = Stream<OutputEvent> Function();
 
@@ -161,27 +161,12 @@ class _OutputPageState extends State<OutputPage> {
         content: _output,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.outputLogSaved(savedName ?? fileName))),
-        );
-    } on PlatformException {
-      _showSaveError(l10n.outputLogSaveFailed);
-    } on MissingPluginException {
-      _showSaveError(l10n.outputLogSaveFailed);
+      showAppSnackBar(context, l10n.outputLogSaved(savedName ?? fileName));
     } catch (_) {
-      _showSaveError(l10n.outputLogSaveFailed);
+      showAppSnackBar(context, l10n.outputLogSaveFailed);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  void _showSaveError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _close() {

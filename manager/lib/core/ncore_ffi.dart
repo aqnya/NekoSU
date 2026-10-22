@@ -338,23 +338,12 @@ class NcoreFfi {
   static String? _readString(_StringDart? function) {
     if (function == null) return null;
     _ensureInitialized();
-
-    var capacity = 128;
-    for (var attempt = 0; attempt < 3; attempt++) {
-      final buffer = calloc<Uint8>(capacity);
-      try {
-        final length = function(buffer, capacity);
-        if (length < 0) return null;
-        if (length < capacity) {
-          return buffer.cast<Utf8>().toDartString(length: length);
-        }
-        if (length > 64 * 1024) return null;
-        capacity = length + 1;
-      } finally {
-        calloc.free(buffer);
-      }
-    }
-    return null;
+    return _readGrowingString(
+      function,
+      initialCapacity: 128,
+      maxCapacity: 64 * 1024,
+      maxAttempts: 3,
+    );
   }
 
   static String? _readModuleStringArg(
@@ -384,8 +373,22 @@ class NcoreFfi {
     if (!retry) {
       return _readModuleStringOnce(function);
     }
-    var capacity = 4096;
-    for (var attempt = 0; attempt < 4; attempt++) {
+    return _readGrowingString(
+      function,
+      initialCapacity: 4096,
+      maxCapacity: 4 * 1024 * 1024,
+      maxAttempts: 4,
+    );
+  }
+
+  static String? _readGrowingString(
+    _StringDart function, {
+    required int initialCapacity,
+    required int maxCapacity,
+    required int maxAttempts,
+  }) {
+    var capacity = initialCapacity;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
       final buffer = calloc<Uint8>(capacity);
       try {
         final length = function(buffer, capacity);
@@ -393,7 +396,7 @@ class NcoreFfi {
         if (length < capacity) {
           return buffer.cast<Utf8>().toDartString(length: length);
         }
-        if (length > 4 * 1024 * 1024) return null;
+        if (length > maxCapacity) return null;
         capacity = length + 1;
       } finally {
         calloc.free(buffer);

@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:nekosu/core/ncore_ffi.dart';
 import 'package:nekosu/data/apps.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
 import 'package:nekosu/shared/widgets/app_icon.dart';
 import 'package:nekosu/shared/widgets/app_popup_menu.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
+import 'package:nekosu/shared/widgets/section_card.dart';
 
 enum _ProfileMode { defaults, custom }
 
@@ -54,7 +56,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ? NcoreFfi.setProfile(
             uid: widget.app.uid,
             rootUid: _rootUid,
-            caps: _caps.fold(0, (bits, cap) => bits | (1 << cap)),
+            caps: capsToBits(_caps),
             domain: _domain,
             namespace: _namespace.value,
           )
@@ -68,26 +70,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (_saveErrorShown) return;
     _saveErrorShown = true;
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(l10n.profileSaveFailed)));
+    showAppSnackBar(context, l10n.profileSaveFailed);
   }
 
   void _toggleAllowed(bool value) {
     setState(() {
       _allowed = value;
       if (value) {
-        if (_caps.isEmpty) _caps = {...defaultCaps};
-        if (_domain.trim().isEmpty) _domain = defaultSelinuxDomain;
+        _ensureProfileDefaults();
       } else {
-        _rootUid = 0;
-        _caps = <int>{};
-        _domain = defaultSelinuxDomain;
-        _namespace = NksuNamespace.inherited;
-        _mode = _ProfileMode.defaults;
+        _applyDefaultProfile();
       }
     });
     _persist();
+  }
+
+  void _ensureProfileDefaults() {
+    if (_caps.isEmpty) _caps = {...defaultCaps};
+    if (_domain.trim().isEmpty) _domain = defaultSelinuxDomain;
+  }
+
+  void _applyDefaultProfile() {
+    _rootUid = 0;
+    _caps = {...defaultCaps};
+    _domain = defaultSelinuxDomain;
+    _namespace = NksuNamespace.inherited;
+    _mode = _ProfileMode.defaults;
   }
 
   void _selectProfileMode(_ProfileMode mode) {
@@ -95,14 +103,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     setState(() {
       _mode = mode;
       if (mode == _ProfileMode.defaults) {
-        _rootUid = 0;
-        _caps = {...defaultCaps};
-        _domain = defaultSelinuxDomain;
-        _namespace = NksuNamespace.inherited;
+        _applyDefaultProfile();
       } else {
         _allowed = true;
-        if (_caps.isEmpty) _caps = {...defaultCaps};
-        if (_domain.trim().isEmpty) _domain = defaultSelinuxDomain;
+        _ensureProfileDefaults();
       }
     });
     _persist();
@@ -112,9 +116,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     await Clipboard.setData(ClipboardData(text: widget.app.packageName));
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(l10n.packageNameCopied)));
+    showAppSnackBar(context, l10n.packageNameCopied);
   }
 
   Future<void> _confirmResetProfile() async {
@@ -139,11 +141,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (confirmed != true || !mounted) return;
     setState(() {
       _allowed = false;
-      _rootUid = 0;
-      _caps = {...defaultCaps};
-      _domain = defaultSelinuxDomain;
-      _namespace = NksuNamespace.inherited;
-      _mode = _ProfileMode.defaults;
+      _applyDefaultProfile();
     });
     _persist();
   }
@@ -160,9 +158,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future<void> _editRootUid() async {
+    final l10n = AppLocalizations.of(context)!;
     final value = await showDialog<int>(
       context: context,
-      builder: (context) => _RootUidDialog(current: _rootUid),
+      builder: (context) => _ConfigTextDialog<int>(
+        title: l10n.rootUid,
+        initialValue: '$_rootUid',
+        labelText: l10n.rootUidInput,
+        helperText: l10n.rootUidDescription,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(10),
+        ],
+        submit: (value) => int.tryParse(value.trim()) ?? 0,
+      ),
     );
     if (value == null || !mounted) return;
     setState(() => _rootUid = value);
@@ -170,9 +180,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future<void> _editDomain() async {
+    final l10n = AppLocalizations.of(context)!;
     final value = await showDialog<String>(
       context: context,
-      builder: (context) => _DomainDialog(current: _domain),
+      builder: (context) => _ConfigTextDialog<String>(
+        title: l10n.selinuxDomain,
+        initialValue: _domain,
+        labelText: l10n.selinuxDomainInput,
+        helperText: l10n.selinuxDomainDescription,
+        hintText: defaultSelinuxDomain,
+        submit: (value) => value,
+      ),
     );
     if (value == null || !mounted) return;
     final domain = value.trim().isEmpty ? defaultSelinuxDomain : value.trim();
@@ -297,7 +315,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _SectionTitle(text: l10n.rootConfiguration),
+                          SectionLabel(
+                            text: l10n.rootConfiguration,
+                            padding: const EdgeInsets.only(left: 16),
+                          ),
                           const SizedBox(height: 8),
                           CardGroup(
                             children: [
@@ -749,22 +770,38 @@ class _CapsSheet extends StatefulWidget {
   State<_CapsSheet> createState() => _CapsSheetState();
 }
 
-class _RootUidDialog extends StatefulWidget {
-  const _RootUidDialog({required this.current});
+class _ConfigTextDialog<T> extends StatefulWidget {
+  const _ConfigTextDialog({
+    required this.title,
+    required this.initialValue,
+    required this.labelText,
+    required this.helperText,
+    required this.submit,
+    this.hintText,
+    this.keyboardType = TextInputType.text,
+    this.inputFormatters = const [],
+  });
 
-  final int current;
+  final String title;
+  final String initialValue;
+  final String labelText;
+  final String helperText;
+  final String? hintText;
+  final TextInputType keyboardType;
+  final List<TextInputFormatter> inputFormatters;
+  final T Function(String value) submit;
 
   @override
-  State<_RootUidDialog> createState() => _RootUidDialogState();
+  State<_ConfigTextDialog<T>> createState() => _ConfigTextDialogState<T>();
 }
 
-class _RootUidDialogState extends State<_RootUidDialog> {
+class _ConfigTextDialogState<T> extends State<_ConfigTextDialog<T>> {
   late final TextEditingController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: '${widget.current}');
+    _controller = TextEditingController(text: widget.initialValue);
   }
 
   @override
@@ -774,81 +811,24 @@ class _RootUidDialogState extends State<_RootUidDialog> {
   }
 
   void _submit() {
-    Navigator.of(context).pop(int.tryParse(_controller.text.trim()) ?? 0);
+    Navigator.of(context).pop(widget.submit(_controller.text));
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(l10n.rootUid),
+      title: Text(widget.title),
       content: TextField(
         controller: _controller,
         autofocus: true,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(10),
-        ],
+        keyboardType: widget.keyboardType,
+        inputFormatters: widget.inputFormatters,
         decoration: InputDecoration(
-          labelText: l10n.rootUidInput,
-          helperText: l10n.rootUidDescription,
+          labelText: widget.labelText,
+          helperText: widget.helperText,
           helperMaxLines: 2,
-          border: const OutlineInputBorder(),
-        ),
-        onSubmitted: (_) => _submit(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.dialogCancel),
-        ),
-        FilledButton(onPressed: _submit, child: Text(l10n.dialogConfirm)),
-      ],
-    );
-  }
-}
-
-class _DomainDialog extends StatefulWidget {
-  const _DomainDialog({required this.current});
-
-  final String current;
-
-  @override
-  State<_DomainDialog> createState() => _DomainDialogState();
-}
-
-class _DomainDialogState extends State<_DomainDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.current);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() => Navigator.of(context).pop(_controller.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.selinuxDomain),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        keyboardType: TextInputType.text,
-        decoration: InputDecoration(
-          labelText: l10n.selinuxDomainInput,
-          helperText: l10n.selinuxDomainDescription,
-          helperMaxLines: 2,
-          hintText: defaultSelinuxDomain,
+          hintText: widget.hintText,
           border: const OutlineInputBorder(),
         ),
         onSubmitted: (_) => _submit(),
@@ -1033,24 +1013,6 @@ class _CapsSheetState extends State<_CapsSheet> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }

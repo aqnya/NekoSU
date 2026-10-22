@@ -6,9 +6,12 @@ import 'package:nekosu/data/kernel_features.dart';
 import 'package:nekosu/features/about/about_page.dart';
 import 'package:nekosu/features/settings/display_mode_page.dart';
 import 'package:nekosu/l10n/app_localizations.dart';
+import 'package:nekosu/shared/app_feedback.dart';
 import 'package:nekosu/shared/layout_insets.dart';
 import 'package:nekosu/shared/widgets/app_popup_menu.dart';
+import 'package:nekosu/shared/widgets/app_sliver_app_bar.dart';
 import 'package:nekosu/shared/widgets/card_group.dart';
+import 'package:nekosu/shared/widgets/section_card.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -18,7 +21,6 @@ class SettingsPage extends StatelessWidget {
     return AnimatedBuilder(
       animation: SettingsController.instance,
       builder: (context, _) {
-        final scheme = Theme.of(context).colorScheme;
         final l10n = AppLocalizations.of(context)!;
         final settings = SettingsController.instance;
         final navBarClearance = appNavBarClearance(context);
@@ -26,19 +28,12 @@ class SettingsPage extends StatelessWidget {
         return Scaffold(
           body: CustomScrollView(
             slivers: [
-              SliverAppBar(
-                pinned: true,
-                title: Text(l10n.settingsLabel),
-                backgroundColor: scheme.surfaceContainer,
-                surfaceTintColor: Colors.transparent,
-                scrolledUnderElevation: 0,
-                elevation: 0,
-              ),
+              AppSliverAppBar(title: Text(l10n.settingsLabel)),
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(0, 12, 0, navBarClearance),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    _SettingsSection(
+                    SectionCard(
                       title: l10n.settingsGeneral,
                       children: [
                         _SettingsChoice<AppThemeMode>(
@@ -85,7 +80,7 @@ class SettingsPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    _SettingsSection(
+                    SectionCard(
                       title: l10n.appearance,
                       children: [
                         _SettingsChoice<AppThemeAccent>(
@@ -182,7 +177,7 @@ class SettingsPage extends StatelessWidget {
                     const SizedBox(height: 20),
                     const _KernelFeatureSection(),
                     const SizedBox(height: 20),
-                    _SettingsSection(
+                    SectionCard(
                       title: l10n.settingsAbout,
                       children: [
                         ListRow(
@@ -285,9 +280,7 @@ class _KernelFeatureSectionState extends State<_KernelFeatureSection> {
       await _load();
     } else {
       final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.featureUpdateFailed)));
+      showAppSnackBar(context, l10n.featureUpdateFailed);
     }
     if (mounted) setState(() => _updating = false);
   }
@@ -295,7 +288,7 @@ class _KernelFeatureSectionState extends State<_KernelFeatureSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return _SettingsSection(
+    return SectionCard(
       title: l10n.featuresTitle,
       children: _features.isEmpty
           ? [
@@ -370,25 +363,16 @@ class _ExportLogsRowState extends State<_ExportLogsRow> {
     try {
       await LogExport.export(title: l10n.settingsExportLogs);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.settingsExportLogsSuccess)));
+      showAppSnackBar(context, l10n.settingsExportLogsSuccess);
     } on PlatformException catch (error) {
-      _showError(error.message ?? l10n.settingsExportLogsFailed);
+      showAppSnackBar(context, error.message ?? l10n.settingsExportLogsFailed);
     } on MissingPluginException {
-      _showError(l10n.settingsExportLogsFailed);
+      showAppSnackBar(context, l10n.settingsExportLogsFailed);
     } catch (_) {
-      _showError(l10n.settingsExportLogsFailed);
+      showAppSnackBar(context, l10n.settingsExportLogsFailed);
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -399,32 +383,6 @@ class _ExportLogsRowState extends State<_ExportLogsRow> {
       headline: Text(l10n.settingsExportLogs),
       supporting: Text(l10n.settingsExportLogsSummary),
       onTap: _exporting ? null : _export,
-    );
-  }
-}
-
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall
-                ?.copyWith(color: scheme.primary),
-          ),
-        ),
-        CardGroup(children: children),
-      ],
     );
   }
 }

@@ -107,6 +107,10 @@ const linuxCaps = <LinuxCap>[
 const defaultCaps = <int>{0, 1, 2, 3, 6, 7, 21};
 const defaultSelinuxDomain = 'u:r:nksu:s0';
 
+int capsToBits(Iterable<int> caps) {
+  return caps.fold(0, (bits, cap) => bits | (1 << cap));
+}
+
 class AppConfig {
   const AppConfig({
     required this.allowed,
@@ -122,7 +126,7 @@ class AppConfig {
   final String selinuxDomain;
   final NksuNamespace namespace;
 
-  int get capsBits => caps.fold(0, (bits, cap) => bits | (1 << cap));
+  int get capsBits => capsToBits(caps);
 }
 
 Map<int, AppConfig> parseProfiles(String text) {
