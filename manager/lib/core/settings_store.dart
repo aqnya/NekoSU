@@ -37,5 +37,6 @@ class SettingsStore {
       throw StateError('SettingsStore has not been initialized');
     }
     await box.put(key, value);
+    await box.flush();
   }
 }
