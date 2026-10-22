@@ -107,6 +107,7 @@ class MainActivity : FlutterActivity() {
                             "fontWeight" to prefs.getInt("font_weight", 1),
                             "amoled" to prefs.getBoolean("amoled_mode", false),
                             "floatingNavBar" to prefs.getBoolean("floating_navbar", true),
+                            "navBarStyle" to prefs.getString("nav_bar_style", null),
                             "language" to prefs.getString("language", "system"),
                             "displayMode" to prefs.getString("display_mode", null),
                         ),

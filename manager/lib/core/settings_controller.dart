@@ -21,6 +21,8 @@ enum AppFontWeight {
   final int value;
 }
 
+enum NavBarStyle { standard, floating, glass }
+
 class SettingsController extends ChangeNotifier {
   SettingsController._();
 
@@ -34,7 +36,7 @@ class SettingsController extends ChangeNotifier {
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
   AppFontWeight fontWeight = AppFontWeight.regular;
   bool amoled = false;
-  bool floatingNavBar = true;
+  NavBarStyle navBarStyle = NavBarStyle.floating;
   String language = 'system';
   String? displayMode;
 
@@ -63,7 +65,13 @@ class SettingsController extends ChangeNotifier {
       themeAccent = _accentFromIndex(values['themeColor']);
       fontWeight = _fontWeightFromIndex(values['fontWeight']);
       amoled = values['amoled'] == true;
-      floatingNavBar = values['floatingNavBar'] != false;
+      final savedNavBarStyle = values['navBarStyle']?.toString();
+      navBarStyle = NavBarStyle.values.firstWhere(
+        (style) => style.name == savedNavBarStyle,
+        orElse: () => values['floatingNavBar'] != false
+            ? NavBarStyle.floating
+            : NavBarStyle.standard,
+      );
       displayMode = values['displayMode']?.toString();
       final savedLanguage = values['language']?.toString();
       if (savedLanguage == 'en' || savedLanguage == 'zh') {
@@ -105,11 +113,12 @@ class SettingsController extends ChangeNotifier {
     await _save('font_weight', value.index);
   }
 
-  Future<void> setFloatingNavBar(bool value) async {
-    if (floatingNavBar == value) return;
-    floatingNavBar = value;
+  Future<void> setNavBarStyle(NavBarStyle value) async {
+    if (navBarStyle == value) return;
+    navBarStyle = value;
     notifyListeners();
-    await _save('floating_navbar', value);
+    await _save('nav_bar_style', value.name);
+    await _save('floating_navbar', value != NavBarStyle.standard);
   }
 
   Future<void> setLanguage(String value) async {

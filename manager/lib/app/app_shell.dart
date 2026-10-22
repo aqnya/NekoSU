@@ -55,27 +55,36 @@ class _AppShellState extends State<AppShell> {
 
     return AnimatedBuilder(
       animation: settings,
-      builder: (context, _) => Scaffold(
-        extendBody: settings.floatingNavBar,
-        body: AppNavBarScope(
-          floating: settings.floatingNavBar,
-          child: _TabPageSwitcher(
-            index: _selectedIndex,
-            child: pages[_selectedIndex],
+      builder: (context, _) {
+        final navBar = switch (settings.navBarStyle) {
+          NavBarStyle.standard => ModernNavigationBar(
+            selectedIndex: _selectedIndex,
+            onTabSelected: _selectTab,
+            tabs: tabs,
           ),
-        ),
-        bottomNavigationBar: settings.floatingNavBar
-            ? GlassFloatingNavBar(
-                selectedIndex: _selectedIndex,
-                onTabSelected: _selectTab,
-                tabs: tabs,
-              )
-            : ModernNavigationBar(
-                selectedIndex: _selectedIndex,
-                onTabSelected: _selectTab,
-                tabs: tabs,
-              ),
-      ),
+          NavBarStyle.floating => ModernCapsuleNavBar(
+            selectedIndex: _selectedIndex,
+            onTabSelected: _selectTab,
+            tabs: tabs,
+          ),
+          NavBarStyle.glass => GlassFloatingNavBar(
+            selectedIndex: _selectedIndex,
+            onTabSelected: _selectTab,
+            tabs: tabs,
+          ),
+        };
+        return Scaffold(
+          extendBody: settings.navBarStyle != NavBarStyle.standard,
+          body: AppNavBarScope(
+            style: settings.navBarStyle,
+            child: _TabPageSwitcher(
+              index: _selectedIndex,
+              child: pages[_selectedIndex],
+            ),
+          ),
+          bottomNavigationBar: navBar,
+        );
+      },
     );
   }
 

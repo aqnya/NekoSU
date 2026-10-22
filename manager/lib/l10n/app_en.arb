@@ -329,14 +329,13 @@
   "displayModeApplyFailed": "Unable to switch refresh rate",
   "settingsAmoled": "AMOLED black",
   "settingsAmoledSummary": "Use a pure black background in dark mode",
-  "settingsFloatingNavBar": "Floating navigation bar",
-  "@settingsFloatingNavBar": {
-    "description": "Toggle between the floating capsule navigation bar and the standard bottom navigation bar"
+  "settingsNavBarStyle": "Navigation bar style",
+  "@settingsNavBarStyle": {
+    "description": "Title of the navigation bar style setting"
   },
-  "settingsFloatingNavBarSummary": "Use the floating capsule bar; turn off for the standard bottom bar",
-  "@settingsFloatingNavBarSummary": {
-    "description": "Description of the floating navigation bar setting"
-  },
+  "navBarStyleStandard": "Standard",
+  "navBarStyleFloating": "Floating capsule",
+  "navBarStyleGlass": "Liquid glass",
   "featuresTitle": "Kernel features",
   "featureEmpty": "No kernel features",
   "featureEmptyDescription": "The kernel module did not report any feature.",

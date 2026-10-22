@@ -163,13 +163,30 @@ class SettingsPage extends StatelessWidget {
                             onChanged: settings.setAmoled,
                           ),
                         ),
-                        ListRow(
-                          icon: const Icon(Icons.space_bar_rounded),
-                          headline: Text(l10n.settingsFloatingNavBar),
-                          supporting: Text(l10n.settingsFloatingNavBarSummary),
-                          trailing: Switch(
-                            value: settings.floatingNavBar,
-                            onChanged: settings.setFloatingNavBar,
+                        _SettingsChoice<NavBarStyle>(
+                          value: settings.navBarStyle,
+                          choices: [
+                            _SettingsChoiceValue(
+                              NavBarStyle.standard,
+                              l10n.navBarStyleStandard,
+                            ),
+                            _SettingsChoiceValue(
+                              NavBarStyle.floating,
+                              l10n.navBarStyleFloating,
+                            ),
+                            _SettingsChoiceValue(
+                              NavBarStyle.glass,
+                              l10n.navBarStyleGlass,
+                            ),
+                          ],
+                          onChanged: settings.setNavBarStyle,
+                          child: ListRow(
+                            icon: const Icon(Icons.space_bar_rounded),
+                            headline: Text(l10n.settingsNavBarStyle),
+                            supporting: Text(
+                              _navBarStyleLabel(settings.navBarStyle, l10n),
+                            ),
+                            trailing: const Icon(Icons.chevron_right_rounded),
                           ),
                         ),
                       ],
@@ -240,6 +257,14 @@ class SettingsPage extends StatelessWidget {
       'en' => l10n.languageEnglish,
       'zh' => l10n.languageChinese,
       _ => l10n.languageSystem,
+    };
+  }
+
+  static String _navBarStyleLabel(NavBarStyle style, AppLocalizations l10n) {
+    return switch (style) {
+      NavBarStyle.standard => l10n.navBarStyleStandard,
+      NavBarStyle.floating => l10n.navBarStyleFloating,
+      NavBarStyle.glass => l10n.navBarStyleGlass,
     };
   }
 }
