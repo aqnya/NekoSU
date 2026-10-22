@@ -186,7 +186,7 @@ class _CardItemState extends State<CardItem> {
       curve: cardGroupMotionCurve,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        color: scheme.surfaceContainerHighest,
         borderRadius: shape,
       ),
       child: Material(
