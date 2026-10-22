@@ -40,7 +40,7 @@ class SettingsController extends ChangeNotifier {
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
 
-  SharedPreferences? _preferences;
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
   AppThemeMode themeMode = AppThemeMode.system;
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
@@ -69,28 +69,31 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final preferences = await SharedPreferences.getInstance();
-      _preferences = preferences;
-
-      themeMode = _themeModeFromIndex(preferences.getInt(_themeModeKey));
-      themeAccent = _accentFromIndex(preferences.getInt(_themeAccentKey));
-      fontWeight = _fontWeightFromIndex(preferences.getInt(_fontWeightKey));
-      amoled = preferences.getBool(_amoledKey) == true;
-      final savedNavBarStyle = preferences.getString(_navBarStyleKey);
+      themeMode = _themeModeFromIndex(await _preferences.getInt(_themeModeKey));
+      themeAccent = _accentFromIndex(
+        await _preferences.getInt(_themeAccentKey),
+      );
+      fontWeight = _fontWeightFromIndex(
+        await _preferences.getInt(_fontWeightKey),
+      );
+      amoled = await _preferences.getBool(_amoledKey) == true;
+      final savedNavBarStyle = await _preferences.getString(_navBarStyleKey);
       navBarStyle = NavBarStyle.values.firstWhere(
         (style) => style.name == savedNavBarStyle,
         orElse: () => NavBarStyle.standard,
       );
-      displayMode = preferences.getString(_displayModeKey);
-      final savedLanguage = preferences.getString(_languageKey);
+      displayMode = await _preferences.getString(_displayModeKey);
+      final savedLanguage = await _preferences.getString(_languageKey);
       if (savedLanguage == 'en' || savedLanguage == 'zh') {
         language = savedLanguage!;
       }
       notifyListeners();
-    } on MissingPluginException {
-      // Widget tests and non-Android platforms keep the defaults.
-    } on PlatformException {
-      // Corrupt or temporarily unavailable preferences keep the defaults.
+    } on MissingPluginException catch (error) {
+      debugPrint('Unable to load settings: $error');
+    } on PlatformException catch (error) {
+      debugPrint('Unable to load settings: $error');
+    } catch (error) {
+      debugPrint('Unable to load settings: $error');
     }
   }
 
@@ -145,22 +148,22 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> _save(String key, Object value) async {
     try {
-      final preferences = _preferences ??=
-          await SharedPreferences.getInstance();
       switch (value) {
         case final bool typed:
-          await preferences.setBool(key, typed);
+          await _preferences.setBool(key, typed);
         case final int typed:
-          await preferences.setInt(key, typed);
+          await _preferences.setInt(key, typed);
         case final String typed:
-          await preferences.setString(key, typed);
+          await _preferences.setString(key, typed);
         default:
           throw ArgumentError.value(value, 'value', 'Unsupported setting type');
       }
-    } on MissingPluginException {
-      // Keep the in-memory setting when running outside Android.
-    } on PlatformException {
-      // Settings remain active for this session if persistence fails.
+    } on MissingPluginException catch (error) {
+      debugPrint('Unable to save setting $key: $error');
+    } on PlatformException catch (error) {
+      debugPrint('Unable to save setting $key: $error');
+    } catch (error) {
+      debugPrint('Unable to save setting $key: $error');
     }
   }
 
