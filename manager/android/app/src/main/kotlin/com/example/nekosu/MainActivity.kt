@@ -98,6 +98,7 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                // Legacy settings written before the shared_preferences migration.
                 "load" -> {
                     val prefs = getSharedPreferences("app_preferences", MODE_PRIVATE)
                     result.success(
@@ -112,27 +113,6 @@ class MainActivity : FlutterActivity() {
                             "displayMode" to prefs.getString("display_mode", null),
                         ),
                     )
-                }
-                "save" -> {
-                    val key = call.argument<String>("key")
-                    val value = call.argument<Any>("value")
-                    if (key == null) {
-                        result.error("invalid_argument", "key is required", null)
-                    } else {
-                        val editor = getSharedPreferences("app_preferences", MODE_PRIVATE).edit()
-                        when (value) {
-                            is Boolean -> editor.putBoolean(key, value)
-                            is Int -> editor.putInt(key, value)
-                            is Long -> editor.putLong(key, value)
-                            is String -> editor.putString(key, value)
-                            else -> {
-                                result.error("invalid_argument", "unsupported setting value", null)
-                                return@setMethodCallHandler
-                            }
-                        }
-                        editor.apply()
-                        result.success(null)
-                    }
                 }
                 "exportLogs" -> exportLogs(
                     call.argument<String>("title") ?: "NekoSU logs",

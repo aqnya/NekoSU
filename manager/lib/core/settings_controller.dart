@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppThemeMode { system, light, dark }
 
@@ -29,8 +30,20 @@ class SettingsController extends ChangeNotifier {
   static final SettingsController instance = SettingsController._();
   static const _channel = MethodChannel('nekosu/settings');
 
+  static const _themeModeKey = 'theme_mode';
+  static const _themeAccentKey = 'theme_color';
+  static const _fontWeightKey = 'font_weight';
+  static const _amoledKey = 'amoled_mode';
+  static const _navBarStyleKey = 'nav_bar_style';
+  static const _floatingNavBarKey = 'floating_navbar';
+  static const _languageKey = 'language';
+  static const _displayModeKey = 'display_mode';
+  static const _settingsMigratedKey = 'settings_migrated';
+
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
+
+  SharedPreferences? _preferences;
 
   AppThemeMode themeMode = AppThemeMode.system;
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
@@ -59,21 +72,26 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final values = await _channel.invokeMapMethod<String, Object?>('load');
-      if (values == null) return;
-      themeMode = _themeModeFromIndex(values['themeMode']);
-      themeAccent = _accentFromIndex(values['themeColor']);
-      fontWeight = _fontWeightFromIndex(values['fontWeight']);
-      amoled = values['amoled'] == true;
-      final savedNavBarStyle = values['navBarStyle']?.toString();
+      final preferences = await SharedPreferences.getInstance();
+      _preferences = preferences;
+      if (preferences.getBool(_settingsMigratedKey) != true) {
+        await _migrateLegacySettings(preferences);
+        await preferences.setBool(_settingsMigratedKey, true);
+      }
+
+      themeMode = _themeModeFromIndex(preferences.getInt(_themeModeKey));
+      themeAccent = _accentFromIndex(preferences.getInt(_themeAccentKey));
+      fontWeight = _fontWeightFromIndex(preferences.getInt(_fontWeightKey));
+      amoled = preferences.getBool(_amoledKey) == true;
+      final savedNavBarStyle = preferences.getString(_navBarStyleKey);
       navBarStyle = NavBarStyle.values.firstWhere(
         (style) => style.name == savedNavBarStyle,
-        orElse: () => values['floatingNavBar'] != false
+        orElse: () => preferences.getBool(_floatingNavBarKey) != false
             ? NavBarStyle.floating
             : NavBarStyle.standard,
       );
-      displayMode = values['displayMode']?.toString();
-      final savedLanguage = values['language']?.toString();
+      displayMode = preferences.getString(_displayModeKey);
+      final savedLanguage = preferences.getString(_languageKey);
       if (savedLanguage == 'en' || savedLanguage == 'zh') {
         language = savedLanguage!;
       }
@@ -85,64 +103,120 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
+  /// Imports the preferences written by the old Android settings channel once.
+  Future<void> _migrateLegacySettings(SharedPreferences preferences) async {
+    try {
+      final legacy = await _channel.invokeMapMethod<String, Object?>('load');
+      if (legacy == null) return;
+      await preferences.setInt(
+        _themeModeKey,
+        _intValue(legacy['themeMode'], 0),
+      );
+      await preferences.setInt(
+        _themeAccentKey,
+        _intValue(legacy['themeColor'], 0),
+      );
+      await preferences.setInt(
+        _fontWeightKey,
+        _intValue(legacy['fontWeight'], AppFontWeight.regular.index),
+      );
+      await preferences.setBool(_amoledKey, legacy['amoled'] == true);
+      final legacyNavBarStyle = legacy['navBarStyle']?.toString();
+      if (legacyNavBarStyle != null && legacyNavBarStyle.isNotEmpty) {
+        await preferences.setString(_navBarStyleKey, legacyNavBarStyle);
+      }
+      await preferences.setBool(
+        _floatingNavBarKey,
+        legacy['floatingNavBar'] != false,
+      );
+      final legacyLanguage = legacy['language']?.toString();
+      if (legacyLanguage != null && legacyLanguage.isNotEmpty) {
+        await preferences.setString(_languageKey, legacyLanguage);
+      }
+      final legacyDisplayMode = legacy['displayMode']?.toString();
+      if (legacyDisplayMode != null && legacyDisplayMode.isNotEmpty) {
+        await preferences.setString(_displayModeKey, legacyDisplayMode);
+      }
+    } on MissingPluginException {
+      // No legacy settings on non-Android platforms.
+    } on PlatformException {
+      // Leave the new preferences empty; defaults remain in use.
+    }
+  }
+
   Future<void> setThemeMode(AppThemeMode value) async {
     if (themeMode == value) return;
     themeMode = value;
     notifyListeners();
-    await _save('theme_mode', value.index);
+    await _save(_themeModeKey, value.index);
   }
 
   Future<void> setThemeAccent(AppThemeAccent value) async {
     if (themeAccent == value) return;
     themeAccent = value;
     notifyListeners();
-    await _save('theme_color', value.index);
+    await _save(_themeAccentKey, value.index);
   }
 
   Future<void> setAmoled(bool value) async {
     if (amoled == value) return;
     amoled = value;
     notifyListeners();
-    await _save('amoled_mode', value);
+    await _save(_amoledKey, value);
   }
 
   Future<void> setFontWeight(AppFontWeight value) async {
     if (fontWeight == value) return;
     fontWeight = value;
     notifyListeners();
-    await _save('font_weight', value.index);
+    await _save(_fontWeightKey, value.index);
   }
 
   Future<void> setNavBarStyle(NavBarStyle value) async {
     if (navBarStyle == value) return;
     navBarStyle = value;
     notifyListeners();
-    await _save('nav_bar_style', value.name);
-    await _save('floating_navbar', value != NavBarStyle.standard);
+    await _save(_navBarStyleKey, value.name);
+    await _save(_floatingNavBarKey, value != NavBarStyle.standard);
   }
 
   Future<void> setLanguage(String value) async {
     if (language == value) return;
     language = value;
     notifyListeners();
-    await _save('language', value);
+    await _save(_languageKey, value);
   }
 
   Future<void> setDisplayMode(String value) async {
     if (displayMode == value) return;
     displayMode = value;
     notifyListeners();
-    await _save('display_mode', value);
+    await _save(_displayModeKey, value);
   }
 
   Future<void> _save(String key, Object value) async {
     try {
-      await _channel.invokeMethod<void>('save', {'key': key, 'value': value});
+      final preferences = _preferences ??=
+          await SharedPreferences.getInstance();
+      switch (value) {
+        case final bool typed:
+          await preferences.setBool(key, typed);
+        case final int typed:
+          await preferences.setInt(key, typed);
+        case final String typed:
+          await preferences.setString(key, typed);
+        default:
+          throw ArgumentError.value(value, 'value', 'Unsupported setting type');
+      }
     } on MissingPluginException {
       // Keep the in-memory setting when running outside Android.
     } on PlatformException {
       // Settings remain active for this session if persistence fails.
     }
+  }
+
+  static int _intValue(Object? value, int fallback) {
+    return value is num ? value.toInt() : fallback;
   }
 
   static AppThemeMode _themeModeFromIndex(Object? value) {
