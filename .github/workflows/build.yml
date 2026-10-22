@@ -97,12 +97,17 @@ jobs:
         java-version: '25'
         distribution: 'temurin'
         cache: gradle
+        cache-dependency-path: |
+          manager/android/**/*.gradle*
+          manager/android/gradle.properties
+          manager/android/gradle/wrapper/gradle-wrapper.properties
+          manager/android/gradle/libs.versions.toml
 
     - name: Cache Flutter Pub
       uses: actions/cache@v6
       with:
         path: ~/.pub-cache
-        key: flutter-pub-${{ hashFiles('manager/pubspec.lock') }}
+        key: flutter-pub-${{ hashFiles('manager/pubspec.yaml', 'manager/pubspec.lock') }}
         restore-keys: flutter-pub-
 
     - name: Set up Flutter
@@ -144,7 +149,7 @@ jobs:
     - name: Cache Rust build artifacts
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: neko -> build/rust/target
+        workspaces: neko -> ../build/neko/rust/target
 
     - name: List packaged assets
       run: |
