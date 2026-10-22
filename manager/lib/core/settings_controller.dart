@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shared_preferences_platform_interface/method_channel_shared_preferences.dart';
-import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:nekosu/core/settings_store.dart';
 
 enum AppThemeMode { system, light, dark }
 
@@ -42,8 +39,6 @@ class SettingsController extends ChangeNotifier {
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
 
-  SharedPreferences? _preferences;
-
   AppThemeMode themeMode = AppThemeMode.system;
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
   AppFontWeight fontWeight = AppFontWeight.regular;
@@ -71,44 +66,26 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      _useLegacyStore();
-      final preferences = await SharedPreferences.getInstance();
-      _preferences = preferences;
-
-      themeMode = _themeModeFromIndex(preferences.getInt(_themeModeKey));
-      themeAccent = _accentFromIndex(preferences.getInt(_themeAccentKey));
-      fontWeight = _fontWeightFromIndex(preferences.getInt(_fontWeightKey));
-      amoled = preferences.getBool(_amoledKey) == true;
-      final savedNavBarStyle = preferences.getString(_navBarStyleKey);
+      themeMode = _themeModeFromIndex(SettingsStore.read<int>(_themeModeKey));
+      themeAccent = _accentFromIndex(SettingsStore.read<int>(_themeAccentKey));
+      fontWeight = _fontWeightFromIndex(
+        SettingsStore.read<int>(_fontWeightKey),
+      );
+      amoled = SettingsStore.read<bool>(_amoledKey) == true;
+      final savedNavBarStyle = SettingsStore.read<String>(_navBarStyleKey);
       navBarStyle = NavBarStyle.values.firstWhere(
         (style) => style.name == savedNavBarStyle,
         orElse: () => NavBarStyle.standard,
       );
-      displayMode = preferences.getString(_displayModeKey);
-      final savedLanguage = preferences.getString(_languageKey);
+      displayMode = SettingsStore.read<String>(_displayModeKey);
+      final savedLanguage = SettingsStore.read<String>(_languageKey);
       if (savedLanguage == 'en' || savedLanguage == 'zh') {
         language = savedLanguage!;
       }
       notifyListeners();
-    } on MissingPluginException catch (error) {
-      debugPrint('Unable to load settings: $error');
-    } on PlatformException catch (error) {
-      debugPrint('Unable to load settings: $error');
     } catch (error) {
       debugPrint('Unable to load settings: $error');
     }
-  }
-
-  /// The Android plugin registers a Pigeon-backed store.  Some builds mix a
-  /// newer Dart Pigeon API with an older native plugin, which fails at runtime;
-  /// force the method-channel store that the legacy native plugin still serves.
-  static void _useLegacyStore() {
-    if (SharedPreferencesStorePlatform.instance
-        is MethodChannelSharedPreferencesStore) {
-      return;
-    }
-    SharedPreferencesStorePlatform.instance =
-        MethodChannelSharedPreferencesStore();
   }
 
   Future<void> setThemeMode(AppThemeMode value) async {
@@ -162,23 +139,7 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> _save(String key, Object value) async {
     try {
-      _useLegacyStore();
-      final preferences = _preferences ??=
-          await SharedPreferences.getInstance();
-      switch (value) {
-        case final bool typed:
-          await preferences.setBool(key, typed);
-        case final int typed:
-          await preferences.setInt(key, typed);
-        case final String typed:
-          await preferences.setString(key, typed);
-        default:
-          throw ArgumentError.value(value, 'value', 'Unsupported setting type');
-      }
-    } on MissingPluginException catch (error) {
-      debugPrint('Unable to save setting $key: $error');
-    } on PlatformException catch (error) {
-      debugPrint('Unable to save setting $key: $error');
+      await SettingsStore.write(key, value);
     } catch (error) {
       debugPrint('Unable to save setting $key: $error');
     }
