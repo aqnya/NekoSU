@@ -38,5 +38,8 @@ class SettingsStore {
     }
     await box.put(key, value);
     await box.flush();
+    // Hive appends every write to the box file. Settings change rarely, so
+    // compacting here keeps the file bounded instead of growing forever.
+    await box.compact();
   }
 }
