@@ -28,8 +28,6 @@ tasks.register("formatRust") {
                 "bootpatcher",
                 "--package",
                 "ffi",
-                "--package",
-                "jni",
             )
         }.result.get().assertNormalExitValue()
     }
