@@ -1,3 +1,15 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // AGP 9 bundles KGP 2.2.10; Flutter requires at least 2.2.20.
+        // Built-in Kotlin resolves the compiler through this classpath entry.
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21")
+    }
+}
+
 allprojects {
     repositories {
         google()
