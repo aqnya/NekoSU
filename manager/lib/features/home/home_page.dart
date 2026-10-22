@@ -57,12 +57,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       debugPrint('Unable to refresh NekoSU installation state: $error');
       return const InstallationState.unknown();
     }
-    debugPrint(
-      'native=${NcoreFfi.available} '
-      'installed=${NcoreFfi.isInstalled} '
-      'gki=${NcoreFfi.isGki} '
-      'moduleVer=${NcoreFfi.moduleVersion}',
-    );
   }
 
   @override

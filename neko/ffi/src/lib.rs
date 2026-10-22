@@ -240,10 +240,25 @@ fn uid_ioctl(uid: i32, flag: u32) -> i32 {
     }
 }
 
+/*
+ * Acquire the control fd from a newly created thread.
+ *
+ * Android forks an app process from zygote while it still carries zygote's
+ * uid, so the thread that eventually runs Dart's main() was created before the
+ * process owned the manager uid and never received TIF_SYSCALL_TRACEPOINT.
+ * prctl() from that thread therefore bypasses the syscall tracepoint and the fd
+ * grant never runs.  A thread created now already carries the manager uid, so
+ * the kernel marks it and the grant succeeds.  The descriptor is process wide,
+ * so every later ctl() on the platform thread finds the cached value.
+ */
+fn ensure_ctl_fd_from_worker() -> Option<RawFd> {
+    std::thread::scope(|scope| scope.spawn(ensure_ctl_fd).join().unwrap_or(None))
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ncore_init() -> i32 {
     init_logging();
-    let Some(_) = ensure_ctl_fd() else {
+    let Some(_) = ensure_ctl_fd_from_worker() else {
         log::error!("can't load control fd!");
         return -1;
     };
