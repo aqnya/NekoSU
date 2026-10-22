@@ -98,22 +98,6 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                // Legacy settings written before the shared_preferences migration.
-                "load" -> {
-                    val prefs = getSharedPreferences("app_preferences", MODE_PRIVATE)
-                    result.success(
-                        mapOf(
-                            "themeMode" to prefs.getInt("theme_mode", 0),
-                            "themeColor" to prefs.getInt("theme_color", 0),
-                            "fontWeight" to prefs.getInt("font_weight", 1),
-                            "amoled" to prefs.getBoolean("amoled_mode", false),
-                            "floatingNavBar" to prefs.getBoolean("floating_navbar", true),
-                            "navBarStyle" to prefs.getString("nav_bar_style", null),
-                            "language" to prefs.getString("language", "system"),
-                            "displayMode" to prefs.getString("display_mode", null),
-                        ),
-                    )
-                }
                 "exportLogs" -> exportLogs(
                     call.argument<String>("title") ?: "NekoSU logs",
                     result,

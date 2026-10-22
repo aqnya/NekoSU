@@ -28,7 +28,6 @@ class SettingsController extends ChangeNotifier {
   SettingsController._();
 
   static final SettingsController instance = SettingsController._();
-  static const _channel = MethodChannel('nekosu/settings');
 
   static const _themeModeKey = 'theme_mode';
   static const _themeAccentKey = 'theme_color';
@@ -38,7 +37,6 @@ class SettingsController extends ChangeNotifier {
   static const _floatingNavBarKey = 'floating_navbar';
   static const _languageKey = 'language';
   static const _displayModeKey = 'display_mode';
-  static const _settingsMigratedKey = 'settings_migrated';
 
   static const managerVersion = '1.0.0';
   static const fallbackSeed = Colors.teal;
@@ -74,10 +72,6 @@ class SettingsController extends ChangeNotifier {
     try {
       final preferences = await SharedPreferences.getInstance();
       _preferences = preferences;
-      if (preferences.getBool(_settingsMigratedKey) != true) {
-        await _migrateLegacySettings(preferences);
-        await preferences.setBool(_settingsMigratedKey, true);
-      }
 
       themeMode = _themeModeFromIndex(preferences.getInt(_themeModeKey));
       themeAccent = _accentFromIndex(preferences.getInt(_themeAccentKey));
@@ -100,47 +94,6 @@ class SettingsController extends ChangeNotifier {
       // Widget tests and non-Android platforms keep the defaults.
     } on PlatformException {
       // Corrupt or temporarily unavailable preferences keep the defaults.
-    }
-  }
-
-  /// Imports the preferences written by the old Android settings channel once.
-  Future<void> _migrateLegacySettings(SharedPreferences preferences) async {
-    try {
-      final legacy = await _channel.invokeMapMethod<String, Object?>('load');
-      if (legacy == null) return;
-      await preferences.setInt(
-        _themeModeKey,
-        _intValue(legacy['themeMode'], 0),
-      );
-      await preferences.setInt(
-        _themeAccentKey,
-        _intValue(legacy['themeColor'], 0),
-      );
-      await preferences.setInt(
-        _fontWeightKey,
-        _intValue(legacy['fontWeight'], AppFontWeight.regular.index),
-      );
-      await preferences.setBool(_amoledKey, legacy['amoled'] == true);
-      final legacyNavBarStyle = legacy['navBarStyle']?.toString();
-      if (legacyNavBarStyle != null && legacyNavBarStyle.isNotEmpty) {
-        await preferences.setString(_navBarStyleKey, legacyNavBarStyle);
-      }
-      await preferences.setBool(
-        _floatingNavBarKey,
-        legacy['floatingNavBar'] != false,
-      );
-      final legacyLanguage = legacy['language']?.toString();
-      if (legacyLanguage != null && legacyLanguage.isNotEmpty) {
-        await preferences.setString(_languageKey, legacyLanguage);
-      }
-      final legacyDisplayMode = legacy['displayMode']?.toString();
-      if (legacyDisplayMode != null && legacyDisplayMode.isNotEmpty) {
-        await preferences.setString(_displayModeKey, legacyDisplayMode);
-      }
-    } on MissingPluginException {
-      // No legacy settings on non-Android platforms.
-    } on PlatformException {
-      // Leave the new preferences empty; defaults remain in use.
     }
   }
 
@@ -213,10 +166,6 @@ class SettingsController extends ChangeNotifier {
     } on PlatformException {
       // Settings remain active for this session if persistence fails.
     }
-  }
-
-  static int _intValue(Object? value, int fallback) {
-    return value is num ? value.toInt() : fallback;
   }
 
   static AppThemeMode _themeModeFromIndex(Object? value) {
