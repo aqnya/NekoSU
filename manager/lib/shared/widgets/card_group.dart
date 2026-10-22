@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 const double cardGroupOuterRadius = 24;
 const double cardGroupInnerRadius = 4;
-const double cardGroupGap = 4;
+const double cardGroupGap = 2;
 
 const Duration cardGroupMotionDuration = Duration(milliseconds: 250);
 const Curve cardGroupMotionCurve = Curves.easeInOutCubic;
