@@ -21,7 +21,7 @@ class AppNavBarScope extends InheritedWidget {
 double appNavBarClearance(BuildContext context) {
   final style =
       context.dependOnInheritedWidgetOfExactType<AppNavBarScope>()?.style ??
-      NavBarStyle.floating;
+      NavBarStyle.standard;
   final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
   return switch (style) {
     NavBarStyle.standard => 16,

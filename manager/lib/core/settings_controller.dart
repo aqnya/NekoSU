@@ -34,7 +34,6 @@ class SettingsController extends ChangeNotifier {
   static const _fontWeightKey = 'font_weight';
   static const _amoledKey = 'amoled_mode';
   static const _navBarStyleKey = 'nav_bar_style';
-  static const _floatingNavBarKey = 'floating_navbar';
   static const _languageKey = 'language';
   static const _displayModeKey = 'display_mode';
 
@@ -47,7 +46,7 @@ class SettingsController extends ChangeNotifier {
   AppThemeAccent themeAccent = AppThemeAccent.materialYou;
   AppFontWeight fontWeight = AppFontWeight.regular;
   bool amoled = false;
-  NavBarStyle navBarStyle = NavBarStyle.floating;
+  NavBarStyle navBarStyle = NavBarStyle.standard;
   String language = 'system';
   String? displayMode;
 
@@ -80,9 +79,7 @@ class SettingsController extends ChangeNotifier {
       final savedNavBarStyle = preferences.getString(_navBarStyleKey);
       navBarStyle = NavBarStyle.values.firstWhere(
         (style) => style.name == savedNavBarStyle,
-        orElse: () => preferences.getBool(_floatingNavBarKey) != false
-            ? NavBarStyle.floating
-            : NavBarStyle.standard,
+        orElse: () => NavBarStyle.standard,
       );
       displayMode = preferences.getString(_displayModeKey);
       final savedLanguage = preferences.getString(_languageKey);
@@ -130,7 +127,6 @@ class SettingsController extends ChangeNotifier {
     navBarStyle = value;
     notifyListeners();
     await _save(_navBarStyleKey, value.name);
-    await _save(_floatingNavBarKey, value != NavBarStyle.standard);
   }
 
   Future<void> setLanguage(String value) async {
