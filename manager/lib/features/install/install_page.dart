@@ -58,6 +58,7 @@ class _InstallPageState extends State<InstallPage> {
   List<InstallOperation> _operationsFor(InstallEnvironment environment) {
     return [
       InstallOperation.file,
+      if (environment.rootAvailable) InstallOperation.fileDirect,
       if (environment.rootAvailable && environment.currentVendorBoot != null)
         InstallOperation.direct,
       if (environment.rootAvailable && environment.inactiveVendorBoot != null)
@@ -95,6 +96,8 @@ class _InstallPageState extends State<InstallPage> {
     if (_localKo == null && _selectedKoName == null) return false;
     return switch (_operation) {
       InstallOperation.file => _vendorBoot != null,
+      InstallOperation.fileDirect =>
+        environment.rootAvailable && _vendorBoot != null,
       InstallOperation.direct =>
         environment.rootAvailable && environment.currentVendorBoot != null,
       InstallOperation.inactive =>
@@ -119,10 +122,7 @@ class _InstallPageState extends State<InstallPage> {
   Future<void> _pickVendorBoot() async {
     final image = await _pick(InstallBridge.pickVendorBoot);
     if (!mounted || image == null) return;
-    setState(() {
-      _vendorBoot = image;
-      _operation = InstallOperation.file;
-    });
+    setState(() => _vendorBoot = image);
   }
 
   Future<void> _pickLocalKo() async {
@@ -204,12 +204,16 @@ class _InstallPageState extends State<InstallPage> {
 
   void _selectOperation(InstallOperation operation) {
     if (_starting) return;
-    if (operation == InstallOperation.file &&
-        _operation == InstallOperation.file) {
+    if ((operation == InstallOperation.file ||
+            operation == InstallOperation.fileDirect) &&
+        _operation == operation) {
       _pickVendorBoot();
       return;
     }
     setState(() => _operation = operation);
+    if (operation == InstallOperation.fileDirect && _vendorBoot == null) {
+      _pickVendorBoot();
+    }
   }
 
   Future<void> _startInstall() async {
@@ -220,7 +224,9 @@ class _InstallPageState extends State<InstallPage> {
       showAppSnackBar(context, l10n.installBootpatcherMissing);
       return;
     }
-    if (_operation == InstallOperation.file && _vendorBoot == null) {
+    if ((_operation == InstallOperation.file ||
+            _operation == InstallOperation.fileDirect) &&
+        _vendorBoot == null) {
       showAppSnackBar(context, l10n.installBootImageRequired);
       return;
     }
@@ -231,22 +237,27 @@ class _InstallPageState extends State<InstallPage> {
 
     final partition = switch (_operation) {
       InstallOperation.file => null,
+      InstallOperation.fileDirect => environment.currentVendorBoot,
       InstallOperation.direct => environment.currentVendorBoot,
       InstallOperation.inactive => environment.inactiveVendorBoot,
     };
     if (_operation != InstallOperation.file) {
+      final partitionLabel = partition ?? l10n.installPartitionAuto;
+      final directFlash =
+          _operation == InstallOperation.direct ||
+          _operation == InstallOperation.fileDirect;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(
-            _operation == InstallOperation.direct
+            directFlash
                 ? l10n.installDirectConfirmTitle
                 : l10n.installInactiveConfirmTitle,
           ),
           content: Text(
-            _operation == InstallOperation.direct
-                ? l10n.installDirectConfirmMessage(partition ?? '')
-                : l10n.installInactiveConfirmMessage(partition ?? ''),
+            directFlash
+                ? l10n.installDirectConfirmMessage(partitionLabel)
+                : l10n.installInactiveConfirmMessage(partitionLabel),
           ),
           actions: [
             TextButton(
@@ -265,7 +276,9 @@ class _InstallPageState extends State<InstallPage> {
 
     final request = InstallRequest(
       operation: _operation,
-      vendorBootPath: _operation == InstallOperation.file
+      vendorBootPath:
+          _operation == InstallOperation.file ||
+              _operation == InstallOperation.fileDirect
           ? _vendorBoot?.path
           : null,
       koName: _localKo == null ? _selectedKoName : null,
@@ -409,6 +422,7 @@ class _InstallPageState extends State<InstallPage> {
                 selected: _operation == operation,
                 title: switch (operation) {
                   InstallOperation.file => l10n.installMethodFile,
+                  InstallOperation.fileDirect => l10n.installMethodFileDirect,
                   InstallOperation.direct => l10n.installMethodDirect,
                   InstallOperation.inactive => l10n.installMethodInactive,
                 },
@@ -487,6 +501,8 @@ class _InstallPageState extends State<InstallPage> {
     return switch (operation) {
       InstallOperation.file =>
         _vendorBoot?.name ?? l10n.installMethodFileDescription,
+      InstallOperation.fileDirect =>
+        _vendorBoot?.name ?? l10n.installMethodFileDirectDescription,
       InstallOperation.direct =>
         environment.currentVendorBoot ?? l10n.installMethodDirectDescription,
       InstallOperation.inactive =>
@@ -527,7 +543,8 @@ class _OperationRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
-        operation == InstallOperation.file
+        operation == InstallOperation.file ||
+                operation == InstallOperation.fileDirect
             ? Icons.image_outlined
             : Icons.smartphone_rounded,
       ),

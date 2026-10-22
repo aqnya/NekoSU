@@ -5,6 +5,7 @@ import 'package:nekosu/core/output_events.dart';
 
 enum InstallOperation {
   file,
+  fileDirect,
   direct,
   inactive;
 
