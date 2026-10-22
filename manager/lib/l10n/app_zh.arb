@@ -29,6 +29,8 @@
   "aboutInformation": "应用信息",
   "aboutVersion": "版本",
   "aboutChannel": "构建通道",
+  "aboutChannelCanary": "Canary",
+  "aboutChannelBeta": "Beta",
   "aboutChannelRelease": "正式版",
   "aboutLicense": "许可证",
   "aboutLicenseShort": "GPL-3.0 开源许可",

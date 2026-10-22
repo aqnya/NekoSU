@@ -45,12 +45,40 @@ fun nksuVersion(): String =
         ?.ifEmpty { null }
         ?: "unknown"
 
-val versionChannel: String =
+val baseVersion = nksuVersion()
+val versionNameOverride: String? =
+    (
+        (project.findProperty("versionNameOverride") as? String)
+            ?: System.getenv("VERSION_NAME")
+    )?.trim()?.takeIf { it.isNotEmpty() }
+
+val requestedVersionChannel: String? =
     (
         (project.findProperty("versionChannel") as? String)
             ?: System.getenv("VERSION_CHANNEL")
-            ?: "canary"
-    ).trim().lowercase()
+    )?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+val inferredVersionChannel: String? =
+    versionNameOverride?.let {
+        when {
+            it.contains("-canary.") -> "canary"
+            it.contains("-beta.") -> "beta"
+            else -> "release"
+        }
+    }
+
+val versionChannel: String =
+    when {
+        requestedVersionChannel != null && inferredVersionChannel != null -> {
+            require(requestedVersionChannel == inferredVersionChannel) {
+                "versionChannel $requestedVersionChannel does not match versionName $versionNameOverride"
+            }
+            requestedVersionChannel
+        }
+        requestedVersionChannel != null -> requestedVersionChannel
+        inferredVersionChannel != null -> inferredVersionChannel
+        else -> "canary"
+    }
 
 val versionChannelCode: Int =
     when (versionChannel) {
@@ -59,13 +87,6 @@ val versionChannelCode: Int =
         "release" -> 2
         else -> error("unknown versionChannel: $versionChannel (expected canary, beta or release)")
     }
-
-val baseVersion = nksuVersion()
-val versionNameOverride: String? =
-    (
-        (project.findProperty("versionNameOverride") as? String)
-            ?: System.getenv("VERSION_NAME")
-    )?.trim()?.takeIf { it.isNotEmpty() }
 
 val buildVersionName: String =
     versionNameOverride

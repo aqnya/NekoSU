@@ -20,6 +20,7 @@ class _AboutPageState extends State<AboutPage> {
   static const _repositoryUrl = 'https://github.com/nksu-crew/NekoSU';
 
   String _version = SettingsController.managerVersion;
+  String _channel = 'release';
 
   @override
   void initState() {
@@ -36,10 +37,17 @@ class _AboutPageState extends State<AboutPage> {
         _version = buildNumber.isEmpty
             ? info.version
             : '${info.version} ($buildNumber)';
+        _channel = _channelOf(info.version);
       });
     } catch (_) {
       // Keep the bundled fallback version when platform metadata is unavailable.
     }
+  }
+
+  static String _channelOf(String version) {
+    if (version.contains('-canary')) return 'canary';
+    if (version.contains('-beta')) return 'beta';
+    return 'release';
   }
 
   Future<void> _openRepository() async {
@@ -98,7 +106,11 @@ class _AboutPageState extends State<AboutPage> {
                     _AboutInfoRow(
                       icon: Icons.new_releases_outlined,
                       title: l10n.aboutChannel,
-                      value: l10n.aboutChannelRelease,
+                      value: switch (_channel) {
+                        'canary' => l10n.aboutChannelCanary,
+                        'beta' => l10n.aboutChannelBeta,
+                        _ => l10n.aboutChannelRelease,
+                      },
                     ),
                     _AboutInfoRow(
                       icon: Icons.gavel_rounded,

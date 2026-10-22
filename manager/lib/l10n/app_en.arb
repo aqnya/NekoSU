@@ -107,6 +107,8 @@
   "aboutInformation": "App information",
   "aboutVersion": "Version",
   "aboutChannel": "Build channel",
+  "aboutChannelCanary": "Canary",
+  "aboutChannelBeta": "Beta",
   "aboutChannelRelease": "Release",
   "aboutLicense": "License",
   "aboutLicenseShort": "GPL-3.0 licensed",
