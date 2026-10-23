@@ -296,29 +296,12 @@
   "modulesMetamodule": "Meta",
   "modulesPendingRemoval": "Pending removal",
   "modulesUpdate": "Update pending",
-  "modulesUpdateAvailable": "Update available",
-  "modulesUpdateCheckFailed": "Update check failed",
+  "modulesUpdateNewVersionTitle": "New version available",
   "modulesUpdateNow": "Update",
-  "modulesUpdateCurrentVersion": "Installed: {version}",
-  "@modulesUpdateCurrentVersion": {
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "modulesUpdateLatestVersion": "Available: {version}",
-  "@modulesUpdateLatestVersion": {
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
+  "modulesUpdateLater": "Later",
   "modulesUpdateChangelog": "Changelog",
   "modulesUpdateChangelogEmpty": "No changelog provided",
   "modulesUpdateChangelogFailed": "Unable to open the changelog",
-  "modulesUpdateOpenInBrowser": "Open in browser",
   "modulesUpdateDownloading": "Downloading update…",
   "modulesUpdateDownloadFailed": "Update download failed",
   "modulesVersion": "Version",

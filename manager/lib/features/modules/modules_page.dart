@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -81,6 +82,15 @@ class _ModulesPageState extends State<ModulesPage> {
           if (module.updateJson.trim().isNotEmpty)
             module.id: ModuleUpdateCheck.failed('$error'),
       };
+    }
+    // Update checks are best effort: a module whose update channel is
+    // unreachable simply gets no update button, matching the module manager
+    // behaviour. Keep the reason in the log for diagnostics.
+    for (final entry in checks.entries) {
+      final error = entry.value.error;
+      if (error != null) {
+        debugPrint('Module update check failed for ${entry.key}: $error');
+      }
     }
     if (!mounted || generation != _updateCheckGeneration) return;
     setState(() => _updateChecks = checks);
@@ -480,64 +490,120 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
     final changelogUrl = widget.update.changelogUrl;
     return AlertDialog(
       title: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(l10n.modulesUpdateChangelog)),
-          if (changelogUrl != null)
-            IconButton(
-              onPressed: () => unawaited(widget.openChangelog(changelogUrl)),
-              tooltip: l10n.modulesUpdateOpenInBrowser,
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: scheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(14),
             ),
+            child: Icon(
+              Icons.download_rounded,
+              color: scheme.onSecondaryContainer,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.modulesUpdateNewVersionTitle,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        child: Text(
+                          widget.update.version,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSecondaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      widget.module.title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (changelogUrl != null)
+                      InkWell(
+                        onTap: () =>
+                            unawaited(widget.openChangelog(changelogUrl)),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                l10n.modulesUpdateChangelog,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.open_in_new_rounded,
+                                size: 16,
+                                color: scheme.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
       content: SizedBox(
         width: double.maxFinite,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 325),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.module.title, style: theme.textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.modulesUpdateCurrentVersion(
-                    widget.module.version.trim().isEmpty
-                        ? '-'
-                        : widget.module.version,
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  l10n.modulesUpdateLatestVersion(widget.update.version),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  width: double.maxFinite,
-                  color: scheme.surfaceContainer,
-                  padding: const EdgeInsets.all(16),
-                  child: changelogUrl == null
-                      ? Text(
-                          l10n.modulesUpdateChangelogEmpty,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        )
-                      : _buildChangelog(
-                          l10n: l10n,
-                          theme: theme,
-                          scheme: scheme,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surfaceBright,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SingleChildScrollView(
+                child: changelogUrl == null
+                    ? Text(
+                        l10n.modulesUpdateChangelogEmpty,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
-                ),
-              ],
+                      )
+                    : _buildChangelog(l10n: l10n, theme: theme, scheme: scheme),
+              ),
             ),
           ),
         ),
@@ -545,11 +611,16 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: Text(l10n.dialogCancel),
+          child: Text(l10n.modulesUpdateLater),
         ),
-        TextButton(
+        FilledButton.icon(
           onPressed: () => Navigator.pop(context, true),
-          child: Text(l10n.modulesUpdateNow),
+          icon: const Icon(Icons.download_rounded, size: 18),
+          label: Text(l10n.modulesUpdateNow),
+          style: FilledButton.styleFrom(
+            shape: const StadiumBorder(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
         ),
       ],
     );
@@ -709,7 +780,6 @@ class _ModuleCardState extends State<_ModuleCard> {
     final scheme = theme.colorScheme;
     final module = widget.module;
     final update = widget.updateCheck?.update;
-    final updateFailed = widget.updateCheck?.failed ?? false;
     final pendingRemoval = module.remove;
     final textDecoration = pendingRemoval ? TextDecoration.lineThrough : null;
     final actionsVisible = !pendingRemoval && module.enabled;
@@ -806,10 +876,7 @@ class _ModuleCardState extends State<_ModuleCard> {
                       ),
                     ),
                   ],
-                  if (module.metamodule ||
-                      module.update ||
-                      update != null ||
-                      updateFailed) ...[
+                  if (module.metamodule || module.update) ...[
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
@@ -824,19 +891,6 @@ class _ModuleCardState extends State<_ModuleCard> {
                           AppTag(
                             label: l10n.modulesUpdate,
                             color: scheme.tertiary,
-                          ),
-                        if (update != null)
-                          AppTag(
-                            label: l10n.modulesUpdateAvailable,
-                            color: scheme.primary,
-                          ),
-                        if (updateFailed)
-                          Tooltip(
-                            message: widget.updateCheck!.error!,
-                            child: AppTag(
-                              label: l10n.modulesUpdateCheckFailed,
-                              color: scheme.error,
-                            ),
                           ),
                       ],
                     ),
@@ -876,7 +930,7 @@ class _ModuleCardState extends State<_ModuleCard> {
                       if (showUpdate)
                         _ModuleCardButton(
                           onPressed: widget.onUpdate,
-                          icon: Icons.system_update_rounded,
+                          icon: Icons.download_rounded,
                           tooltip: l10n.modulesUpdateNow,
                         ),
                     ],
