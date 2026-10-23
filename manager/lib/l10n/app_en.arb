@@ -299,14 +299,6 @@
   "modulesUpdateAvailable": "Update available",
   "modulesUpdateCheckFailed": "Update check failed",
   "modulesUpdateNow": "Update",
-  "modulesUpdateDialogTitle": "Update {name}",
-  "@modulesUpdateDialogTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "modulesUpdateCurrentVersion": "Installed: {version}",
   "@modulesUpdateCurrentVersion": {
     "placeholders": {
@@ -324,7 +316,9 @@
     }
   },
   "modulesUpdateChangelog": "Changelog",
+  "modulesUpdateChangelogEmpty": "No changelog provided",
   "modulesUpdateChangelogFailed": "Unable to open the changelog",
+  "modulesUpdateOpenInBrowser": "Open in browser",
   "modulesUpdateDownloading": "Downloading update…",
   "modulesUpdateDownloadFailed": "Update download failed",
   "modulesVersion": "Version",

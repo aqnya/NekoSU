@@ -95,6 +95,7 @@ class ModuleUpdateService {
   static const _connectTimeout = Duration(seconds: 10);
   static const _requestTimeout = Duration(seconds: 20);
   static const _maxMetadataBytes = 256 * 1024;
+  static const _maxChangelogBytes = 256 * 1024;
 
   /// Checks every module that declares `updateJson`, at most [concurrency]
   /// requests at a time, and returns the result keyed by module id.
@@ -173,6 +174,38 @@ class ModuleUpdateService {
     }
   }
 
+  /// Fetches the complete changelog text behind [update]'s `changelog` URL.
+  static Future<String> fetchChangelog(ModuleUpdate update) async {
+    final changelogUrl = update.changelogUrl;
+    if (changelogUrl == null) {
+      throw const ModuleUpdateException('No changelog URL provided');
+    }
+    final uri = Uri.tryParse(changelogUrl);
+    if (uri == null || !ModuleUpdate.isHttpUri(uri)) {
+      throw ModuleUpdateException('Invalid changelog URL: $changelogUrl');
+    }
+
+    final client = HttpClient()..connectionTimeout = _connectTimeout;
+    try {
+      final request = await client.getUrl(uri).timeout(_requestTimeout);
+      request.headers.set(HttpHeaders.userAgentHeader, 'NekoSU');
+      final response = await request.close().timeout(_requestTimeout);
+      if (response.statusCode != HttpStatus.ok) {
+        throw ModuleUpdateException(
+          'HTTP ${response.statusCode} from $changelogUrl',
+        );
+      }
+      final body = await _readBody(response, maxBytes: _maxChangelogBytes);
+      return utf8.decode(body, allowMalformed: true).replaceFirst('\uFEFF', '');
+    } on TimeoutException {
+      throw ModuleUpdateException(
+        'Timed out while loading the changelog from $changelogUrl',
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   /// Downloads [update] to [destination], replacing any existing file.
   ///
   /// [onProgress] receives the bytes written and the expected total, which is
@@ -229,13 +262,16 @@ class ModuleUpdateService {
     }
   }
 
-  static Future<List<int>> _readBody(HttpClientResponse response) async {
+  static Future<List<int>> _readBody(
+    HttpClientResponse response, {
+    int maxBytes = _maxMetadataBytes,
+  }) async {
     final bytes = <int>[];
     await for (final chunk in response.timeout(_requestTimeout)) {
       bytes.addAll(chunk);
-      if (bytes.length > _maxMetadataBytes) {
-        throw const ModuleUpdateException(
-          'Update metadata is larger than expected',
+      if (bytes.length > maxBytes) {
+        throw ModuleUpdateException(
+          'Response is larger than the $maxBytes byte limit',
         );
       }
     }

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:nekosu/data/module_updates.dart';
 import 'package:nekosu/data/modules.dart';
 import 'package:nekosu/features/modules/webui_page.dart';
@@ -290,43 +291,12 @@ class _ModulesPageState extends State<ModulesPage> {
   }
 
   Future<bool?> _confirmUpdate(ModuleInfo module, ModuleUpdate update) {
-    final l10n = AppLocalizations.of(context)!;
-    final changelogUrl = update.changelogUrl;
     return showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.modulesUpdateDialogTitle(module.title)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.modulesUpdateCurrentVersion(
-                module.version.trim().isEmpty ? '-' : module.version,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(l10n.modulesUpdateLatestVersion(update.version)),
-            if (changelogUrl != null) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () => _openChangelog(changelogUrl),
-                icon: const Icon(Icons.notes_rounded, size: 18),
-                label: Text(l10n.modulesUpdateChangelog),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.dialogCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.modulesUpdateNow),
-          ),
-        ],
+      builder: (context) => _ModuleUpdateDialog(
+        module: module,
+        update: update,
+        openChangelog: _openChangelog,
       ),
     );
   }
@@ -468,6 +438,232 @@ class _ModulesPageState extends State<ModulesPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ModuleUpdateDialog extends StatefulWidget {
+  const _ModuleUpdateDialog({
+    required this.module,
+    required this.update,
+    required this.openChangelog,
+  });
+
+  final ModuleInfo module;
+  final ModuleUpdate update;
+  final Future<void> Function(String url) openChangelog;
+
+  @override
+  State<_ModuleUpdateDialog> createState() => _ModuleUpdateDialogState();
+}
+
+class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
+  Future<String>? _changelog;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChangelog();
+  }
+
+  void _loadChangelog() {
+    _changelog = widget.update.changelogUrl == null
+        ? null
+        : ModuleUpdateService.fetchChangelog(widget.update);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final changelogUrl = widget.update.changelogUrl;
+    return AlertDialog(
+      title: Row(
+        children: [
+          Expanded(child: Text(l10n.modulesUpdateChangelog)),
+          if (changelogUrl != null)
+            IconButton(
+              onPressed: () => unawaited(widget.openChangelog(changelogUrl)),
+              tooltip: l10n.modulesUpdateOpenInBrowser,
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 325),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.module.title, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  l10n.modulesUpdateCurrentVersion(
+                    widget.module.version.trim().isEmpty
+                        ? '-'
+                        : widget.module.version,
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  l10n.modulesUpdateLatestVersion(widget.update.version),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.maxFinite,
+                  color: scheme.surfaceContainer,
+                  padding: const EdgeInsets.all(16),
+                  child: changelogUrl == null
+                      ? Text(
+                          l10n.modulesUpdateChangelogEmpty,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        )
+                      : _buildChangelog(
+                          l10n: l10n,
+                          theme: theme,
+                          scheme: scheme,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(l10n.dialogCancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(l10n.modulesUpdateNow),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChangelog({
+    required AppLocalizations l10n,
+    required ThemeData theme,
+    required ColorScheme scheme,
+  }) {
+    return FutureBuilder<String>(
+      future: _changelog,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${snapshot.error}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.error,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(_loadChangelog),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(l10n.retry),
+              ),
+            ],
+          );
+        }
+        final changelog = snapshot.data?.trim() ?? '';
+        if (changelog.isEmpty) {
+          return Text(
+            l10n.modulesUpdateChangelogEmpty,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          );
+        }
+        return MarkdownBody(
+          data: changelog,
+          selectable: true,
+          styleSheet: _markdownStyle(theme, scheme),
+          onTapLink: (text, href, title) {
+            if (href == null) return;
+            final uri = Uri.tryParse(href);
+            if (uri == null || !ModuleUpdate.isHttpUri(uri)) return;
+            unawaited(widget.openChangelog(href));
+          },
+        );
+      },
+    );
+  }
+
+  MarkdownStyleSheet _markdownStyle(ThemeData theme, ColorScheme scheme) {
+    final base = MarkdownStyleSheet.fromTheme(theme);
+    final body = theme.textTheme.bodyMedium?.copyWith(height: 1.5);
+    return base.copyWith(
+      p: body,
+      pPadding: const EdgeInsets.only(bottom: 8),
+      a: body?.copyWith(
+        color: scheme.primary,
+        decoration: TextDecoration.underline,
+        decorationColor: scheme.primary,
+      ),
+      em: body?.copyWith(fontStyle: FontStyle.italic),
+      strong: body?.copyWith(fontWeight: FontWeight.w600),
+      h1: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+      h2: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      h3: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      h4: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+      h5: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      h6: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      code: theme.textTheme.bodySmall?.copyWith(
+        fontFamily: 'monospace',
+        backgroundColor: scheme.surfaceContainerHighest,
+        color: scheme.onSurface,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      codeblockPadding: const EdgeInsets.all(12),
+      blockquote: body?.copyWith(color: scheme.onSurfaceVariant),
+      blockquoteDecoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
+      ),
+      blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      tableBorder: TableBorder.all(color: scheme.outlineVariant),
+      tableHead: theme.textTheme.bodySmall?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+      tableBody: theme.textTheme.bodySmall,
+      tableCellsPadding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      listBullet: body,
+      listIndent: 20,
+      blockSpacing: 10,
     );
   }
 }
