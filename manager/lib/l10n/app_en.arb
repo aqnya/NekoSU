@@ -296,6 +296,37 @@
   "modulesMetamodule": "Meta",
   "modulesPendingRemoval": "Pending removal",
   "modulesUpdate": "Update pending",
+  "modulesUpdateAvailable": "Update available",
+  "modulesUpdateCheckFailed": "Update check failed",
+  "modulesUpdateNow": "Update",
+  "modulesUpdateDialogTitle": "Update {name}",
+  "@modulesUpdateDialogTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modulesUpdateCurrentVersion": "Installed: {version}",
+  "@modulesUpdateCurrentVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "modulesUpdateLatestVersion": "Available: {version}",
+  "@modulesUpdateLatestVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "modulesUpdateChangelog": "Changelog",
+  "modulesUpdateChangelogFailed": "Unable to open the changelog",
+  "modulesUpdateDownloading": "Downloading update…",
+  "modulesUpdateDownloadFailed": "Update download failed",
   "modulesVersion": "Version",
   "modulesAuthor": "Author",
   "modulesRemoveHint": "The module will be removed on the next boot.",
