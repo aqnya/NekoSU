@@ -500,7 +500,7 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
-              Icons.download_rounded,
+              Icons.system_update_rounded,
               color: scheme.onSecondaryContainer,
             ),
           ),
@@ -515,11 +515,17 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.module.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                Row(
                   children: [
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -540,42 +546,40 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
                         ),
                       ),
                     ),
-                    Text(
-                      widget.module.title,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (changelogUrl != null)
-                      InkWell(
-                        onTap: () =>
-                            unawaited(widget.openChangelog(changelogUrl)),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 2,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                l10n.modulesUpdateChangelog,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w500,
+                    if (changelogUrl != null) ...[
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: InkWell(
+                          onTap: () =>
+                              unawaited(widget.openChangelog(changelogUrl)),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  l10n.modulesUpdateChangelog,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 2),
-                              Icon(
-                                Icons.open_in_new_rounded,
-                                size: 16,
-                                color: scheme.primary,
-                              ),
-                            ],
+                                const SizedBox(width: 2),
+                                Icon(
+                                  Icons.open_in_new_rounded,
+                                  size: 16,
+                                  color: scheme.primary,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ],
@@ -587,7 +591,8 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
         width: double.maxFinite,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 325),
-          child: DecoratedBox(
+          child: Container(
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: scheme.surfaceBright,
               borderRadius: BorderRadius.circular(16),
@@ -615,7 +620,7 @@ class _ModuleUpdateDialogState extends State<_ModuleUpdateDialog> {
         ),
         FilledButton.icon(
           onPressed: () => Navigator.pop(context, true),
-          icon: const Icon(Icons.download_rounded, size: 18),
+          icon: const Icon(Icons.system_update_rounded, size: 18),
           label: Text(l10n.modulesUpdateNow),
           style: FilledButton.styleFrom(
             shape: const StadiumBorder(),
@@ -930,8 +935,8 @@ class _ModuleCardState extends State<_ModuleCard> {
                       if (showUpdate)
                         _ModuleCardButton(
                           onPressed: widget.onUpdate,
-                          icon: Icons.download_rounded,
-                          tooltip: l10n.modulesUpdateNow,
+                          icon: Icons.system_update_rounded,
+                          label: l10n.modulesUpdateNow,
                         ),
                     ],
                   ),
