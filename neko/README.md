@@ -10,6 +10,9 @@ NekoSU's userspace runtime.
   reads the `.nksu_ksymtab` symbol table embedded in the LKM and verifies the
   required kallsyms entries against the kernel in the supplied boot image
   (`-b <boot.img>`); `--no-symbol-check` skips that verification.
+- `bootparse/` — the boot/vendor_boot image library `bootpatcher` is built on:
+  AOSP headers via bindgen, block extraction with compression detection, a newc
+  `cpio` reader/writer and the vendor_boot repacker.
 - `jni/` — the JNI bridge the Compose manager loads as `libjni.so`.
 
 All three binaries are cross-compiled by Gradle through `cargo-ndk` as part of
@@ -17,4 +20,4 @@ the manager build and shipped as `libncore.so`, `libbootpatcher.so` and
 `libjni.so`.
 
 All Rust dependencies come from crates.io or are vendored under `third_party/`
-(`android-bootimg`, `prop-rs`/`prop-rs-android`); no Git dependencies are used.
+(`prop-rs`/`prop-rs-android`); no Git dependencies are used.

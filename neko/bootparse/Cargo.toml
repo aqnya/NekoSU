@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[package]
+name = "bootparse"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Android boot / vendor_boot image parser and patcher"
+
+[dependencies]
+anyhow.workspace = true
+bzip2 = "0.6.1"
+flate2 = "1.1.10"
+lz4 = "1.28.1"
+lzma-rust2 = "0.24.0"
+# Pure-Rust LZO1X codec plus the .lzo (lzop) container.
+lzo1x = { package = "rust-lzo1x", version = "0.4.0" }
+zerocopy = { version = "0.8.63", features = ["derive"] }
+
+[build-dependencies]
+bindgen = "0.73.2"

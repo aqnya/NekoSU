@@ -7,4 +7,4 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-android-bootimg = { path = "../third_party/android-bootimg" }
+bootparse = { path = "../bootparse" }

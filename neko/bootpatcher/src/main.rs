@@ -22,14 +22,13 @@ mod kallsyms;
 mod symbols;
 
 use std::fs;
-use std::io::Cursor;
 use std::path::Path;
 use std::process::ExitCode;
 
-use android_bootimg::cpio::{Cpio, CpioEntry};
-use android_bootimg::parser::{BootImage, BootImageVersion};
-use android_bootimg::patcher::BootImagePatchOption;
 use anyhow::{Context, Result, bail};
+use bootparse::cpio::{Cpio, CpioEntry};
+use bootparse::parse::BootImage;
+use bootparse::patcher::VendorBootPatcher;
 
 const MODULE_PATH: &str = "lib/modules/nksu.ko";
 
@@ -64,42 +63,32 @@ fn run() -> Result<()> {
         "bootpatcher: parsing boot image ({} bytes)",
         image_data.len()
     );
-    let boot = BootImage::parse(&image_data).with_context(|| format!("parse {}", args.image))?;
+    let image = BootImage::parse(&image_data).with_context(|| format!("parse {}", args.image))?;
 
-    match boot.get_header().get_version() {
-        BootImageVersion::Vendor(3 | 4) => {}
+    match image.vendor_boot_version() {
+        Some(3 | 4) => {}
         version => bail!("only vendor_boot v3/v4 images are supported (got {version:?})"),
     }
 
-    let ramdisk = boot
-        .get_blocks()
-        .get_ramdisk()
-        .context("vendor_boot has no ramdisk")?;
+    let ramdisks = image.ramdisks().context("vendor_boot has no ramdisk")?;
 
     // v4 splits the vendor ramdisk into table entries; v3 has one blob.  Find
     // the entry that already carries lib/modules, falling back to the first
     // entry that parses as a cpio archive.
     eprintln!("bootpatcher: locating vendor ramdisk");
-    let mut candidates: Vec<(Option<usize>, Cpio, bool)> = Vec::new();
-    if ramdisk.is_vendor_ramdisk() {
-        for (index, entry) in ramdisk.iter_vendor_ramdisk().enumerate() {
-            let mut raw = Vec::new();
-            if entry.dump(&mut raw, false).is_err() {
-                continue;
-            }
-            let Ok(cpio) = Cpio::load_from_data(&raw) else {
-                continue;
-            };
-            let has_modules = cpio
-                .entries()
-                .keys()
-                .any(|name| name == "lib/modules" || name.starts_with("lib/modules/"));
-            candidates.push((Some(index), cpio, has_modules));
-        }
-    } else {
-        let mut raw = Vec::new();
-        ramdisk.dump(&mut raw, false)?;
-        candidates.push((None, Cpio::load_from_data(&raw)?, true));
+    let mut candidates: Vec<(usize, Cpio, bool)> = Vec::new();
+    for entry in ramdisks {
+        let Ok(raw) = entry.decompress() else {
+            continue;
+        };
+        let Ok(cpio) = Cpio::load_from_data(&raw) else {
+            continue;
+        };
+        let has_modules = cpio
+            .entries()
+            .keys()
+            .any(|name| name == "lib/modules" || name.starts_with("lib/modules/"));
+        candidates.push((entry.index, cpio, has_modules));
     }
 
     let chosen = candidates
@@ -108,25 +97,19 @@ fn run() -> Result<()> {
         .or_else(|| (!candidates.is_empty()).then_some(0))
         .context("no cpio vendor ramdisk found in the image")?;
     let (vendor_index, mut cpio, _) = candidates.swap_remove(chosen);
-    let format = match vendor_index {
-        Some(index) => ramdisk
-            .get_vendor_ramdisk(index)
-            .map(|entry| entry.get_compress_format()),
-        None => Some(ramdisk.get_compress_format()),
-    };
-    eprintln!("bootpatcher: selected ramdisk index={vendor_index:?}, compression={format:?}");
+    eprintln!(
+        "bootpatcher: selected ramdisk index={vendor_index}, compression={:?}",
+        ramdisks[vendor_index].format()
+    );
 
     eprintln!("bootpatcher: injecting lib/modules/nksu.ko");
-    if !cpio.entries().contains_key("lib/modules") {
-        if !cpio.entries().contains_key("lib") {
+    if !cpio.exists("lib/modules") {
+        if !cpio.exists("lib") {
             cpio.add("lib", CpioEntry::dir(0o755))?;
         }
         cpio.add("lib/modules", CpioEntry::dir(0o755))?;
     }
-    cpio.add(
-        MODULE_PATH,
-        CpioEntry::regular(0o644, Box::new(module_data)),
-    )?;
+    cpio.add(MODULE_PATH, CpioEntry::regular(0o644, module_data))?;
     ensure_line(
         &mut cpio,
         "lib/modules/modules.load",
@@ -141,23 +124,16 @@ fn run() -> Result<()> {
     )?;
 
     eprintln!("bootpatcher: repacking ramdisk");
-    let mut new_cpio = Vec::new();
-    cpio.dump(&mut new_cpio)?;
-
-    let mut patcher = BootImagePatchOption::new(&boot);
-    if let Some(index) = vendor_index {
-        patcher.replace_vendor_ramdisk(index, Box::new(Cursor::new(new_cpio)), false);
-    } else {
-        patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
-    }
+    let new_cpio = cpio.dump();
 
     eprintln!("bootpatcher: repacking boot image");
-    let mut output = Cursor::new(Vec::with_capacity(boot.get_size()));
-    patcher.patch(&mut output)?;
+    let mut patcher = VendorBootPatcher::new(&image)?;
+    patcher.replace_vendor_ramdisk(vendor_index, new_cpio);
+    let output = patcher.patch()?;
 
     let output_path = format!("{}.new", Path::new(&args.image).display());
     eprintln!("bootpatcher: writing {output_path}");
-    fs::write(&output_path, output.into_inner()).with_context(|| format!("write {output_path}"))?;
+    fs::write(&output_path, output).with_context(|| format!("write {output_path}"))?;
     eprintln!("bootpatcher: done");
     Ok(())
 }
@@ -184,21 +160,19 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
     eprintln!("bootpatcher: reading boot image {boot_path}");
     let boot_data = fs::read(boot_path).with_context(|| format!("read {boot_path}"))?;
 
-    let mut kernel_data = Vec::new();
-    {
+    let kernel_data = {
         let boot = BootImage::parse(&boot_data).with_context(|| format!("parse {boot_path}"))?;
         let kernel = boot
-            .get_blocks()
-            .get_kernel()
+            .kernel()
             .with_context(|| format!("{boot_path} has no kernel"))?;
         eprintln!(
             "bootpatcher: extracting kernel (compression={:?})",
-            kernel.get_compress_format()
+            kernel.format()
         );
         kernel
-            .dump(&mut kernel_data, false)
-            .with_context(|| format!("extract kernel from {boot_path}"))?;
-    }
+            .decompress()
+            .with_context(|| format!("extract kernel from {boot_path}"))?
+    };
     drop(boot_data);
 
     eprintln!("bootpatcher: decoding kallsyms");
@@ -259,7 +233,7 @@ fn ensure_line(cpio: &mut Cpio, name: &str, needles: &[&str], line: &str) -> Res
     }
     text.push_str(line);
 
-    cpio.add(name, CpioEntry::regular(0o644, Box::new(text.into_bytes())))?;
+    cpio.add(name, CpioEntry::regular(0o644, text.into_bytes()))?;
     Ok(())
 }
 

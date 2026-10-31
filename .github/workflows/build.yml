@@ -136,6 +136,16 @@ jobs:
         rustup default stable
         rustup target add aarch64-linux-android
 
+    # bootparse generates its header bindings with bindgen at build time, so
+    # the runner needs libclang on top of the Rust toolchain.
+    - name: Install libclang for bindgen
+      run: |
+        set -euo pipefail
+        if ! ldconfig -p | grep -q 'libclang'; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libclang-dev
+        fi
+
     - name: Install cargo-ndk
       run: cargo install cargo-ndk --locked
 
