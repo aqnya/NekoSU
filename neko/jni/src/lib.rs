@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![cfg(target_os = "android")]
 //! Rust replacement for the manager's former C++ JNI layer.
+#![allow(dead_code)]
+
+mod bindgen;
+mod ioc;
 
 use std::ffi::{CStr, CString};
-use std::fs;
 use std::os::fd::RawFd;
 use std::ptr;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Mutex, Once};
 
 use jni::EnvUnowned;
@@ -14,141 +16,8 @@ use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
 
-const FMAC_MAX_DATA: usize = 64 * 1024;
-const FMAC_STACK_DATA: usize = 264;
-const FMAC_DATA_CAP: usize = 12;
-const FMAC_DATA_SELRULE: usize = 264;
-const FMAC_DATA_PROFILE: usize = 84;
-const FMAC_DATA_FEATURE: usize = 12;
-const FMAC_OFF_UID: usize = 0;
-const FMAC_OFF_CAPS: usize = 4;
-const FMAC_OFF_DOMAIN: usize = 12;
-const FMAC_OFF_NS: usize = 76;
-const FMAC_OFF_ROOT_UID: usize = 80;
-const FMAC_OFF_TGT: usize = 64;
-const FMAC_OFF_CLS: usize = 128;
-const FMAC_OFF_PERM: usize = 192;
-const FMAC_OFF_EFFECT: usize = 256;
-const FMAC_OFF_INVERT: usize = 260;
-const FMAC_OFF_FEATURE_VALUE: usize = 4;
-
-const IOC_CMD: libc::c_int = 0xC008_4600u32 as libc::c_int;
-const IOC_ADD_UID: u32 = 3;
-const IOC_DEL_UID: u32 = 4;
-const IOC_HAS_UID: u32 = 5;
-const IOC_SET_CAP: u32 = 6;
-const IOC_GET_CAP: u32 = 7;
-const IOC_DEL_CAP: u32 = 8;
-const IOC_SEL_ADD_RULE: u32 = 9;
-const IOC_SET_PROFILE: u32 = 10;
-const IOC_GET_PROFILES: u32 = 13;
-const IOC_GET_VERSION: u32 = 14;
-const IOC_FEATURE_LIST: u32 = 15;
-const IOC_FEATURE_GET: u32 = 16;
-const IOC_FEATURE_SET: u32 = 17;
-
-const PR_GET_SHM_FD: libc::c_int = 201;
-const PR_GET_CTL_FD: libc::c_int = 203;
-
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
-
-static DRIVER_FD: AtomicI32 = AtomicI32::new(-1);
-static CTL_FD: AtomicI32 = AtomicI32::new(-1);
-
-fn scan_fd(target: &str) -> RawFd {
-    let Ok(entries) = fs::read_dir("/proc/self/fd") else {
-        return -1;
-    };
-    for entry in entries.flatten() {
-        let Ok(fd) = entry.file_name().to_string_lossy().parse::<i32>() else {
-            continue;
-        };
-        let link = format!("/proc/self/fd/{fd}");
-        if let Ok(path) = fs::read_link(link)
-            && path.to_string_lossy().contains(target)
-        {
-            return fd;
-        }
-    }
-    -1
-}
-
-fn ensure_ctl_fd() -> Option<RawFd> {
-    let cached = CTL_FD.load(Ordering::Relaxed);
-    if cached >= 0 {
-        return Some(cached);
-    }
-    unsafe {
-        libc::prctl(PR_GET_CTL_FD, 0, 0, 0, 0);
-    }
-    let fd = scan_fd("[fmac_ctl]");
-    if fd >= 0 {
-        CTL_FD.store(fd, Ordering::Relaxed);
-        Some(fd)
-    } else {
-        log::error!("control fd not found after prctl({PR_GET_CTL_FD})");
-        None
-    }
-}
-
-fn ioc_call(fd: RawFd, flag: u32, data: &mut [u8]) -> i32 {
-    if data.len() > FMAC_MAX_DATA {
-        return -1;
-    }
-    let total = 8 + data.len();
-    let mut stack = [0u8; 8 + FMAC_STACK_DATA];
-    let mut heap = Vec::new();
-    let buffer: &mut [u8] = if total <= stack.len() {
-        &mut stack[..total]
-    } else {
-        heap.resize(total, 0);
-        &mut heap
-    };
-    buffer[0..4].copy_from_slice(&flag.to_ne_bytes());
-    buffer[4..8].copy_from_slice(&(data.len() as u32).to_ne_bytes());
-    buffer[8..].copy_from_slice(data);
-
-    let ret = unsafe { libc::ioctl(fd, IOC_CMD, buffer.as_mut_ptr()) };
-    if ret < 0 {
-        log::error!(
-            "ioctl flag {flag} failed: {}",
-            std::io::Error::last_os_error()
-        );
-    } else if !data.is_empty() {
-        data.copy_from_slice(&buffer[8..]);
-    }
-    ret
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
-    _env: EnvUnowned,
-    _this: JObject,
-    value: jint,
-) -> jint {
-    log::info!("ctl({value})");
-    match value {
-        1 => {
-            unsafe {
-                libc::prctl(PR_GET_SHM_FD, 0, 0, 0, 0);
-            }
-            let fd = scan_fd("[fmac_shm]");
-            if fd >= 0 {
-                DRIVER_FD.store(fd, Ordering::Relaxed);
-            }
-        }
-        3 => {
-            ensure_ctl_fd();
-        }
-        _ => return -1,
-    }
-    if DRIVER_FD.load(Ordering::Relaxed) >= 0 {
-        0
-    } else {
-        -1
-    }
-}
 
 fn get_utf(env: &mut EnvUnowned, value: &JString) -> Option<String> {
     if value.as_raw().is_null() {
@@ -181,6 +50,21 @@ fn put_bytes(env: &mut EnvUnowned, data: &[u8]) -> jbyteArray {
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// jni 0.22 aliases `jboolean` to `bool` on Android and to `u8` elsewhere, so
+/// compare against the type's default instead of the integer literal 0.
+fn jboolean_is_true(value: jboolean) -> bool {
+    value != jboolean::default()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
+    _env: EnvUnowned,
+    _this: JObject,
+    value: jint,
+) -> jint {
+    ioc::ctl(value)
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfile(
     mut env: EnvUnowned,
@@ -191,21 +75,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfile(
     domain: JString,
     ns: jint,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return -1;
+    };
     let domain = get_utf(&mut env, &domain).unwrap_or_default();
-    let mut data = [0u8; FMAC_DATA_PROFILE];
-    data[FMAC_OFF_UID..FMAC_OFF_UID + 4].copy_from_slice(&(uid as u32).to_ne_bytes());
-    data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].copy_from_slice(&(caps as u64).to_ne_bytes());
-    let bytes = domain.as_bytes();
-    let len = bytes.len().min(FMAC_OFF_NS - FMAC_OFF_DOMAIN - 1);
-    data[FMAC_OFF_DOMAIN..FMAC_OFF_DOMAIN + len].copy_from_slice(&bytes[..len]);
-    data[FMAC_OFF_NS..FMAC_OFF_NS + 4].copy_from_slice(&ns.to_ne_bytes());
-    data[FMAC_OFF_ROOT_UID..FMAC_OFF_ROOT_UID + 4]
-        .copy_from_slice(&(root_uid as u32).to_ne_bytes());
-    if ioc_call(fd, IOC_SET_PROFILE, &mut data) < 0 {
-        -1
-    } else {
-        0
+    match fd.set_profile(uid, root_uid, caps as u64, &domain, ns) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -215,15 +91,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_adduid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
-    }
-    let mut data = (uid as u32).to_ne_bytes();
-    if ioc_call(fd, IOC_ADD_UID, &mut data) < 0 {
-        -1
-    } else {
-        0
+    };
+    match fd.add_uid(uid) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -233,15 +106,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_deluid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
-    }
-    let mut data = (uid as u32).to_ne_bytes();
-    if ioc_call(fd, IOC_DEL_UID, &mut data) < 0 {
-        -1
-    } else {
-        0
+    };
+    match fd.del_uid(uid) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -251,15 +121,14 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_hasuid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
+    };
+    match fd.has_uid(uid) {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
     }
-    let mut data = (uid as u32).to_ne_bytes();
-    if ioc_call(fd, IOC_HAS_UID, &mut data) < 0 {
-        return -1;
-    }
-    if u32::from_ne_bytes(data) != 0 { 1 } else { 0 }
 }
 
 #[unsafe(no_mangle)]
@@ -269,17 +138,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setCap(
     uid: jint,
     caps: jlong,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
-    }
-    let mut data = [0u8; FMAC_DATA_CAP];
-    data[FMAC_OFF_UID..FMAC_OFF_UID + 4].copy_from_slice(&(uid as u32).to_ne_bytes());
-    data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].copy_from_slice(&(caps as u64).to_ne_bytes());
-    if ioc_call(fd, IOC_SET_CAP, &mut data) < 0 {
-        -1
-    } else {
-        0
+    };
+    match fd.set_cap(uid, caps as u64) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -289,16 +153,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_getCap(
     _this: JObject,
     uid: jint,
 ) -> jlong {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
+    };
+    match fd.get_cap(uid) {
+        Some(caps) => caps as jlong,
+        None => -1,
     }
-    let mut data = [0u8; FMAC_DATA_CAP];
-    data[FMAC_OFF_UID..FMAC_OFF_UID + 4].copy_from_slice(&(uid as u32).to_ne_bytes());
-    if ioc_call(fd, IOC_GET_CAP, &mut data) < 0 {
-        return -1;
-    }
-    u64::from_ne_bytes(data[FMAC_OFF_CAPS..FMAC_OFF_CAPS + 8].try_into().unwrap()) as jlong
 }
 
 #[unsafe(no_mangle)]
@@ -307,16 +168,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_delCap(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    if uid < 0 {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return -1;
-    }
-    let mut data = [0u8; FMAC_DATA_CAP];
-    data[FMAC_OFF_UID..FMAC_OFF_UID + 4].copy_from_slice(&(uid as u32).to_ne_bytes());
-    if ioc_call(fd, IOC_DEL_CAP, &mut data) < 0 {
-        -1
-    } else {
-        0
+    };
+    match fd.del_cap(uid) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -331,28 +188,16 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_addSelinuxRule(
     effect: jint,
     invert: jboolean,
 ) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return -1;
+    };
     let src = get_utf(&mut env, &src).unwrap_or_default();
     let tgt = get_utf(&mut env, &tgt).unwrap_or_default();
     let cls = get_utf(&mut env, &cls).unwrap_or_default();
     let perm = get_utf(&mut env, &perm).unwrap_or_default();
-    let mut data = [0u8; FMAC_DATA_SELRULE];
-    let mut put = |offset: usize, cap: usize, value: &str| {
-        let bytes = value.as_bytes();
-        let len = bytes.len().min(cap - 1);
-        data[offset..offset + len].copy_from_slice(&bytes[..len]);
-    };
-    put(FMAC_OFF_UID, FMAC_OFF_TGT - FMAC_OFF_UID, &src);
-    put(FMAC_OFF_TGT, FMAC_OFF_CLS - FMAC_OFF_TGT, &tgt);
-    put(FMAC_OFF_CLS, FMAC_OFF_PERM - FMAC_OFF_CLS, &cls);
-    put(FMAC_OFF_PERM, FMAC_OFF_EFFECT - FMAC_OFF_PERM, &perm);
-    data[FMAC_OFF_EFFECT..FMAC_OFF_EFFECT + 4].copy_from_slice(&effect.to_ne_bytes());
-    let inv: i32 = if invert { 1 } else { 0 };
-    data[FMAC_OFF_INVERT..FMAC_OFF_INVERT + 4].copy_from_slice(&inv.to_ne_bytes());
-    if ioc_call(fd, IOC_SEL_ADD_RULE, &mut data) < 0 {
-        -1
-    } else {
-        0
+    match fd.add_selinux_rule(&src, &tgt, &cls, &perm, effect, jboolean_is_true(invert)) {
+        Ok(()) => 0,
+        Err(()) => -1,
     }
 }
 
@@ -380,18 +225,75 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_listProfiles(
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jstring {
-    let Some(fd) = ensure_ctl_fd() else {
+    let Some(fd) = ioc::get_ctl_fd() else {
         return ptr::null_mut();
     };
-    let mut data = vec![0u8; 64 * 1024];
-    let ret = ioc_call(fd, IOC_GET_PROFILES, &mut data);
-    if ret < 0 {
-        log::error!("listProfiles failed: ret={ret}");
-        return ptr::null_mut();
+    match fd.list_profiles() {
+        Some(text) => put_string(&mut env, &text),
+        None => {
+            log::error!("listProfiles failed");
+            ptr::null_mut()
+        }
     }
-    let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    log::info!("listProfiles: ret={ret}, text_len={end}");
-    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_moduleVersion(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return ptr::null_mut();
+    };
+    match fd.module_version() {
+        Some(text) => put_string(&mut env, &text),
+        None => ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureList(
+    mut env: EnvUnowned,
+    _this: JObject,
+) -> jstring {
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return ptr::null_mut();
+    };
+    match fd.feature_list() {
+        Some(text) => put_string(&mut env, &text),
+        None => ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureGet(
+    _env: EnvUnowned,
+    _this: JObject,
+    id: jint,
+) -> jlong {
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return -1;
+    };
+    match fd.feature_get(id) {
+        Some(value) => value as jlong,
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
+    _env: EnvUnowned,
+    _this: JObject,
+    id: jint,
+    value: jlong,
+) -> jint {
+    let Some(fd) = ioc::get_ctl_fd() else {
+        return -1;
+    };
+    match fd.feature_set(id, value as u64) {
+        Ok(()) => 0,
+        Err(()) => -1,
+    }
 }
 
 fn write_all(fd: RawFd, mut buf: &[u8]) -> bool {
@@ -778,22 +680,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_readFilePersistent(
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_writeBlock(
-    mut env: EnvUnowned,
-    _this: JObject,
-    src: JString,
-    dst: JString,
-) -> jboolean {
-    let (Some(src), Some(dst)) = (get_utf(&mut env, &src), get_utf(&mut env, &dst)) else {
-        return JNI_FALSE;
-    };
+fn write_block_impl(src: &str, dst: &str) -> bool {
     let (Ok(src), Ok(dst)) = (CString::new(src), CString::new(dst)) else {
-        return JNI_FALSE;
+        return false;
     };
     let pid = unsafe { libc::fork() };
     if pid < 0 {
-        return JNI_FALSE;
+        return false;
     }
     if pid == 0 {
         unsafe {
@@ -875,55 +768,34 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_writeBlock(
         && unsafe { *libc::__errno() } == libc::EINTR
     {}
     if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
-        JNI_TRUE
+        true
     } else {
         log::error!("writeBlock failed: status={status}");
-        JNI_FALSE
+        false
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_findVendorBoot(
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_writeBlock(
     mut env: EnvUnowned,
     _this: JObject,
-    slot: JString,
-    allow_slotless: jboolean,
-) -> jstring {
-    let slot = get_utf(&mut env, &slot).unwrap_or_default();
-    find_partition(
-        &mut env,
-        "vendor_boot",
-        &slot,
-        jboolean_is_true(allow_slotless),
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_findBoot(
-    mut env: EnvUnowned,
-    _this: JObject,
-    slot: JString,
-    allow_slotless: jboolean,
-) -> jstring {
-    let slot = get_utf(&mut env, &slot).unwrap_or_default();
-    find_partition(&mut env, "boot", &slot, jboolean_is_true(allow_slotless))
-}
-
-/// jni 0.22 aliases `jboolean` to `bool` on Android and to `u8` elsewhere, so
-/// compare against the type's default instead of the integer literal 0.
-fn jboolean_is_true(value: jboolean) -> bool {
-    value != jboolean::default()
+    src: JString,
+    dst: JString,
+) -> jboolean {
+    let (Some(src), Some(dst)) = (get_utf(&mut env, &src), get_utf(&mut env, &dst)) else {
+        return JNI_FALSE;
+    };
+    if write_block_impl(&src, &dst) {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
 }
 
 /// Find a block-device path through `/dev/block/by-name` (or bootdevice) as
 /// root. The lookup runs in a forked child so the caller does not need to hold
 /// root itself.
-fn find_partition(
-    env: &mut EnvUnowned,
-    partition: &str,
-    slot: &str,
-    allow_slotless: bool,
-) -> jstring {
+fn find_partition(partition: &str, slot: &str, allow_slotless: bool) -> Option<String> {
     let mut candidates = Vec::new();
     for base in ["/dev/block/by-name", "/dev/block/bootdevice/by-name"] {
         candidates.push(format!("{base}/{partition}{slot}"));
@@ -937,7 +809,7 @@ fn find_partition(
         .collect();
     let mut pipe = [0; 2];
     if unsafe { libc::pipe(pipe.as_mut_ptr()) } != 0 {
-        return ptr::null_mut();
+        return None;
     }
     let pid = unsafe { libc::fork() };
     if pid < 0 {
@@ -945,7 +817,7 @@ fn find_partition(
             libc::close(pipe[0]);
             libc::close(pipe[1]);
         }
-        return ptr::null_mut();
+        return None;
     }
     if pid == 0 {
         unsafe {
@@ -997,10 +869,38 @@ fn find_partition(
     {}
     if data.is_empty() || !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
         log::warn!("{partition}(slot={slot}) not found");
-        return ptr::null_mut();
+        return None;
     }
     let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(env, &String::from_utf8_lossy(&data[..end]))
+    Some(String::from_utf8_lossy(&data[..end]).into_owned())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_findVendorBoot(
+    mut env: EnvUnowned,
+    _this: JObject,
+    slot: JString,
+    allow_slotless: jboolean,
+) -> jstring {
+    let slot = get_utf(&mut env, &slot).unwrap_or_default();
+    match find_partition("vendor_boot", &slot, jboolean_is_true(allow_slotless)) {
+        Some(path) => put_string(&mut env, &path),
+        None => ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_findBoot(
+    mut env: EnvUnowned,
+    _this: JObject,
+    slot: JString,
+    allow_slotless: jboolean,
+) -> jstring {
+    let slot = get_utf(&mut env, &slot).unwrap_or_default();
+    match find_partition("boot", &slot, jboolean_is_true(allow_slotless)) {
+        Some(path) => put_string(&mut env, &path),
+        None => ptr::null_mut(),
+    }
 }
 
 fn parse_gki(release: &str) -> Option<(bool, String)> {
@@ -1067,76 +967,6 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_kernelRelease(
     match uname_release() {
         Some(release) => put_string(&mut env, &release),
         None => ptr::null_mut(),
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_moduleVersion(
-    mut env: EnvUnowned,
-    _this: JObject,
-) -> jstring {
-    let Some(fd) = ensure_ctl_fd() else {
-        return ptr::null_mut();
-    };
-    let mut data = [0u8; 64];
-    if ioc_call(fd, IOC_GET_VERSION, &mut data) < 0 {
-        return ptr::null_mut();
-    }
-    let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureList(
-    mut env: EnvUnowned,
-    _this: JObject,
-) -> jstring {
-    let Some(fd) = ensure_ctl_fd() else {
-        return ptr::null_mut();
-    };
-    let mut data = [0u8; 1024];
-    if ioc_call(fd, IOC_FEATURE_LIST, &mut data) < 0 {
-        return ptr::null_mut();
-    }
-    let end = data.iter().position(|b| *b == 0).unwrap_or(data.len());
-    put_string(&mut env, &String::from_utf8_lossy(&data[..end]))
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureGet(
-    _env: EnvUnowned,
-    _this: JObject,
-    id: jint,
-) -> jlong {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    let mut data = [0u8; FMAC_DATA_FEATURE];
-    data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
-    if ioc_call(fd, IOC_FEATURE_GET, &mut data) < 0 {
-        return -1;
-    }
-    u64::from_ne_bytes(
-        data[FMAC_OFF_FEATURE_VALUE..FMAC_OFF_FEATURE_VALUE + 8]
-            .try_into()
-            .unwrap(),
-    ) as jlong
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
-    _env: EnvUnowned,
-    _this: JObject,
-    id: jint,
-    value: jlong,
-) -> jint {
-    let Some(fd) = ensure_ctl_fd() else { return -1 };
-    let mut data = [0u8; FMAC_DATA_FEATURE];
-    data[..4].copy_from_slice(&(id as u32).to_ne_bytes());
-    data[FMAC_OFF_FEATURE_VALUE..FMAC_OFF_FEATURE_VALUE + 8]
-        .copy_from_slice(&(value as u64).to_ne_bytes());
-    if ioc_call(fd, IOC_FEATURE_SET, &mut data) < 0 {
-        -1
-    } else {
-        0
     }
 }
 

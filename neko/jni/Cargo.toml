@@ -14,3 +14,6 @@ jni = "0.22"
 libc = "0.2"
 log.workspace = true
 android_logger = "0.15"
+
+[build-dependencies]
+bindgen = "0.73.2"
