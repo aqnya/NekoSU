@@ -3,7 +3,7 @@ use std::fs;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use crate::bindgen::*;
+use uapi::*;
 
 const FMAC_MAX_DATA: usize = 64 * 1024;
 const FMAC_STACK_DATA: usize = 264;

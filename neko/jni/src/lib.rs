@@ -2,8 +2,6 @@
 #![cfg(target_os = "android")]
 //! Rust replacement for the manager's former C++ JNI layer.
 #![allow(dead_code)]
-
-mod bindgen;
 mod ioc;
 
 use std::ffi::{CStr, CString};
