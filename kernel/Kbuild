@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Manager certificate SHA256 hash (64 hex chars).
+# Default matches the built-in manager signing cert; override on the
+# command line for tree-out builds:
+#   make -C $KDIR M=$PWD NKSU_MANAGER_CERTHASH="your64hexchars"
+NKSU_MANAGER_CERTHASH ?= d809b63480beea6086cd7868e42f2eb2b9202c670c0d3db0894e9e4312f128e9
+ccflags-y += -DNKSU_MANAGER_CERTHASH_STR=\"$(NKSU_MANAGER_CERTHASH)\"
+
 nksu-y += core.o
 nksu-y += boot/component.o boot/hook_init.o boot/init_rc.o boot/safe_mode.o
 nksu-y += hook/handle.o hook/syscall.o hook/dispatch.o hook/get_arg.o hook/patch.o hook/lsm_hook.o

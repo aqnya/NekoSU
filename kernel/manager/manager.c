@@ -1082,7 +1082,7 @@ int appscan_init(void)
 
 	pr_info("[manager] Module starting scan...\n");
 
-	ret = parse_cert_hash(CONFIG_NKSU_MANAGER_CERTHASH, manager_cert_hash);
+	ret = parse_cert_hash(NKSU_MANAGER_CERTHASH_STR, manager_cert_hash);
 	if (ret) {
 		pr_err("[manager] initial manager CERTHASH failed: %d\n", ret);
 		return -EINVAL;
