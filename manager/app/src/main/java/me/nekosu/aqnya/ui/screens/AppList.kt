@@ -206,15 +206,21 @@ class AppViewModel(
     }
 
     private fun readKernelProfiles(): Map<Int, AppConfig> {
-        val text =
-            Ncore.listProfiles()
-                ?: error("listProfiles() returned null: control fd unavailable or ioctl failed")
-        val map = parseAllowProfile(text)
-        if (map.isEmpty() && text.isNotBlank()) {
+    val text =
+        Ncore.listProfiles()
+            ?: error("listProfiles() returned null: control fd unavailable or ioctl failed")
+    val map = parseAllowProfile(text)
+    if (map.isEmpty() && text.isNotBlank()) {
+        val hasRealContent = text.lineSequence().any { line ->
+            val t = line.trim()
+            t.isNotEmpty() && !t.startsWith("#")
+        }
+        if (hasRealContent) {
             error("listProfiles() returned non-empty data but parsed to empty map: $text")
         }
-        return map
     }
+    return map
+}
 
     private suspend fun loadAppConfigs() =
         withContext(Dispatchers.IO) {
