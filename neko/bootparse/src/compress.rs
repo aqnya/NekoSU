@@ -126,7 +126,12 @@ pub fn compress(data: &[u8], format: CompressFormat) -> Result<Vec<u8>> {
             Ok(out)
         }
         CompressFormat::CPIO | CompressFormat::UNKNOWN => Ok(data.to_vec()),
+        #[cfg(feature = "experimental")]
         CompressFormat::LZOP => compress_lzop(data),
+        #[cfg(not(feature = "experimental"))]
+        CompressFormat::LZOP => Err(anyhow::anyhow!(
+            "LZOP compression requires the `experimental` feature"
+        )),
     }
 }
 
@@ -141,7 +146,12 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
             decoder.read_to_end(&mut out)?;
             Ok(out)
         }
+        #[cfg(feature = "experimental")]
         CompressFormat::LZOP => decompress_lzop(data),
+        #[cfg(not(feature = "experimental"))]
+        CompressFormat::LZOP => Err(anyhow::anyhow!(
+            "LZOP decompression requires the `experimental` feature"
+        )),
         CompressFormat::XZ => {
             use lzma_rust2::XzReader;
             let mut decoder = XzReader::new(data, true);
@@ -202,24 +212,15 @@ fn decompress_lz4_legacy(data: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Write `data` as a complete `.lzo` file, the container `lzop` produces.
+/// Compress `data` into a `.lzo` stream.
+/// Note: this uses LZO1X-999 (method 3, level 9), not LZO1X-1.
+#[cfg(feature = "experimental")]
 fn compress_lzop(data: &[u8]) -> Result<Vec<u8>> {
-    // Level 1 is LZO1X-1, the variant the encoder emits; the embedded file
-    // name is irrelevant for a ramdisk stream.
-    let header = lzo1x::lzop::Header::new(b"", 0o644, 0, 1);
-    let mut out = Vec::new();
-    lzo1x::lzop::compress(&mut Cursor::new(data), &mut out, &header)
-        .map_err(|error| anyhow::anyhow!("lzop: {error}"))?;
-    Ok(out)
+    crate::lzo::compress_lzop(data, "").map_err(|error| anyhow::anyhow!("lzop: {error}"))
 }
 
 /// Read a complete `.lzo` file, checking its header and block checksums.
+#[cfg(feature = "experimental")]
 fn decompress_lzop(data: &[u8]) -> Result<Vec<u8>> {
-    let mut cursor = Cursor::new(data);
-    let header =
-        lzo1x::lzop::read_header(&mut cursor).map_err(|error| anyhow::anyhow!("lzop: {error}"))?;
-    let mut out = Vec::new();
-    lzo1x::lzop::decompress(&mut cursor, &mut out, &header)
-        .map_err(|error| anyhow::anyhow!("lzop: {error}"))?;
-    Ok(out)
+    crate::lzo::decompress_lzop(data).map_err(|error| anyhow::anyhow!("lzop: {error}"))
 }

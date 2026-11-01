@@ -6,7 +6,6 @@
 //! provides the pieces `bootpatcher` needs: block extraction with compression
 //! detection, a newc `cpio` reader/writer and a vendor_boot repacker that
 //! preserves the vendor ramdisk table and AVB structures.
-
 pub mod boot;
 pub mod compress;
 pub mod cpio;
@@ -15,8 +14,9 @@ pub mod patcher;
 pub mod vendor_boot;
 
 mod bindgen;
+#[cfg(feature = "experimental")]
+mod lzo;
 mod utils;
-
 pub use boot::BootVer;
 pub use compress::CompressFormat;
 pub use cpio::{Cpio, CpioEntry};
