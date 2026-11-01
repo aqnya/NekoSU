@@ -29,11 +29,6 @@
 #endif
 #endif
 
-/*
- * 统一的控制接口：所有操作通过同一个 IOC_CMD 下发，
- * 请求体为 { flag, size, data[] }，内核按 flag 从 data 中自由解析。
- * 不依赖任何业务结构体传递数据。
- */
 #define IOC_MAGIC 'F'
 #define IOC_CMD_NR 0
 #define IOC_CMD _IOWR(IOC_MAGIC, IOC_CMD_NR, struct fmac_ioc)
