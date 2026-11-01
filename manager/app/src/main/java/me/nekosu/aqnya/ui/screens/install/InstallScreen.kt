@@ -323,6 +323,7 @@ private fun InstallMethodSection(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clip(currentListItemShapes())
                         .clickable(enabled = !state.running) { onPickBoot() },
                 shapes = currentListItemShapes(),
                 colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
@@ -359,6 +360,7 @@ private fun InstallMethodRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .clip(currentListItemShapes())
                 .clickable(enabled = !state.running) {
                     when (option) {
                         InstallMethod.FILE ->
@@ -423,6 +425,7 @@ private fun KernelModuleSection(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
+                                .clip(currentListItemShapes())
                                 .clickable(enabled = !state.running) { onSelectKmi() },
                         shapes = currentListItemShapes(),
                         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
@@ -463,6 +466,7 @@ private fun KernelModuleSection(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .clip(currentListItemShapes())
                             .clickable(enabled = !state.running) { onPickLocal() },
                     shapes = currentListItemShapes(),
                     colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
