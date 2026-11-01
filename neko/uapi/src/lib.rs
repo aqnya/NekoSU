@@ -8,7 +8,7 @@
     unsafe_op_in_unsafe_fn
 )]
 mod inner {
-    include!(concat!(env!("OUT_DIR"), "/ioctl_bindings.rs"));
+    include!(concat!(env!("OUT_DIR"), "/uapi_bindings.rs"));
 }
 
 pub use inner::*;

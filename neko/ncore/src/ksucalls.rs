@@ -16,18 +16,12 @@ use std::os::fd::RawFd;
 use std::sync::OnceLock;
 
 use crate::ksu_uapi;
+use uapi::*;
 
 const FMAC_CTL_NAME: &str = "fmac_ctl";
 
 // _IOWR('F', 0, struct fmac_ioc) with a two-u32 header.
 const IOC_CMD: libc::c_int = 0xC008_4600u32 as libc::c_int;
-
-const IOC_SET_SEPOLICY: u32 = 12;
-const IOC_GET_VERSION: u32 = 14;
-const IOC_GET_SAFEMODE: u32 = 18;
-const IOC_DISARM_SAFEMODE: u32 = 19;
-const IOC_SET_INIT_PGRP: u32 = 20;
-const IOC_SET_MNT_LAYOUT: u32 = 23;
 
 std::thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
@@ -115,7 +109,7 @@ pub fn get_info() -> ksu_uapi::ksu_get_info_cmd {
 
         // The version ioctl is the authoritative liveness probe.
         let mut version = [0u8; 64];
-        if ksuctl(IOC_GET_VERSION, &mut version).is_err() {
+        if ksuctl(fmac_flag_IOC_GET_VERSION, &mut version).is_err() {
             info.flags = 0;
         }
         info
@@ -172,12 +166,12 @@ pub fn report_services() -> Result<bool> {
 pub fn report_boot_complete() {
     // Safe-mode is latched by the kernel until the daemon has read it; the
     // last boot stage releases the watcher.
-    let _ = ksuctl(IOC_DISARM_SAFEMODE, &mut []);
+    let _ = ksuctl(fmac_flag_IOC_DISARM_SAFEMODE, &mut []);
 }
 
 pub fn check_kernel_safemode() -> bool {
     let mut data = [];
-    matches!(ksuctl(IOC_GET_SAFEMODE, &mut data), Ok(1))
+    matches!(ksuctl(fmac_flag_IOC_GET_SAFEMODE, &mut data), Ok(1))
 }
 
 pub fn set_sepolicy(payload: *const u8, payload_len: u64) -> Result<i32> {
@@ -186,12 +180,12 @@ pub fn set_sepolicy(payload: *const u8, payload_len: u64) -> Result<i32> {
     }
     let bytes = unsafe { std::slice::from_raw_parts(payload, payload_len as usize) };
     let mut data = bytes.to_vec();
-    ksuctl(IOC_SET_SEPOLICY, &mut data)
+    ksuctl(fmac_flag_IOC_SET_SEPOLICY, &mut data)
 }
 
 pub fn set_init_pgrp() -> Result<()> {
     let mut data = [];
-    ksuctl(IOC_SET_INIT_PGRP, &mut data)?;
+    ksuctl(fmac_flag_IOC_SET_INIT_PGRP, &mut data)?;
     Ok(())
 }
 
@@ -199,7 +193,7 @@ pub fn set_mount_layout(mnt_id_off: u32, mnt_off: u32) -> Result<()> {
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&mnt_id_off.to_ne_bytes());
     data.extend_from_slice(&mnt_off.to_ne_bytes());
-    ksuctl(IOC_SET_MNT_LAYOUT, &mut data)?;
+    ksuctl(fmac_flag_IOC_SET_MNT_LAYOUT, &mut data)?;
     Ok(())
 }
 
