@@ -43,10 +43,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
-    let Some(args) = cli::parse_args()? else {
-        eprintln!("{}", cli::USAGE);
-        return Ok(());
-    };
+    let args = cli::parse_args()?;
 
     eprintln!("bootpatcher: reading module {}", args.module);
     let module_data = fs::read(&args.module).with_context(|| format!("read {}", args.module))?;
