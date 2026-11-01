@@ -13,7 +13,7 @@ config NKSU_DEBUG
 	default y
 	help
 	  Enable nekosu debug mode.
-	  
+
 config NKSU_SYSCALL
 	bool "use syscall hook"
 	depends on NKSU
@@ -24,5 +24,14 @@ config NKSU_SYSCALL
 	  This path rewrites sys_call_table entries with a pt_regs dispatcher
 	  and requires Linux >= 4.17.  On 4.9 leave it disabled; the default
 	  tracepoint dispatcher is used instead.
+
+config NKSU_MANAGER_CERTHASH
+	string "manager certificate SHA256 hash"
+	depends on NKSU
+	default "d809b63480beea6086cd7868e42f2eb2b9202c670c0d3db0894e9e4312f128e9"
+	help
+	  SHA256 hash of the manager certificate used to verify
+	  management connections.  Specified as a hex string, e.g.
+	  "abcdef0123456789...".
 
 endmenu

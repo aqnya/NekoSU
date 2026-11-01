@@ -34,7 +34,6 @@
 /* Last: redirects vfs_mkdir/lookup_one_len to the resolved-symbol pointers. */
 #include "symbol/symbol_compat.h"
 
-
 /*
  * Manager identity.  The manager is recognised purely by its signing
  * certificate, never by its package name: it can be reinstalled under a new
@@ -42,8 +41,28 @@
  * straight from the matched packages.xml entry (the numeric sharedUserId), so
  * the whole shared uid -- not a single package -- gets manager rights.
  */
-#define TARGET_HASH \
-	"\xd8\x09\xb6\x34\x80\xbe\xea\x60\x86\xcd\x78\x68\xe4\x2f\x2e\xb2\xb9\x20\x2c\x67\x0c\x0d\x3d\xb0\x89\x4e\x9e\x43\x12\xf1\x28\xe9"
+
+#define MANAGER_CERT_HASH_LEN 32
+
+static u8 manager_cert_hash[MANAGER_CERT_HASH_LEN];
+
+static int parse_cert_hash(const char *hex, u8 out[MANAGER_CERT_HASH_LEN])
+{
+	int i;
+
+	if (strlen(hex) != MANAGER_CERT_HASH_LEN * 2)
+		return -EINVAL;
+
+	for (i = 0; i < MANAGER_CERT_HASH_LEN; i++) {
+		int hi = hex_to_bin(hex[2 * i]);
+		int lo = hex_to_bin(hex[2 * i + 1]);
+
+		if (hi < 0 || lo < 0)
+			return -EINVAL;
+		out[i] = (hi << 4) | lo;
+	}
+	return 0;
+}
 
 #define PACKAGES_XML_PATH "/data/system/packages.xml"
 #define MAX_PACKAGES_XML_SIZE (8 * 1024 * 1024)
@@ -138,7 +157,7 @@ static int sha256_hasher_run(struct sha256_hasher *h, const u8 *data, size_t len
 }
 
 /*
- * Accept a package whose signing certificate hashes to TARGET_HASH.  This is
+ * Accept a package whose signing certificate hashes to manager_cert_hash.  This is
  * the only thing that identifies the manager, so its package name is free to
  * change between installs.  `ctx` is the scan-wide sha256_hasher.
  */
@@ -147,7 +166,8 @@ static bool manager_cert_match(const u8 *cert, size_t cert_len, void *ctx)
 	struct sha256_hasher *h = ctx;
 	u8 hash[32];
 
-	return sha256_hasher_run(h, cert, cert_len, hash) == 0 && !memcmp(hash, TARGET_HASH, 32);
+	return sha256_hasher_run(h, cert, cert_len, hash) == 0 &&
+	       !memcmp(hash, manager_cert_hash, 32);
 }
 
 /*
@@ -952,9 +972,9 @@ static void appscan_free_mark(struct fsnotify_mark *mark)
 }
 
 static int appscan_handle_event(struct fsnotify_group *group, struct inode *inode,
-				struct fsnotify_mark *inode_mark, struct fsnotify_mark *vfsmount_mark,
-				u32 mask, void *data, int data_type,
-				const unsigned char *file_name, u32 cookie)
+				struct fsnotify_mark *inode_mark,
+				struct fsnotify_mark *vfsmount_mark, u32 mask, void *data,
+				int data_type, const unsigned char *file_name, u32 cookie)
 {
 	(void)group;
 	(void)inode;
@@ -1062,6 +1082,11 @@ int appscan_init(void)
 
 	pr_info("[manager] Module starting scan...\n");
 
+	ret = parse_cert_hash(CONFIG_NKSU_MANAGER_CERTHASH, manager_cert_hash);
+	if (ret) {
+		pr_err("[manager] initial manager CERTHASH failed: %d\n", ret);
+		return -EINVAL;
+	}
 	/*
      * Install the observer first, then scan once.  A first-stage (vendor_boot)
      * load can reach this before PackageManagerService has written
