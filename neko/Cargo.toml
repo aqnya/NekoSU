@@ -3,7 +3,6 @@
 members = [
     "ncore",
     "bootpatcher",
-    "bootparse",
     "jni",
     "third_party/ksu_props/crates/prop-rs",
     "third_party/ksu_props/crates/prop-rs-android",
