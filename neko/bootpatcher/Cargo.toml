@@ -8,4 +8,4 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-bootparse = { git = "https://github.com/nksu-crew/bootprase.git" }
+bootparse = { git = "https://github.com/nksu-crew/bootparse.git" }
