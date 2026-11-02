@@ -397,6 +397,7 @@ static long ioc_disarm_safemode(void)
      * Keep ncore's tracepoint marking alive: ncore still needs the control fd
      * for module installs and runtime sepolicy changes after boot.
      */
+    nksu_daemon_fd_exit();
 	return 0;
 }
 

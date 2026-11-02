@@ -172,12 +172,12 @@ pub fn on_boot_completed() {
         return;
     }
 
-    ksucalls::report_boot_complete();
     info!("on_boot_completed triggered!");
 
     crate::preinit::on_boot_completed();
 
     run_stage("boot-completed", ScriptWait::NoWait);
+    ksucalls::report_boot_complete();
 }
 
 fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {

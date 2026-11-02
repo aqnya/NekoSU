@@ -38,7 +38,7 @@ static const struct nksu_component nksu_components[] = {
 
 	/* EARLY: input and tracepoint support, before SELinux policy exists. */
 	NKSU_EARLY_COMPONENT("safe mode", nksu_safe_mode_init, nksu_safe_mode_exit),
-	NKSU_EARLY_COMPONENT("ncore tracepoint", nksu_daemon_fd_init, nksu_daemon_fd_exit),
+	NKSU_EARLY_COMPONENT("ncore tracepoint", nksu_daemon_fd_init, NULL),
 
 	/* SELINUX: the policy is loaded during init's selinux_setup stage. */
 	NKSU_SELINUX_COMPONENT("SELinux hook", init_selinux_hook, selinux_exit),
