@@ -27,6 +27,7 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
+#include <linux/spinlock.h>
 #include <fmac.h>
 
 #include "ss/policydb.h"
@@ -69,22 +70,65 @@ static struct policydb *fmac_get_pdb(void)
 }
 
 /*
- * avc_reset — tell every SELinux subsystem the policy changed.
- * AVC, netlink, xfrm.  Order follows sel_write_load() in selinuxfs.c.
+ * Tell every SELinux consumer that @seqno was published.  The order follows
+ * selinux_notify_policy_change() in ss/services.c: AVC, netlink, status page,
+ * xfrm.
+ */
+static void policy_notify_change(u32 seqno)
+{
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+	avc_ss_reset(seqno);
+#else
+	avc_ss_reset(selinux_state.avc, seqno);
+#endif
+	selnl_notify_policyload(seqno);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+	selinux_status_update_policyload(&selinux_state, seqno);
+#else
+	selinux_status_update_policyload(seqno);
+#endif
+	selinux_xfrm_notify_policyload();
+}
+
+/*
+ * avc_reset — publish a policy change to every SELinux subsystem.
  *
- * Deliberately does NOT call selinux_status_update_policyload(): that would
- * overwrite the live /sys/fs/selinux/status page's policyload and bump its
- * sequence on every rule change, which stock only does on a real policy load.
+ * Every publication advances the policy generation (latest_granting), exactly
+ * like a stock policy load or boolean update does.  That generation is what
+ * userspace sees: status-backed libselinux clients (app_process and friends)
+ * only process a policy load when it changes, and the AVC refuses to cache a
+ * decision whose seqno is behind the last reset.  Passing a constant zero
+ * leaves both stalled.
  */
 void avc_reset(void)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
-	avc_ss_reset(0);
+	u32 seqno;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	struct selinux_policy *pol;
+
+	/* Hold the lock across the notification, like a real policy load, so
+	 * concurrent publications are observed in generation order. */
+	mutex_lock(&selinux_state.policy_mutex);
+	pol = rcu_dereference_protected(selinux_state.policy,
+					lockdep_is_held(&selinux_state.policy_mutex));
+	if (!pol) {
+		mutex_unlock(&selinux_state.policy_mutex);
+		return;
+	}
+	seqno = ++pol->latest_granting;
+	policy_notify_change(seqno);
+	mutex_unlock(&selinux_state.policy_mutex);
 #else
-	avc_ss_reset(selinux_state.avc, 0);
+	unsigned long flags;
+
+	/* Pre-5.7 the policy lock is a spinlock: bump under it, then notify. */
+	write_lock_irqsave(&selinux_state.ss->policy_rwlock, flags);
+	seqno = ++selinux_state.ss->latest_granting;
+	write_unlock_irqrestore(&selinux_state.ss->policy_rwlock, flags);
+
+	policy_notify_change(seqno);
 #endif
-	selnl_notify_policyload(0);
-	selinux_xfrm_notify_policyload();
 }
 
 /* ---- low-level avtab helpers ---- */
@@ -1035,10 +1079,11 @@ static bool rule_add_typeattribute(struct policydb *db, const char *type, const 
 /* ---- public API (locks internally) ---- */
 
 /*
- * avc_reset() is expensive: it flushes the AVC and broadcasts on netlink and
- * xfrm.  A batch of mutations therefore commits once at the end instead of
- * after every rule.  Batches are bracketed by sepolicy_batch_begin()/_end(); a
- * lone mutation (e.g. the manager's single IOC rule) resets immediately.
+ * avc_reset() is expensive: it advances the policy generation, flushes the AVC
+ * and broadcasts on netlink, the status page and xfrm.  A batch of mutations
+ * therefore commits once at the end instead of after every rule.  Batches are
+ * bracketed by sepolicy_batch_begin()/_end(); a lone mutation (e.g. the
+ * manager's single IOC rule) resets immediately.
  */
 static atomic_t rule_batch_depth = ATOMIC_INIT(0);
 static bool rule_reset_pending;

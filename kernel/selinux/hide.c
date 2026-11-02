@@ -512,11 +512,11 @@ static ssize_t __nocfi nksu_write_access(struct file *file, char *buf, size_t si
 	nksu_clean_compute_av(ssid, tsid, tclass, &avd);
 
 	/*
-     * Stock reads 1 here (the policy's real load counter).  The status page
-     * is deliberately left with the kernel's own values -- sequence and
-     * policyload stay 0 below 6.10 (see avc_reset) -- so this is not a
-     * cross-check that has to agree with it.
-     */
+	 * Stock reads 1 here (the policy's real load counter).  The clean
+	 * policy still carries that generation, but the status page is a
+	 * lazily allocated snapshot that also sees NekoSU's own publications,
+	 * so the two are not a cross-check that has to agree.
+	 */
 	avd.seqno = 1;
 	length = scnprintf(buf, NKSU_SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x", avd.allowed,
 			   0xffffffff, avd.auditallow, avd.auditdeny, avd.seqno, avd.flags);

@@ -381,6 +381,20 @@ NKSU_SYMBOL_VOID_FN(avc_ss_reset, (u32 seqno), (seqno))
 NKSU_SYMBOL_VOID_FN(avc_ss_reset, (void *avc, u32 seqno), (avc, seqno))
 #endif
 NKSU_SYMBOL_VOID_FN(selnl_notify_policyload, (u32 seqno), (seqno))
+/*
+ * selinux_status_update_policyload() kept a struct selinux_state argument
+ * until 6.4 dropped it with the other helpers' state argument; the seqno
+ * parameter became u32 in 6.6.  Match the running kernel's declaration so the
+ * __nocfi wrapper is called with an identical type under CFI.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload,
+		    (struct selinux_state * state, int seqno), (state, seqno))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload, (int seqno), (seqno))
+#else
+NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload, (u32 seqno), (seqno))
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 NKSU_SYMBOL_FN(int, security_context_to_sid,
 	       (const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp_flags),
@@ -436,7 +450,7 @@ NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
 #define switch_task_namespaces nksu_switch_task_namespaces_fn
 #define avc_ss_reset nksu_avc_ss_reset_fn
 #define selnl_notify_policyload nksu_selnl_notify_policyload_fn
-#define selinux_status_update_policyload nksu_selinux_status_update_policyload
+#define selinux_status_update_policyload nksu_selinux_status_update_policyload_fn
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
 #define symtab_search nksu_symtab_search_fn
 #define symtab_insert nksu_symtab_insert_fn

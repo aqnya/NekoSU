@@ -455,10 +455,18 @@ void sepolicy_restore(void)
 	{
 		live = rcu_dereference_protected(selinux_state.policy,
 						 lockdep_is_held(&selinux_state.policy_mutex));
-		if (live == nksu_work_policy)
+		if (live == nksu_work_policy) {
+			/*
+			 * Re-publishing the original is a policy change like any
+			 * other: carry the working copy's generation over so the
+			 * avc_reset() below advances past it instead of rolling
+			 * the generation back, which would stop AVC caching.
+			 */
+			nksu_orig_policy->latest_granting = live->latest_granting;
 			rcu_assign_pointer(selinux_state.policy, nksu_orig_policy);
-		else
+		} else {
 			pr_warn("[selinux]: live policy already replaced, leaving it\n");
+		}
 	}
 	synchronize_rcu();
 

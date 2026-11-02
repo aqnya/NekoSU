@@ -8,7 +8,7 @@
  * Rule manipulation on the working policy copy.  The semantics follow
  * KernelSU's sepolicy engine; the names are NekoSU's.
  *
- *   avc_reset                    invalidate cached access vectors
+ *   avc_reset                    advance the policy generation and notify
  *   sepolicy_add_rule            allow/deny/auditallow/dontaudit (effect+invert)
  *   sepolicy_add_xperm           ioctl extended permissions
  *   sepolicy_add_type            new concrete type
@@ -28,8 +28,8 @@ void avc_reset(void);
 
 /*
  * Batch rule mutations so a multi-rule load (boot or one manager batch)
- * flushes the AVC / notifies netlink+xfrm once at the end instead of after
- * every rule.  Nestable; a lone mutation need not bracket.
+ * flushes the AVC / notifies netlink, status and xfrm once at the end instead
+ * of after every rule.  Nestable; a lone mutation need not bracket.
  */
 void sepolicy_batch_begin(void);
 void sepolicy_batch_end(void);
