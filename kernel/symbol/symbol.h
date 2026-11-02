@@ -39,9 +39,9 @@
  * compile-time nksu_ksym_lookup("name") call sites record themselves without a
  * second, manually maintained list. _name must be a string literal.
  */
-#define NKSU_SYMBOL_EXPORT_FLAGS(_flags, _name)                            \
-	__asm__(".pushsection .nksu_ksymtab, \"a\"\n\t.byte " #_flags      \
-		"\n\t.asciz \"" _name "\"\n\t.popsection\n")
+#define NKSU_SYMBOL_EXPORT_FLAGS(_flags, _name)                                             \
+	__asm__(".pushsection .nksu_ksymtab, \"a\"\n\t.byte " #_flags "\n\t.asciz \"" _name \
+		"\"\n\t.popsection\n")
 
 #define NKSU_SYMBOL_EXPORT(_name) NKSU_SYMBOL_EXPORT_FLAGS(1, _name)
 #define NKSU_SYMBOL_EXPORT_OPTIONAL(_name) NKSU_SYMBOL_EXPORT_FLAGS(0, _name)
@@ -52,16 +52,16 @@
  * a missing symbol, and nksu_ksym_lookup() directly when the name is only
  * known at runtime: those names cannot be checked before flashing.
  */
-#define NKSU_KSYM_LOOKUP(_name)                                            \
-	({                                                               \
-		NKSU_SYMBOL_EXPORT(_name);                              \
-		nksu_ksym_lookup(_name);                                 \
+#define NKSU_KSYM_LOOKUP(_name)            \
+	({                                 \
+		NKSU_SYMBOL_EXPORT(_name); \
+		nksu_ksym_lookup(_name);   \
 	})
 
-#define NKSU_KSYM_TRY_LOOKUP(_name)                                        \
-	({                                                               \
-		NKSU_SYMBOL_EXPORT_OPTIONAL(_name);                     \
-		nksu_ksym_lookup(_name);                                 \
+#define NKSU_KSYM_TRY_LOOKUP(_name)                 \
+	({                                          \
+		NKSU_SYMBOL_EXPORT_OPTIONAL(_name); \
+		nksu_ksym_lookup(_name);            \
 	})
 
 /*

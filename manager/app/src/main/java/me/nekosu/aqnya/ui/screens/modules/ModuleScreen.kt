@@ -145,30 +145,33 @@ fun ModuleScreen() {
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            when {
-                state.installDone -> {
-                    LogDoneFab(
-                        label = stringResource(R.string.modules_install_close),
-                        onClick = moduleViewModel::resetInstall,
-                    )
-                }
-
-                state.actionDone -> {
-                    LogDoneFab(
-                        label = stringResource(R.string.modules_action_close),
-                        onClick = moduleViewModel::resetAction,
-                    )
-                }
-
-                !state.installing && !actionVisible -> {
-                    AppFloatingActionButton(
-                        onClick = { pickZip.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.modules_install))
+            Box(
+                modifier =
+                    Modifier.padding(
+                        bottom = LocalBottomBarClearance.current - 16.dp,
+                    ),
+            ) {
+                when {
+                    state.installDone -> {
+                        LogDoneFab(
+                            label = stringResource(R.string.modules_install_close),
+                            onClick = moduleViewModel::resetInstall,
+                        )
+                    }
+                    state.actionDone -> {
+                        LogDoneFab(
+                            label = stringResource(R.string.modules_action_close),
+                            onClick = moduleViewModel::resetAction,
+                        )
+                    }
+                    !state.installing && !actionVisible -> {
+                        AppFloatingActionButton(
+                            onClick = { pickZip.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.modules_install))
+                        }
                     }
                 }
-
-                else -> Unit
             }
         },
         contentWindowInsets =

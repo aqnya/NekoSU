@@ -115,7 +115,8 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		void *selected_origin = NULL;
 		int (*lookup_size)(unsigned long, unsigned long *, unsigned long *) = NULL;
 
-		lookup_size = (typeof(lookup_size))NKSU_KSYM_TRY_LOOKUP("kallsyms_lookup_size_offset");
+		lookup_size =
+			(typeof(lookup_size))NKSU_KSYM_TRY_LOOKUP("kallsyms_lookup_size_offset");
 
 		scalls_addr = NKSU_KSYM_LOOKUP("static_calls_table");
 		if (!scalls_addr) {

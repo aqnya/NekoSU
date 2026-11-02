@@ -23,11 +23,9 @@ object DialogAnimations {
     /** Flutter's `Curves.easeOut`: Cubic(0.0, 0.0, 0.58, 1.0). */
     private val easing = CubicBezierEasing(0f, 0f, 0.58f, 1f)
 
-    fun createEnterAnimation(): EnterTransition =
-        fadeIn(animationSpec = tween(DurationMillis, easing = easing))
+    fun createEnterAnimation(): EnterTransition = fadeIn(animationSpec = tween(DurationMillis, easing = easing))
 
-    fun createExitAnimation(): ExitTransition =
-        fadeOut(animationSpec = tween(DurationMillis, easing = easing))
+    fun createExitAnimation(): ExitTransition = fadeOut(animationSpec = tween(DurationMillis, easing = easing))
 }
 
 /**

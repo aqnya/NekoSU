@@ -31,7 +31,6 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 
-
 static void (*security_dump_masked_av_fn)(struct policydb *policydb, struct context *scontext,
 					  struct context *tcontext, u16 tclass, u32 permissions,
 					  const char *reason) = NULL;
@@ -47,8 +46,8 @@ int nksu_engine_init(void)
 	if (!security_dump_masked_av_fn)
 		pr_warn("[selinux_hide] security_dump_masked_av not found\n");
 
-	context_struct_compute_av_fn =
-		(typeof(context_struct_compute_av_fn))NKSU_KSYM_TRY_LOOKUP("context_struct_compute_av");
+	context_struct_compute_av_fn = (typeof(context_struct_compute_av_fn))NKSU_KSYM_TRY_LOOKUP(
+		"context_struct_compute_av");
 	if (!context_struct_compute_av_fn)
 		pr_warn("[selinux_hide] context_struct_compute_av not found\n");
 
@@ -518,7 +517,8 @@ static int constraint_expr_eval(struct policydb *policydb, struct context *scont
  */
 static void __nocfi context_struct_compute_av(struct policydb *policydb, struct context *scontext,
 					      struct context *tcontext, u16 tclass,
-					      struct av_decision *avd, struct extended_perms *xperms)
+					      struct av_decision *avd,
+					      struct extended_perms *xperms)
 {
 	struct constraint_node *constraint;
 	struct role_allow *ra;

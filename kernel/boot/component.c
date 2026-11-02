@@ -38,8 +38,7 @@ static const struct nksu_component nksu_components[] = {
 
 	/* EARLY: input and tracepoint support, before SELinux policy exists. */
 	NKSU_EARLY_COMPONENT("safe mode", nksu_safe_mode_init, nksu_safe_mode_exit),
-	NKSU_EARLY_COMPONENT("ncore tracepoint", nksu_daemon_fd_init,
-			     nksu_daemon_fd_exit),
+	NKSU_EARLY_COMPONENT("ncore tracepoint", nksu_daemon_fd_init, nksu_daemon_fd_exit),
 
 	/* SELINUX: the policy is loaded during init's selinux_setup stage. */
 	NKSU_SELINUX_COMPONENT("SELinux hook", init_selinux_hook, selinux_exit),
@@ -47,15 +46,12 @@ static const struct nksu_component nksu_components[] = {
 	/* FEATURE: everything that needs the policy, /data and the zygote. */
 	NKSU_FEATURE_COMPONENT("anonymous fd", fmac_anonfd_init, fmac_anonfd_exit),
 	NKSU_FEATURE_COMPONENT("uid profile", nksu_profile_init, nksu_profile_exit),
-	NKSU_FEATURE_COMPONENT("profile store", nksu_profile_store_init,
-			       nksu_profile_store_exit),
+	NKSU_FEATURE_COMPONENT("profile store", nksu_profile_store_init, nksu_profile_store_exit),
 #ifndef CONFIG_NKSU_SYSCALL
-	NKSU_FEATURE_COMPONENT("tracepoint hook", load_tracepoint_hook,
-			       unload_tracepoint_hook),
+	NKSU_FEATURE_COMPONENT("tracepoint hook", load_tracepoint_hook, unload_tracepoint_hook),
 #endif
 	NKSU_FEATURE_COMPONENT("manager scan", appscan_init, appscan_exit),
-	NKSU_FEATURE_COMPONENT("SELinux hide", nksu_selinux_hide_init,
-			       nksu_selinux_hide_exit),
+	NKSU_FEATURE_COMPONENT("SELinux hide", nksu_selinux_hide_init, nksu_selinux_hide_exit),
 	NKSU_FEATURE_COMPONENT("umount config", nksu_umount_feature_init, NULL),
 #ifdef CONFIG_NKSU_SYSCALL
 	NKSU_FEATURE_COMPONENT("syscall hook", init_syscall_hook, exit_syscall_hook),
@@ -83,8 +79,7 @@ int __nocfi nksu_components_init(enum nksu_init_stage stage)
 		if (nksu_components[start].stage == stage)
 			break;
 
-	for (i = start; i < ARRAY_SIZE(nksu_components) &&
-		    nksu_components[i].stage == stage; i++) {
+	for (i = start; i < ARRAY_SIZE(nksu_components) && nksu_components[i].stage == stage; i++) {
 		const struct nksu_component *comp = &nksu_components[i];
 
 		ret = comp->init ? comp->init() : 0;
@@ -126,8 +121,7 @@ void __nocfi nksu_components_exit_from(enum nksu_init_stage stage)
 	for (i = ARRAY_SIZE(nksu_components); i-- > 0;) {
 		const struct nksu_component *comp = &nksu_components[i];
 
-		if (comp->stage >= stage && (nksu_ready & BIT(comp->stage)) &&
-		    comp->exit)
+		if (comp->stage >= stage && (nksu_ready & BIT(comp->stage)) && comp->exit)
 			comp->exit();
 	}
 

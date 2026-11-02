@@ -75,16 +75,16 @@
  * the original name to it.  _params declares the wrapper's parameters and
  * _args forwards them to the resolved pointer.
  */
-#define NKSU_SYMBOL_FN(_ret, _name, _params, _args)                  \
-	static inline __nocfi _ret nksu_##_name##_fn _params         \
-	{                                                             \
-		return nksu_##_name _args;                            \
+#define NKSU_SYMBOL_FN(_ret, _name, _params, _args)          \
+	static inline __nocfi _ret nksu_##_name##_fn _params \
+	{                                                    \
+		return nksu_##_name _args;                   \
 	}
 
-#define NKSU_SYMBOL_VOID_FN(_name, _params, _args)                   \
-	static inline __nocfi void nksu_##_name##_fn _params         \
-	{                                                             \
-		nksu_##_name _args;                                   \
+#define NKSU_SYMBOL_VOID_FN(_name, _params, _args)           \
+	static inline __nocfi void nksu_##_name##_fn _params \
+	{                                                    \
+		nksu_##_name _args;                          \
 	}
 
 /* function symbols (pointers) */
@@ -204,7 +204,8 @@ static inline ssize_t __nocfi nksu_kread(struct file *file, void *buf, size_t co
 #endif
 }
 
-static inline ssize_t __nocfi nksu_kwrite(struct file *file, const void *buf, size_t count, loff_t *pos)
+static inline ssize_t __nocfi nksu_kwrite(struct file *file, const void *buf, size_t count,
+					  loff_t *pos)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 	ssize_t ret = nksu_kernel_write(file, (const char *)buf, count, *pos);
@@ -263,7 +264,8 @@ extern typeof(fsnotify_add_mark) *nksu_fsnotify_add_mark;
  * fsnotify_add_mark() signature instead (see manager/manager.c).
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-int __nocfi nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode, int add_flags);
+int __nocfi nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
+					 int add_flags);
 #endif
 
 /*
@@ -307,34 +309,34 @@ extern typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #ifndef NKSU_SYMBOL_COMPAT_NO_MACROS
 NKSU_SYMBOL_FN(struct user_struct *, alloc_uid, (kuid_t kuid), (kuid))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
-NKSU_SYMBOL_FN(int, set_cred_ucounts, (struct cred *new), (new))
+NKSU_SYMBOL_FN(int, set_cred_ucounts, (struct cred * new), (new))
 #endif
-NKSU_SYMBOL_VOID_FN(switch_task_namespaces, (struct task_struct *p, struct nsproxy *new), (p, new))
+NKSU_SYMBOL_VOID_FN(switch_task_namespaces, (struct task_struct * p, struct nsproxy *new), (p, new))
 NKSU_SYMBOL_FN(struct file *, filp_open, (const char *filename, int flags, umode_t mode),
 	       (filename, flags, mode))
 NKSU_SYMBOL_FN(struct task_struct *, find_task_by_vpid, (pid_t nr), (nr))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 NKSU_SYMBOL_FN(int, task_work_add,
-	       (struct task_struct *task, struct callback_head *work,
+	       (struct task_struct * task, struct callback_head *work,
 		enum task_work_notify_mode notify),
 	       (task, work, notify))
 #else
 NKSU_SYMBOL_FN(int, task_work_add,
-	       (struct task_struct *task, struct callback_head *work, bool notify),
+	       (struct task_struct * task, struct callback_head *work, bool notify),
 	       (task, work, notify))
 #endif
-NKSU_SYMBOL_VOID_FN(change_pid, (struct task_struct *task, enum pid_type type, struct pid *pid),
+NKSU_SYMBOL_VOID_FN(change_pid, (struct task_struct * task, enum pid_type type, struct pid *pid),
 		    (task, type, pid))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-NKSU_SYMBOL_FN(int, path_umount, (struct path *path, int flags), (path, flags))
+NKSU_SYMBOL_FN(int, path_umount, (struct path * path, int flags), (path, flags))
 #else
 NKSU_SYMBOL_FN(long, sys_umount, (char __user *name, int flags), (name, flags))
 #endif
-NKSU_SYMBOL_VOID_FN(free_uid, (struct user_struct *up), (up))
-NKSU_SYMBOL_FN(int, commit_creds, (struct cred *new), (new))
-NKSU_SYMBOL_VOID_FN(abort_creds, (struct cred *new), (new))
+NKSU_SYMBOL_VOID_FN(free_uid, (struct user_struct * up), (up))
+NKSU_SYMBOL_FN(int, commit_creds, (struct cred * new), (new))
+NKSU_SYMBOL_VOID_FN(abort_creds, (struct cred * new), (new))
 NKSU_SYMBOL_FN(struct group_info *, groups_alloc, (int gidsetsize), (gidsetsize))
-NKSU_SYMBOL_VOID_FN(set_groups, (struct cred *new, struct group_info *group_info),
+NKSU_SYMBOL_VOID_FN(set_groups, (struct cred * new, struct group_info *group_info),
 		    (new, group_info))
 NKSU_SYMBOL_FN(int, unshare_fs_struct, (void), ())
 
@@ -344,36 +346,35 @@ NKSU_SYMBOL_FN(int, unshare_fs_struct, (void), ())
  * engine files can drop their file-wide CFI opt-outs too.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
-NKSU_SYMBOL_FN(void *, symtab_search, (struct symtab *s, const char *name), (s, name))
-NKSU_SYMBOL_FN(int, symtab_insert, (struct symtab *s, char *name, void *datum),
-	       (s, name, datum))
+NKSU_SYMBOL_FN(void *, symtab_search, (struct symtab * s, const char *name), (s, name))
+NKSU_SYMBOL_FN(int, symtab_insert, (struct symtab * s, char *name, void *datum), (s, name, datum))
 #endif
-NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node,
-	       (struct avtab *h, struct avtab_key *key), (h, key))
+NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node, (struct avtab * h, struct avtab_key *key),
+	       (h, key))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node_next, (struct avtab_node *node, u16 tclass),
+NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node_next, (struct avtab_node * node, u16 tclass),
 	       (node, tclass))
 #else
-NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node_next, (struct avtab_node *node, int tclass),
+NKSU_SYMBOL_FN(struct avtab_node *, avtab_search_node_next, (struct avtab_node * node, int tclass),
 	       (node, tclass))
 #endif
 NKSU_SYMBOL_FN(struct avtab_node *, avtab_insert_nonunique,
-	       (struct avtab *h, struct avtab_key *key, struct avtab_datum *datum),
+	       (struct avtab * h, struct avtab_key *key, struct avtab_datum *datum),
 	       (h, key, datum))
-NKSU_SYMBOL_FN(int, avtab_alloc, (struct avtab *h, u32 nr), (h, nr))
-NKSU_SYMBOL_VOID_FN(avtab_destroy, (struct avtab *h), (h))
+NKSU_SYMBOL_FN(int, avtab_alloc, (struct avtab * h, u32 nr), (h, nr))
+NKSU_SYMBOL_VOID_FN(avtab_destroy, (struct avtab * h), (h))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 NKSU_SYMBOL_FN(struct filename_trans_datum *, policydb_filenametr_search,
-	       (struct policydb *p, struct filename_trans_key *key), (p, key))
+	       (struct policydb * p, struct filename_trans_key *key), (p, key))
 #endif
-NKSU_SYMBOL_FN(int, policydb_write, (struct policydb *p, void *fp), (p, fp))
-NKSU_SYMBOL_FN(int, policydb_read, (struct policydb *p, void *fp), (p, fp))
-NKSU_SYMBOL_VOID_FN(policydb_destroy, (struct policydb *p), (p))
-NKSU_SYMBOL_FN(int, ebitmap_set_bit, (struct ebitmap *e, unsigned long bit, int value),
+NKSU_SYMBOL_FN(int, policydb_write, (struct policydb * p, void *fp), (p, fp))
+NKSU_SYMBOL_FN(int, policydb_read, (struct policydb * p, void *fp), (p, fp))
+NKSU_SYMBOL_VOID_FN(policydb_destroy, (struct policydb * p), (p))
+NKSU_SYMBOL_FN(int, ebitmap_set_bit, (struct ebitmap * e, unsigned long bit, int value),
 	       (e, bit, value))
-NKSU_SYMBOL_FN(int, ebitmap_get_bit, (struct ebitmap *e, unsigned long bit), (e, bit))
-NKSU_SYMBOL_VOID_FN(ebitmap_destroy, (struct ebitmap *e), (e))
-NKSU_SYMBOL_FN(int, ebitmap_cpy, (struct ebitmap *dst, struct ebitmap *src), (dst, src))
+NKSU_SYMBOL_FN(int, ebitmap_get_bit, (struct ebitmap * e, unsigned long bit), (e, bit))
+NKSU_SYMBOL_VOID_FN(ebitmap_destroy, (struct ebitmap * e), (e))
+NKSU_SYMBOL_FN(int, ebitmap_cpy, (struct ebitmap * dst, struct ebitmap *src), (dst, src))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
 NKSU_SYMBOL_VOID_FN(avc_ss_reset, (u32 seqno), (seqno))
 #else
@@ -385,39 +386,38 @@ NKSU_SYMBOL_FN(int, security_context_to_sid,
 	       (const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp_flags),
 	       (scontext, scontext_len, sid, gfp_flags))
 NKSU_SYMBOL_FN(int, avc_has_perm,
-	       (u32 ssid, u32 tsid, u16 tclass, u32 requested,
-		struct common_audit_data *auditdata),
+	       (u32 ssid, u32 tsid, u16 tclass, u32 requested, struct common_audit_data *auditdata),
 	       (ssid, tsid, tclass, requested, auditdata))
 #else
 NKSU_SYMBOL_FN(int, security_context_to_sid,
-	       (struct selinux_state *state, const char *scontext, u32 scontext_len, u32 *sid,
+	       (struct selinux_state * state, const char *scontext, u32 scontext_len, u32 *sid,
 		gfp_t gfp_flags),
 	       (state, scontext, scontext_len, sid, gfp_flags))
 NKSU_SYMBOL_FN(int, security_sid_to_context,
-	       (struct selinux_state *state, u32 sid, char **scontext, u32 *scontext_len),
+	       (struct selinux_state * state, u32 sid, char **scontext, u32 *scontext_len),
 	       (state, sid, scontext, scontext_len))
 NKSU_SYMBOL_VOID_FN(security_compute_av_user,
-		      (struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass,
-		       struct av_decision *avd),
-		      (state, ssid, tsid, tclass, avd))
+		    (struct selinux_state * state, u32 ssid, u32 tsid, u16 tclass,
+		     struct av_decision *avd),
+		    (state, ssid, tsid, tclass, avd))
 NKSU_SYMBOL_FN(int, avc_has_perm,
-	       (struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested,
+	       (struct selinux_state * state, u32 ssid, u32 tsid, u16 tclass, u32 requested,
 		struct common_audit_data *auditdata),
 	       (state, ssid, tsid, tclass, requested, auditdata))
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
-	       (struct mnt_idmap *idmap, struct dentry *dentry, const char *name,
+	       (struct mnt_idmap * idmap, struct dentry *dentry, const char *name,
 		const void *value, size_t size, int flags),
 	       (idmap, dentry, name, value, size, flags))
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
-	       (struct user_namespace *mnt_userns, struct dentry *dentry, const char *name,
+	       (struct user_namespace * mnt_userns, struct dentry *dentry, const char *name,
 		const void *value, size_t size, int flags),
 	       (mnt_userns, dentry, name, value, size, flags))
 #else
 NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
-	       (struct dentry *dentry, const char *name, const void *value, size_t size,
+	       (struct dentry * dentry, const char *name, const void *value, size_t size,
 		int flags),
 	       (dentry, name, value, size, flags))
 #endif

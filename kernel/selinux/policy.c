@@ -197,7 +197,8 @@ struct policydb *nksu_policydb_dup_live(void)
 	for (attempt = 0; attempt < 3; attempt++) {
 		alloc = selinux_state.ss->policydb.len +
 			(size_t)selinux_state.ss->policydb.p_types.nprim *
-				(sizeof(u32) + sizeof(u64)) + 4096;
+				(sizeof(u32) + sizeof(u64)) +
+			4096;
 		data = vmalloc(alloc);
 		if (!data)
 			return ERR_PTR(-ENOMEM);
@@ -368,8 +369,7 @@ int sepolicy_dup_and_apply(void)
 	 * Serialise under the policy write lock, but only with a preallocated
 	 * buffer: policydb_write() just copies memory and cannot sleep.
 	 */
-	alloc = live->len +
-		(size_t)live->p_types.nprim * (sizeof(u32) + sizeof(u64));
+	alloc = live->len + (size_t)live->p_types.nprim * (sizeof(u32) + sizeof(u64));
 	data = vmalloc(alloc);
 	if (!data) {
 		kfree(saved);

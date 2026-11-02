@@ -137,7 +137,8 @@ typeof(probe_kernel_write) *nksu_probe_kernel_write;
  *   >= 6.10 fsnotify_add_mark(mark, inode, type, flags)
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-int __nocfi nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode, int add_flags)
+int __nocfi nksu_fsnotify_add_inode_mark(struct fsnotify_mark *mark, struct inode *inode,
+					 int add_flags)
 {
 	if (!nksu_fsnotify_add_mark)
 		return -ENOSYS;

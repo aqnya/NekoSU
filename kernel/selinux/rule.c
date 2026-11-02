@@ -1121,13 +1121,13 @@ void sepolicy_batch_end(void)
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
-#define RULE_LOCK_GET(db)                     \
-	struct policydb *db;                  \
-	mutex_lock(&selinux_state.policy_mutex); \
-	db = fmac_get_pdb();                  \
-	if (!db) {                            \
+#define RULE_LOCK_GET(db)                                  \
+	struct policydb *db;                               \
+	mutex_lock(&selinux_state.policy_mutex);           \
+	db = fmac_get_pdb();                               \
+	if (!db) {                                         \
 		mutex_unlock(&selinux_state.policy_mutex); \
-		return -ENOENT;               \
+		return -ENOENT;                            \
 	}
 
 #define RULE_UNLOCK(ret)                           \
@@ -1135,36 +1135,36 @@ void sepolicy_batch_end(void)
 	if ((ret) == 0)                            \
 		rule_mark_dirty();
 #else
-#define RULE_LOCK_GET(db)                                             \
-	struct policydb *db;                                          \
-	bool __rule_batch = rule_in_batch();                          \
-	if (__rule_batch) {                                           \
-		db = rule_batch_pdb();                                \
-		if (!db)                                              \
-			return -ENOMEM;                               \
-	} else {                                                      \
-		mutex_lock(&nksu_rule_state_lock);                    \
-		db = nksu_policydb_dup_live();                        \
-		if (IS_ERR(db)) {                                     \
-			mutex_unlock(&nksu_rule_state_lock);          \
-			return PTR_ERR(db);                           \
-		}                                                     \
+#define RULE_LOCK_GET(db)                                    \
+	struct policydb *db;                                 \
+	bool __rule_batch = rule_in_batch();                 \
+	if (__rule_batch) {                                  \
+		db = rule_batch_pdb();                       \
+		if (!db)                                     \
+			return -ENOMEM;                      \
+	} else {                                             \
+		mutex_lock(&nksu_rule_state_lock);           \
+		db = nksu_policydb_dup_live();               \
+		if (IS_ERR(db)) {                            \
+			mutex_unlock(&nksu_rule_state_lock); \
+			return PTR_ERR(db);                  \
+		}                                            \
 	}
 
-#define RULE_UNLOCK(ret)                                      \
-	if (!__rule_batch) {                                  \
-		if ((ret) == 0) {                             \
+#define RULE_UNLOCK(ret)                                        \
+	if (!__rule_batch) {                                    \
+		if ((ret) == 0) {                               \
 			int __inst = nksu_policydb_install(db); \
-			if (__inst)                           \
-				(ret) = __inst;               \
-		} else {                                      \
-			nksu_policydb_free(db);               \
-		}                                             \
-		mutex_unlock(&nksu_rule_state_lock);          \
-		if ((ret) == 0)                               \
-			rule_mark_dirty();                    \
-	} else if ((ret) == 0) {                              \
-		rule_mark_dirty();                            \
+			if (__inst)                             \
+				(ret) = __inst;                 \
+		} else {                                        \
+			nksu_policydb_free(db);                 \
+		}                                               \
+		mutex_unlock(&nksu_rule_state_lock);            \
+		if ((ret) == 0)                                 \
+			rule_mark_dirty();                      \
+	} else if ((ret) == 0) {                                \
+		rule_mark_dirty();                              \
 	}
 #endif
 

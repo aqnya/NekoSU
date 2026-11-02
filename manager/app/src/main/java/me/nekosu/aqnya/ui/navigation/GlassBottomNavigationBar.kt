@@ -221,7 +221,8 @@ fun GlassBottomNavigationBar(
         // icons; the pill below stays outside and keeps its own press scale.
         Box(
             modifier =
-                Modifier.fillMaxSize()
+                Modifier
+                    .fillMaxSize()
                     .layerBackdrop(tabsBackdrop)
                     .drawBackdrop(
                         backdrop = backdrop,
@@ -253,13 +254,13 @@ fun GlassBottomNavigationBar(
             ) {
                 Row(
                     modifier =
-                        Modifier.fillMaxSize()
+                        Modifier
+                            .fillMaxSize()
                             .onGloballyPositioned { coordinates ->
                                 totalWidthPx = coordinates.size.width.toFloat()
                                 val contentWidthPx = totalWidthPx - innerPaddingPx * 2f
                                 tabWidthPx = (contentWidthPx / items.size).coerceAtLeast(0f)
-                            }
-                            .selectableGroup()
+                            }.selectableGroup()
                             .then(interactiveHighlight.modifier)
                             .padding(GlassBarInnerPadding),
                     verticalAlignment = Alignment.CenterVertically,
@@ -283,7 +284,8 @@ fun GlassBottomNavigationBar(
             val tabWidthDp = with(density) { tabWidthPx.toDp() }
             Box(
                 modifier =
-                    Modifier.padding(horizontal = GlassBarInnerPadding)
+                    Modifier
+                        .padding(horizontal = GlassBarInnerPadding)
                         .graphicsLayer {
                             val progressOffset = dragAnimation.value * tabWidthPx
                             translationX = if (isLtr) progressOffset else -progressOffset
@@ -292,8 +294,7 @@ fun GlassBottomNavigationBar(
                             val velocity = dragAnimation.velocity / 10f
                             scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
                             scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
-                        }
-                        .then(interactiveHighlight.gestureModifier)
+                        }.then(interactiveHighlight.gestureModifier)
                         .then(dragAnimation.modifier)
                         .drawBackdrop(
                             backdrop = combinedBackdrop,
@@ -323,8 +324,7 @@ fun GlassBottomNavigationBar(
                                 drawRect(selectionSurface, alpha = 1f - progress)
                                 drawRect(Color.Black.copy(alpha = 0.03f * progress))
                             },
-                        )
-                        .height(GlassPillHeight)
+                        ).height(GlassPillHeight)
                         .width(tabWidthDp),
             )
         }
@@ -356,8 +356,7 @@ private fun RowScope.GlassBottomBarItem(
                     indication = null,
                     role = Role.Tab,
                     onClick = onSelect,
-                )
-                .fillMaxHeight()
+                ).fillMaxHeight()
                 .weight(1f)
                 .graphicsLayer {
                     val scale = tabScale()

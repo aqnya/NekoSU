@@ -58,28 +58,24 @@ import me.nekosu.aqnya.ui.navigation.GlassBottomNavigationBar
 import me.nekosu.aqnya.ui.navigation.LocalBottomBarClearance
 import me.nekosu.aqnya.ui.navigation.NormalBottomNavigationBar
 import me.nekosu.aqnya.ui.navigation.StandardBottomBarContentPadding
-import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 import me.nekosu.aqnya.ui.permission.AppPermission
 import me.nekosu.aqnya.ui.permission.MiuiPermissionUtils
 import me.nekosu.aqnya.ui.permission.rememberPermissionState
 import me.nekosu.aqnya.ui.screens.install.InstallScreen
 import me.nekosu.aqnya.ui.screens.modules.ModuleScreen
 import me.nekosu.aqnya.ui.screens.settings.SettingsScreen
+import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 
 // Flutter's tab switcher cross-fades the page content over 70 ms. Routes that
 // leave the tab set use the same Cupertino-style slide as pushed pages.
 private const val TabFadeMillis = 70
 
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(
-    navItems: List<BottomNavItem>,
-): Boolean {
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(navItems: List<BottomNavItem>): Boolean {
     val routes = navItems.map { it.route }
     return initialState.destination.route in routes && targetState.destination.route in routes
 }
 
-private fun tabTransitionEnter(
-    navItems: List<BottomNavItem>,
-): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
+private fun tabTransitionEnter(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
     {
         if (isTabSwitch(navItems)) {
             fadeIn(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
@@ -88,9 +84,7 @@ private fun tabTransitionEnter(
         }
     }
 
-private fun tabTransitionExit(
-    navItems: List<BottomNavItem>,
-): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
+private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     {
         if (isTabSwitch(navItems)) {
             fadeOut(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
@@ -99,9 +93,7 @@ private fun tabTransitionExit(
         }
     }
 
-private fun tabTransitionPopEnter(
-    navItems: List<BottomNavItem>,
-): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
+private fun tabTransitionPopEnter(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
     {
         if (isTabSwitch(navItems)) {
             fadeIn(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
@@ -110,9 +102,7 @@ private fun tabTransitionPopEnter(
         }
     }
 
-private fun tabTransitionPopExit(
-    navItems: List<BottomNavItem>,
-): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
+private fun tabTransitionPopExit(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     {
         if (isTabSwitch(navItems)) {
             fadeOut(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
@@ -339,8 +329,7 @@ fun MainScreen() {
                                     .navigationBarsPadding()
                                     .windowInsetsPadding(
                                         WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
-                                    )
-                                    .padding(
+                                    ).padding(
                                         horizontal = GlassBottomBarHorizontalPadding,
                                         vertical = GlassBottomBarVerticalPadding,
                                     ),

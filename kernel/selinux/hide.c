@@ -84,7 +84,6 @@ static struct selinux_ss fake_ss;
 /* Last: redirects unexported symbols (selinux_state, ...) through pointers. */
 #include "symbol/symbol_compat.h"
 
-
 /* Feature name in the registry, and the key in the persistent enabled set. */
 #define NKSU_HIDE_FEATURE_NAME "selinux_hide"
 
@@ -589,7 +588,8 @@ static void nksu_clean_policy_release(void)
 }
 
 /* /sys/fs/selinux/policy: hand apps the clean policy instead of the live one. */
-static ssize_t __nocfi nksu_read_policy(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
+static ssize_t __nocfi nksu_read_policy(struct file *filp, char __user *buf, size_t count,
+					loff_t *ppos)
 {
 	if (likely(current_uid().val < NKSU_APP_UID_MIN) || !nksu_hide_running ||
 	    !clean_policy_data)
@@ -695,8 +695,8 @@ static int nksu_hide_enable(void)
 	fake_state.ss = &fake_ss;
 #endif
 
-	nksu_bounded_transition_fn =
-		(typeof(nksu_bounded_transition_fn))NKSU_KSYM_TRY_LOOKUP("security_bounded_transition");
+	nksu_bounded_transition_fn = (typeof(nksu_bounded_transition_fn))NKSU_KSYM_TRY_LOOKUP(
+		"security_bounded_transition");
 	if (!nksu_bounded_transition_fn)
 		pr_warn("[selinux_hide] security_bounded_transition not found\n");
 

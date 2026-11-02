@@ -50,7 +50,6 @@
 #define nksu_kernel_thread_run(fn, arg, name, flags) kernel_thread((fn), (arg), (flags))
 #endif
 
-
 struct nksu_spawn {
 	char *path;
 	char **argv;
