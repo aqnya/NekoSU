@@ -116,6 +116,7 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 #else
 typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #endif
+typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
 
 #define NKSU_RESOLVE(ptr, sym)                                   \
 	do {                                                     \
@@ -260,6 +261,7 @@ int nksu_symbol_compat_init(void)
 #else
 	NKSU_RESOLVE(nksu_probe_kernel_write, "probe_kernel_write");
 #endif
+	NKSU_RESOLVE(nksu_seccomp_filter_release, "seccomp_filter_release");
 
 	if (missing) {
 		pr_err("[ksym] %d unexported symbol(s) unresolved, cache=%lu\n", missing,
@@ -368,4 +370,5 @@ void nksu_symbol_compat_exit(void)
 	nksu_sys_wait4 = NULL;
 #endif
 	nksu_flush_signal_handlers = NULL;
+	nksu_seccomp_filter_release = NULL;
 }

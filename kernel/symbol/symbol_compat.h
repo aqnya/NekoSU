@@ -48,6 +48,7 @@
 #include <linux/task_work.h>
 #include <linux/pid.h>
 #include <asm/fixmap.h>
+#include <linux/seccomp.h>
 
 #include "kernel_compat.h"
 
@@ -285,6 +286,7 @@ extern typeof(getname_kernel) *nksu_getname_kernel;
 extern typeof(sys_wait4) *nksu_sys_wait4;
 #endif
 extern typeof(flush_signal_handlers) *nksu_flush_signal_handlers;
+extern typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
 
 /* data symbol (pointer, dereferenced by the macro) */
 extern typeof(selinux_state) *nksu_selinux_state;
@@ -435,6 +437,7 @@ NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
 		int flags),
 	       (dentry, name, value, size, flags))
 #endif
+NKSU_SYMBOL_VOID_FN(seccomp_filter_release, (struct task_struct * tsk), (tsk))
 #endif
 
 /*
@@ -528,6 +531,7 @@ NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 #define copy_to_kernel_nofault nksu_copy_to_kernel_nofault
 #endif
+#define seccomp_filter_release nksu_seccomp_filter_release_fn
 #endif /* NKSU_SYMBOL_COMPAT_NO_MACROS */
 
 /* Resolve all symbols into the pointers; returns negative errno if any fail. */
