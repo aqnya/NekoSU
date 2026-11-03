@@ -197,6 +197,12 @@ pub fn set_mount_layout(mnt_id_off: u32, mnt_off: u32) -> Result<()> {
     Ok(())
 }
 
+pub fn set_manager_uid(uid: u32) -> Result<()> {
+    let mut buf = uid.to_ne_bytes();
+    ksuctl(fmac_flag_IOC_SET_MANAGER_UID, &mut buf)?;
+    Ok(())
+}
+
 pub fn set_no_new_privs() -> anyhow::Result<()> {
     let ret = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
     if ret != 0 {

@@ -34,4 +34,11 @@ fn main() {
     };
     println!("cargo:rustc-env=VERSION_CODE={code}");
     println!("cargo:rustc-env=VERSION_NAME={name}");
+
+    println!("cargo:rerun-if-env-changed=NKSU_MANAGER_CERTHASH");
+    let hash = std::env::var("NKSU_MANAGER_CERTHASH").unwrap_or_default();
+    if hash.is_empty() {
+        println!("cargo:warning=NKSU_MANAGER_CERTHASH not set; manager cert hash will be empty");
+    }
+    println!("cargo:rustc-env=NKSU_MANAGER_CERTHASH={hash}");
 }

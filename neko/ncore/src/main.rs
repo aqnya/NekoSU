@@ -26,6 +26,7 @@ mod hot_install;
 mod init_event;
 #[cfg(target_os = "android")]
 mod ksucalls;
+mod manager;
 #[cfg(target_os = "android")]
 mod metamodule;
 #[cfg(target_os = "android")]

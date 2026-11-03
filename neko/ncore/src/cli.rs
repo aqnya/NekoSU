@@ -6,6 +6,10 @@
  * profile commands.  NekoSU does boot patching in bootpatcher, loads its LKM from
  * vendor_boot and drives profiles/features through the manager JNI, so only
  * the module runtime, su/resetprop entry points and daemon install remain.
+ *
+ * Manager recognition moved from the kernel module into `src/manager/` (a
+ * user-space port of manager/abx.c + manager.c).  There is no fsnotify
+ * observer here, so scanning is triggered explicitly via `ncore manager ...`.
  */
 use anyhow::{Ok, Result};
 use clap::Parser;
@@ -13,7 +17,7 @@ use clap::Parser;
 use android_logger::Config;
 use log::{LevelFilter, info};
 
-use crate::{defs, init_event, ksucalls, module, resetprop, su, utils};
+use crate::{defs, init_event, ksucalls, manager, module, resetprop, su, utils};
 
 #[derive(Parser, Debug)]
 #[command(author, version = defs::FULL_VERSION, about, long_about = None)]
@@ -48,11 +52,31 @@ enum Commands {
     /// Install the ncore userspace component
     Install,
 
+    /// Manager recognition and /data/adb/ncore bootstrap
+    Manager {
+        #[command(subcommand)]
+        command: ManagerCmd,
+    },
+
     /// Resetprop - Magisk-compatible system property tool
     #[command(disable_help_flag = true)]
     Resetprop {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum ManagerCmd {
+    /// Find the manager package by signing certificate and print its details
+    Scan {
+        /// SHA-256 of the manager's DER signing certificate (64 hex chars).
+        /// If omitted, the build-time NKSU_MANAGER_CERTHASH is used.
+        #[arg(default_value = "")]
+        cert_hash: String,
+        /// Override packages.xml path (default: /data/system/packages.xml)
+        #[arg(long, value_name = "PATH")]
+        packages_xml: Option<String>,
     },
 }
 
@@ -134,6 +158,13 @@ pub fn run() -> Result<()> {
             Ok(())
         }
         Commands::Install => utils::install(None, None),
+        Commands::Manager { command } => match command {
+            ManagerCmd::Scan {
+                cert_hash,
+                packages_xml,
+            } => manager::cli::resolve_cert_hash(cert_hash)
+                .and_then(|h| manager::cli::run_manager_scan(&h, packages_xml)),
+        },
         Commands::Resetprop { args } => {
             let mut full_args = vec!["resetprop".to_string()];
             full_args.extend(args);

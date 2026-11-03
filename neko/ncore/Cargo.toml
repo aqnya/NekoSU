@@ -19,6 +19,7 @@ rust-embed = { version = "8", features = [
 ] }
 which = "8"
 regex-lite = "0.1"
+sha2 = "0.11.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 rustix = { version = "1", features = [

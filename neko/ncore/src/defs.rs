@@ -77,5 +77,7 @@ pub const FULL_VERSION: &str = const_format::formatcp!(
     crate::ksu_uapi::KERNEL_SU_UAPI_VERSION
 );
 
+pub const MANAGER_CERT_HASH: &str = env!("NKSU_MANAGER_CERTHASH");
+
 #[cfg(target_os = "android")]
 pub use android::*;
