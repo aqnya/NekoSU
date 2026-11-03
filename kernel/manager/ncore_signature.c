@@ -107,10 +107,15 @@ struct nksu_akcipher_wait {
 	int err;
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+static void nksu_akcipher_done(void *ctx, int err)
+{
+	struct nksu_akcipher_wait *wait = ctx;
+#else
 static void nksu_akcipher_done(struct crypto_async_request *req, int err)
 {
 	struct nksu_akcipher_wait *wait = req->data;
-
+#endif
 	if (err == -EINPROGRESS)
 		return;
 
