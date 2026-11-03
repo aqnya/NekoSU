@@ -502,8 +502,7 @@ static int ncore_bootstrap(void)
 	}
 
 	if (!kfile_exists(NKSU_DAEMON_APP_PATH)) {
-		pr_info("no %s yet, waiting for the manager to stage it\n",
-			NKSU_DAEMON_APP_PATH);
+		pr_info("no %s yet, waiting for the manager to stage it\n", NKSU_DAEMON_APP_PATH);
 		ret = -ENOENT;
 		goto out;
 	}

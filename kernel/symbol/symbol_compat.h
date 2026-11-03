@@ -288,6 +288,8 @@ extern typeof(sys_wait4) *nksu_sys_wait4;
 #endif
 extern typeof(flush_signal_handlers) *nksu_flush_signal_handlers;
 extern typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
+/* crypto API for AKCIPHER (used by nksu for signature verification, etc.) */
+extern typeof(crypto_alloc_akcipher) *nksu_crypto_alloc_akcipher;
 
 /* data symbol (pointer, dereferenced by the macro) */
 extern typeof(selinux_state) *nksu_selinux_state;
@@ -439,6 +441,8 @@ NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
 	       (dentry, name, value, size, flags))
 #endif
 NKSU_SYMBOL_VOID_FN(seccomp_filter_release, (struct task_struct * tsk), (tsk))
+NKSU_SYMBOL_FN(struct crypto_akcipher *, crypto_alloc_akcipher,
+	       (const char *alg_name, u32 type, u32 mask), (alg_name, type, mask))
 #endif
 
 /*
@@ -533,6 +537,7 @@ NKSU_SYMBOL_VOID_FN(seccomp_filter_release, (struct task_struct * tsk), (tsk))
 #define copy_to_kernel_nofault nksu_copy_to_kernel_nofault
 #endif
 #define seccomp_filter_release nksu_seccomp_filter_release_fn
+#define crypto_alloc_akcipher nksu_crypto_alloc_akcipher_fn
 #endif /* NKSU_SYMBOL_COMPAT_NO_MACROS */
 
 /* Resolve all symbols into the pointers; returns negative errno if any fail. */

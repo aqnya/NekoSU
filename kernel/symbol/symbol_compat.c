@@ -117,6 +117,7 @@ typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #endif
 typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
+typeof(crypto_alloc_akcipher) *nksu_crypto_alloc_akcipher;
 
 #define NKSU_RESOLVE(ptr, sym)                              \
 	do {                                                \
@@ -262,6 +263,7 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_probe_kernel_write, "probe_kernel_write");
 #endif
 	NKSU_RESOLVE(nksu_seccomp_filter_release, "seccomp_filter_release");
+	NKSU_RESOLVE(nksu_crypto_alloc_akcipher, "crypto_alloc_akcipher");
 
 	if (missing) {
 		pr_err("%d unexported symbol(s) unresolved, cache=%lu\n", missing,
@@ -371,4 +373,5 @@ void nksu_symbol_compat_exit(void)
 #endif
 	nksu_flush_signal_handlers = NULL;
 	nksu_seccomp_filter_release = NULL;
+	nksu_crypto_alloc_akcipher = NULL;
 }
