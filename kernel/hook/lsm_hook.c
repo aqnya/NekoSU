@@ -96,12 +96,12 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		if (!target)
 			target = target_alt;
 		if (!target) {
-			pr_err("[lsm_hook] cannot resolve %s\n", target_name);
+			pr_err("cannot resolve %s\n", target_name);
 			ret = -ENOENT;
 			goto out_unlock;
 		}
 	}
-	pr_debug("[lsm_hook] %s target %px alt %px\n", target_name, target, target_alt);
+	pr_debug("%s target %px alt %px\n", target_name, target, target_alt);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 	{
@@ -120,7 +120,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 
 		scalls_addr = NKSU_KSYM_LOOKUP("static_calls_table");
 		if (!scalls_addr) {
-			pr_err("[lsm_hook] no static_calls_table\n");
+			pr_err("no static_calls_table\n");
 			ret = -ENOSYS;
 			goto out_unlock;
 		}
@@ -129,18 +129,18 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		if (lookup_size)
 			lookup_size(scalls_addr, &sym_size, NULL);
 		else
-			pr_warn("[lsm_hook] no kallsyms_lookup_size_offset\n");
+			pr_warn("no kallsyms_lookup_size_offset\n");
 
 		active_addr = NKSU_KSYM_TRY_LOOKUP("lsm_active_cnt");
 		if (active_addr)
 			lsm_active_cnt = *(u32 *)active_addr;
 		if (lsm_active_cnt == 0 || lsm_active_cnt > 20) {
-			pr_err("[lsm_hook] bad lsm_active_cnt %u\n", lsm_active_cnt);
+			pr_err("bad lsm_active_cnt %u\n", lsm_active_cnt);
 			ret = -EINVAL;
 			goto out_unlock;
 		}
 		if (sym_size % (lsm_active_cnt * sizeof(struct lsm_static_call)))
-			pr_warn("[lsm_hook] odd static_calls_table size\n");
+			pr_warn("odd static_calls_table size\n");
 		scalls_count = sym_size / sizeof(struct lsm_static_call);
 		if (!scalls_count) {
 			ret = -ENOSYS;
@@ -148,8 +148,8 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		}
 
 		scalls = (struct lsm_static_call *)scalls_addr;
-		pr_debug("[lsm_hook] static_calls_table %lu size=%lu count=%zu active=%u\n",
-			 scalls_addr, sym_size, scalls_count, lsm_active_cnt);
+		pr_debug("static_calls_table %lu size=%lu count=%zu active=%u\n", scalls_addr,
+			 sym_size, scalls_count, lsm_active_cnt);
 		for (i = 0; i < scalls_count; i++) {
 			struct lsm_static_call *scall = &scalls[i];
 			void **slot;
@@ -174,7 +174,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		}
 
 		if (!selected_scall) {
-			pr_err("[lsm_hook] %s not found: target %s, table=%lu count=%zu hook_off=%zu\n",
+			pr_err("%s not found: target %s, table=%lu count=%zu hook_off=%zu\n",
 			       hook->head_name, target_name, scalls_addr, scalls_count,
 			       hook->hook_offset);
 			ret = -ENOENT;
@@ -185,7 +185,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 
 		ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
 		if (ret) {
-			pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
+			pr_err("patch %s failed: %d\n", target_name, ret);
 			goto out_unlock;
 		}
 		if (nksu_lsm_update_scall(selected_scall, hook->replacement)) {
@@ -198,7 +198,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 
 		hook->entry = selected_entry;
 		hook->scall = selected_scall;
-		pr_info("[lsm_hook] hooked %s\n", target_name);
+		pr_info("hooked %s\n", target_name);
 	}
 #else
 	{
@@ -215,7 +215,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 
 		heads_addr = NKSU_KSYM_LOOKUP("security_hook_heads");
 		if (!heads_addr) {
-			pr_err("[lsm_hook] no security_hook_heads\n");
+			pr_err("no security_hook_heads\n");
 			ret = -ENOENT;
 			goto out_unlock;
 		}
@@ -260,7 +260,7 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 		}
 
 		if (!selected_entry) {
-			pr_err("[lsm_hook] %s not found: target %s, heads=%lu count=%u scanned=%u hook_off=%zu\n",
+			pr_err("%s not found: target %s, heads=%lu count=%u scanned=%u hook_off=%zu\n",
 			       hook->head_name, target_name, heads_addr, heads_count, scanned,
 			       hook->hook_offset);
 			ret = -ENOENT;
@@ -271,12 +271,12 @@ int __nocfi nksu_lsm_hook(struct nksu_lsm_hook *hook)
 
 		ret = nksu_lsm_patch_slot(selected_slot, hook->replacement);
 		if (ret) {
-			pr_err("[lsm_hook] patch %s failed: %d\n", target_name, ret);
+			pr_err("patch %s failed: %d\n", target_name, ret);
 			goto out_unlock;
 		}
 
 		hook->entry = selected_entry;
-		pr_info("[lsm_hook] hooked %s\n", target_name);
+		pr_info("hooked %s\n", target_name);
 	}
 #endif
 
@@ -301,7 +301,7 @@ void nksu_lsm_unhook(struct nksu_lsm_hook *hook)
 
 	slot = (void **)((char *)hook->entry + hook->hook_offset);
 	if (nksu_lsm_patch_slot(slot, hook->original)) {
-		pr_err("[lsm_hook] restore %s failed\n", hook->target_name);
+		pr_err("restore %s failed\n", hook->target_name);
 		mutex_unlock(&nksu_lsm_hook_lock);
 		return;
 	}
@@ -317,6 +317,6 @@ void nksu_lsm_unhook(struct nksu_lsm_hook *hook)
 
 	synchronize_rcu();
 	hook->entry = NULL;
-	pr_info("[lsm_hook] restored %s\n", hook->target_name);
+	pr_info("restored %s\n", hook->target_name);
 	mutex_unlock(&nksu_lsm_hook_lock);
 }

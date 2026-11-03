@@ -157,7 +157,7 @@ void nksu_profile_store_save(void)
 	len = nksu_profile_to_text(buf, cap);
 	if (len < 0) {
 		/* Should not happen: cap is sized from the entry count. */
-		pr_warn("[profile] serialize for %s failed: %d\n", NKSU_PROFILE_FILE, len);
+		pr_warn("serialize for %s failed: %d\n", NKSU_PROFILE_FILE, len);
 		return;
 	}
 
@@ -171,18 +171,17 @@ void nksu_profile_store_save(void)
 			ssize_t written = nksu_kwrite(fp, buf + pos, (size_t)(len - pos), &pos);
 
 			if (written < 0) {
-				pr_err("[profile] write %s failed: %d (pos=%lld)\n",
-				       NKSU_PROFILE_FILE, (int)written, pos);
+				pr_err("write %s failed: %d (pos=%lld)\n", NKSU_PROFILE_FILE,
+				       (int)written, pos);
 				break;
 			}
 			if (written == 0) {
-				pr_err("[profile] write %s: short write at %lld\n",
-				       NKSU_PROFILE_FILE, pos);
+				pr_err("write %s: short write at %lld\n", NKSU_PROFILE_FILE, pos);
 				break;
 			}
 		}
 	} else if (PTR_ERR(fp) != -ENOENT) {
-		pr_err("[profile] open %s failed: %ld\n", NKSU_PROFILE_FILE, PTR_ERR(fp));
+		pr_err("open %s failed: %ld\n", NKSU_PROFILE_FILE, PTR_ERR(fp));
 	}
 
 	nksu_borrow_creds_end(old);
@@ -343,8 +342,7 @@ int nksu_profile_store_load(void)
 	WRITE_ONCE(store_suppress, false);
 
 	if (ret)
-		pr_warn("[profile] %s had an entry that failed to load: %d\n", NKSU_PROFILE_FILE,
-			ret);
+		pr_warn("%s had an entry that failed to load: %d\n", NKSU_PROFILE_FILE, ret);
 	return ret;
 }
 
@@ -359,10 +357,9 @@ int nksu_profile_store_init(void)
 	int ret = nksu_profile_store_load();
 
 	if (ret)
-		pr_warn("[profile] failed to restore %s: %d\n", NKSU_PROFILE_FILE, ret);
+		pr_warn("failed to restore %s: %d\n", NKSU_PROFILE_FILE, ret);
 	else
-		pr_info("[profile] restored %u entries from %s\n", nksu_profile_count(),
-			NKSU_PROFILE_FILE);
+		pr_info("restored %u entries from %s\n", nksu_profile_count(), NKSU_PROFILE_FILE);
 	return 0;
 }
 

@@ -28,6 +28,7 @@
 #include "selinux/hide.h"
 #include "selinux/selinux.h"
 #include "symbol/symbol_compat.h"
+#include "klog.h"
 
 static const struct nksu_component nksu_components[] = {
 	/* CORE: needed by the boot watcher and every later stage. */
@@ -84,7 +85,7 @@ int __nocfi nksu_components_init(enum nksu_init_stage stage)
 
 		ret = comp->init ? comp->init() : 0;
 		if (ret) {
-			pr_err("nksu: %s failed: %d\n", comp->name, ret);
+			pr_err("%s failed: %d\n", comp->name, ret);
 			while (i > start) {
 				i--;
 				if (nksu_components[i].exit)

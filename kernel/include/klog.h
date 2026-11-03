@@ -2,7 +2,7 @@
 #ifdef pr_fmt
 #undef pr_fmt
 #endif
-#define pr_fmt(fmt) "ncore: " KBUILD_BASENAME ": " fmt
+#define pr_fmt(fmt) "ncore: [" KBUILD_BASENAME ".c] " fmt
 
 /*
  * Pull in the old-kernel shims (task_work flag, mmap_lock, kvmalloc, ...) for

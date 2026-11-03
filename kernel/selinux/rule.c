@@ -354,15 +354,15 @@ static bool rule_add(struct policydb *db, const char *s, const char *t, const ch
 	struct perm_datum *perm = NULL;
 
 	if (s && !(src = symtab_search(&db->p_types, s))) {
-		pr_info("[selinux]: source type '%s' not found\n", s);
+		pr_info("source type '%s' not found\n", s);
 		return false;
 	}
 	if (t && !(tgt = symtab_search(&db->p_types, t))) {
-		pr_info("[selinux]: target type '%s' not found\n", t);
+		pr_info("target type '%s' not found\n", t);
 		return false;
 	}
 	if (c && !(cls = symtab_search(&db->p_classes, c))) {
-		pr_info("[selinux]: class '%s' not found\n", c);
+		pr_info("class '%s' not found\n", c);
 		return false;
 	}
 	if (p) {
@@ -372,7 +372,7 @@ static bool rule_add(struct policydb *db, const char *s, const char *t, const ch
 		if (!perm && cls->comdatum)
 			perm = symtab_search(&cls->comdatum->permissions, p);
 		if (!perm) {
-			pr_info("[selinux]: perm '%s' not found in class '%s'\n", p, c);
+			pr_info("perm '%s' not found in class '%s'\n", p, c);
 			return false;
 		}
 	}
@@ -468,7 +468,7 @@ static void rule_add_xperm_raw(struct policydb *db, struct type_datum *src, stru
 
 		node = rule_get_avtab_node(db, &key, &xperms);
 		if (!node) {
-			pr_warn("[selinux]: xperm node not found\n");
+			pr_warn("xperm node not found\n");
 			return;
 		}
 
@@ -485,15 +485,15 @@ static bool rule_add_xperm(struct policydb *db, const char *s, const char *t, co
 	u16 low, high;
 
 	if (s && !(src = symtab_search(&db->p_types, s))) {
-		pr_info("[selinux]: source type '%s' not found\n", s);
+		pr_info("source type '%s' not found\n", s);
 		return false;
 	}
 	if (t && !(tgt = symtab_search(&db->p_types, t))) {
-		pr_info("[selinux]: target type '%s' not found\n", t);
+		pr_info("target type '%s' not found\n", t);
 		return false;
 	}
 	if (c && !(cls = symtab_search(&db->p_classes, c))) {
-		pr_info("[selinux]: class '%s' not found\n", c);
+		pr_info("class '%s' not found\n", c);
 		return false;
 	}
 
@@ -1009,7 +1009,7 @@ static bool rule_set_type_state(struct policydb *db, const char *type_name, bool
 
 	type = symtab_search(&db->p_types, type_name);
 	if (!type) {
-		pr_info("[selinux]: type '%s' not found\n", type_name);
+		pr_info("type '%s' not found\n", type_name);
 		return false;
 	}
 	return ebitmap_set_bit(&db->permissive_map, type->value, permissive) == 0;
@@ -1054,21 +1054,21 @@ static bool rule_add_typeattribute(struct policydb *db, const char *type, const 
 
 	type_d = symtab_search(&db->p_types, type);
 	if (!type_d) {
-		pr_info("[selinux]: type '%s' not found\n", type);
+		pr_info("type '%s' not found\n", type);
 		return false;
 	}
 	if (type_d->attribute) {
-		pr_info("[selinux]: '%s' is an attribute, not a type\n", type);
+		pr_info("'%s' is an attribute, not a type\n", type);
 		return false;
 	}
 
 	attr_d = symtab_search(&db->p_types, attr);
 	if (!attr_d) {
-		pr_info("[selinux]: attribute '%s' not found\n", attr);
+		pr_info("attribute '%s' not found\n", attr);
 		return false;
 	}
 	if (!attr_d->attribute) {
-		pr_info("[selinux]: '%s' is not an attribute\n", attr);
+		pr_info("'%s' is not an attribute\n", attr);
 		return false;
 	}
 
@@ -1152,7 +1152,7 @@ void sepolicy_batch_end(void)
 	if (outer) {
 		if (nksu_rule_batch_pdb) {
 			if (nksu_policydb_install(nksu_rule_batch_pdb))
-				pr_err("[selinux]: cannot install updated policy\n");
+				pr_err("cannot install updated policy\n");
 			nksu_rule_batch_pdb = NULL;
 		}
 		nksu_rule_batch_owner = NULL;

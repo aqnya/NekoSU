@@ -99,7 +99,7 @@ static struct policydb *nksu_policy_dup(struct policydb *old_pdb)
 
 	ret = policydb_write(old_pdb, &fp);
 	if (ret) {
-		pr_err("[selinux]: policydb_write: %d\n", ret);
+		pr_err("policydb_write: %d\n", ret);
 		vfree(data);
 		return ERR_PTR(ret);
 	}
@@ -141,7 +141,7 @@ static struct policydb *nksu_policy_dup(struct policydb *old_pdb)
 
 	ret = policydb_read(&new_pol->policydb, &fp);
 	if (ret) {
-		pr_err("[selinux]: policydb_read: %d\n", ret);
+		pr_err("policydb_read: %d\n", ret);
 		kfree(new_pol);
 		vfree(data);
 		return ERR_PTR(ret);
@@ -159,7 +159,7 @@ static struct policydb *nksu_policy_dup(struct policydb *old_pdb)
 
 	ret = policydb_read(new_pdb, &fp);
 	if (ret) {
-		pr_err("[selinux]: policydb_read: %d\n", ret);
+		pr_err("policydb_read: %d\n", ret);
 		kfree(new_pdb);
 		vfree(data);
 		return ERR_PTR(ret);
@@ -298,7 +298,7 @@ int nksu_policydb_install(struct policydb *new_pdb)
 	 * is a safety net rather than an expected path.
 	 */
 	if (nksu_orig_pdb && old->p_types.table == nksu_orig_pdb->p_types.table) {
-		pr_err("[selinux]: refusing to free the clean policy\n");
+		pr_err("refusing to free the clean policy\n");
 		kfree(old);
 		return 0;
 	}
@@ -319,7 +319,7 @@ int sepolicy_dup_and_apply(void)
 	struct selinux_policy *orig, *work;
 
 	if (nksu_orig_policy) {
-		pr_warn("[selinux]: sepolicy_dup_and_apply: already active\n");
+		pr_warn("sepolicy_dup_and_apply: already active\n");
 		return -EBUSY;
 	}
 
@@ -328,13 +328,13 @@ int sepolicy_dup_and_apply(void)
 		orig = rcu_dereference_protected(selinux_state.policy,
 						 lockdep_is_held(&selinux_state.policy_mutex));
 		if (!orig) {
-			pr_err("[selinux]: sepolicy_dup_and_apply: no live policy\n");
+			pr_err("sepolicy_dup_and_apply: no live policy\n");
 			return -ENOENT;
 		}
 
 		work = nksu_policy_dup(orig);
 		if (IS_ERR(work)) {
-			pr_err("[selinux]: sepolicy_dup_and_apply: dup failed\n");
+			pr_err("sepolicy_dup_and_apply: dup failed\n");
 			return PTR_ERR(work);
 		}
 
@@ -352,11 +352,11 @@ int sepolicy_dup_and_apply(void)
 	int ret;
 
 	if (nksu_orig_pdb) {
-		pr_warn("[selinux]: sepolicy_dup_and_apply: already active\n");
+		pr_warn("sepolicy_dup_and_apply: already active\n");
 		return -EBUSY;
 	}
 	if (!selinux_state.ss) {
-		pr_err("[selinux]: sepolicy_dup_and_apply: no live policy\n");
+		pr_err("sepolicy_dup_and_apply: no live policy\n");
 		return -ENOENT;
 	}
 
@@ -383,7 +383,7 @@ int sepolicy_dup_and_apply(void)
 	ret = policydb_write(live, &fp);
 	write_unlock_irq(&selinux_state.ss->policy_rwlock);
 	if (ret) {
-		pr_err("[selinux]: policydb_write: %d\n", ret);
+		pr_err("policydb_write: %d\n", ret);
 		vfree(data);
 		kfree(saved);
 		return ret;
@@ -410,7 +410,7 @@ int sepolicy_dup_and_apply(void)
 		fp.len = len;
 		ret = policydb_read(work, &fp);
 		if (ret) {
-			pr_err("[selinux]: policydb_read: %d\n", ret);
+			pr_err("policydb_read: %d\n", ret);
 			kfree(work);
 			vfree(data);
 			kfree(saved);
@@ -424,7 +424,7 @@ int sepolicy_dup_and_apply(void)
 	/* A concurrent reload would have replaced the tables underneath us. */
 	if (selinux_state.ss->policydb.p_types.table != saved->p_types.table) {
 		write_unlock_irq(&selinux_state.ss->policy_rwlock);
-		pr_err("[selinux]: policy reloaded during dup, retrying next boot\n");
+		pr_err("policy reloaded during dup, retrying next boot\n");
 		policydb_destroy(work);
 		kfree(work);
 		kfree(saved);
@@ -437,7 +437,7 @@ int sepolicy_dup_and_apply(void)
 	nksu_orig_pdb = saved;
 #endif
 
-	pr_info("[selinux]: policy duplicated, working copy installed\n");
+	pr_info("policy duplicated, working copy installed\n");
 	return 0;
 }
 
@@ -447,7 +447,7 @@ void sepolicy_restore(void)
 	struct selinux_policy *live;
 
 	if (!nksu_orig_policy) {
-		pr_warn("[selinux]: sepolicy_restore: nothing to restore\n");
+		pr_warn("sepolicy_restore: nothing to restore\n");
 		return;
 	}
 
@@ -465,7 +465,7 @@ void sepolicy_restore(void)
 			nksu_orig_policy->latest_granting = live->latest_granting;
 			rcu_assign_pointer(selinux_state.policy, nksu_orig_policy);
 		} else {
-			pr_warn("[selinux]: live policy already replaced, leaving it\n");
+			pr_warn("live policy already replaced, leaving it\n");
 		}
 	}
 	synchronize_rcu();
@@ -492,7 +492,7 @@ void sepolicy_restore(void)
 	nksu_orig_policy = NULL;
 #else
 	if (!nksu_orig_pdb) {
-		pr_warn("[selinux]: sepolicy_restore: nothing to restore\n");
+		pr_warn("sepolicy_restore: nothing to restore\n");
 		return;
 	}
 
@@ -506,7 +506,7 @@ void sepolicy_restore(void)
 
 	avc_reset();
 
-	pr_info("[selinux]: original policy restored (working copy kept)\n");
+	pr_info("original policy restored (working copy kept)\n");
 }
 
 /* ---- static rule set (aligned with KernelSU's apply_kernelsu_rules) ---- */
@@ -542,7 +542,7 @@ static bool xperm_supported(void)
 int load_policy(void)
 {
 	if (!getenforce())
-		pr_info("[selinux]: enforcing is false, applying rules anyway\n");
+		pr_info("enforcing is false, applying rules anyway\n");
 
 	sepolicy_batch_begin();
 
@@ -645,7 +645,7 @@ int load_policy(void)
 
 	sepolicy_batch_end();
 
-	pr_info("[selinux]: policy for domain '%s' loaded\n", DOMAIN);
+	pr_info("policy for domain '%s' loaded\n", DOMAIN);
 	return 0;
 }
 
@@ -656,5 +656,5 @@ int sepolicy_init(void)
 
 void sepolicy_exit(void)
 {
-	pr_info("[selinux]: sepolicy exit\n");
+	pr_info("sepolicy exit\n");
 }

@@ -164,13 +164,13 @@ static void nksu_fake_status_prepare(void)
 	if (fake_status)
 		goto out;
 	if (!NKSU_STATUS_PAGE) {
-		pr_warn("[selinux_hide] status page not ready\n");
+		pr_warn("status page not ready\n");
 		goto out;
 	}
 
 	cur = page_address(NKSU_STATUS_PAGE);
 	if (!cur->enforcing && !late_load) {
-		pr_warn("[selinux_hide] permissive, fake status skipped\n");
+		pr_warn("permissive, fake status skipped\n");
 		goto out;
 	}
 
@@ -199,8 +199,8 @@ static void nksu_fake_status_prepare(void)
 	}
 
 	fake_status = page;
-	pr_info("[selinux_hide] fake status ready: sequence=%u policyload=%u enforcing=%u\n",
-		copy->sequence, copy->policyload, copy->enforcing);
+	pr_info("fake status ready: sequence=%u policyload=%u enforcing=%u\n", copy->sequence,
+		copy->policyload, copy->enforcing);
 out:
 	mutex_unlock(&NKSU_STATUS_LOCK_OBJ);
 }
@@ -574,7 +574,7 @@ static int nksu_clean_policy_prepare(void)
 
 	clean_policy_len = len - fp.len;
 	clean_policy_data = data;
-	pr_info("[selinux_hide] captured %zu-byte clean policy\n", clean_policy_len);
+	pr_info("captured %zu-byte clean policy\n", clean_policy_len);
 	return 0;
 }
 
@@ -606,7 +606,7 @@ static int nksu_hide_unhook(void)
 		err = nksu_patch_text(context_write_slot, &orig_context_write,
 				      sizeof(orig_context_write));
 		if (err) {
-			pr_err("[selinux_hide] restore context write: %d\n", err);
+			pr_err("restore context write: %d\n", err);
 			ret = err;
 		} else {
 			context_write_slot = NULL;
@@ -617,7 +617,7 @@ static int nksu_hide_unhook(void)
 		err = nksu_patch_text(access_write_slot, &orig_access_write,
 				      sizeof(orig_access_write));
 		if (err) {
-			pr_err("[selinux_hide] restore access write: %d\n", err);
+			pr_err("restore access write: %d\n", err);
 			ret = ret ? ret : err;
 		} else {
 			access_write_slot = NULL;
@@ -628,7 +628,7 @@ static int nksu_hide_unhook(void)
 		err = nksu_patch_text(status_open_slot, &orig_status_open,
 				      sizeof(orig_status_open));
 		if (err) {
-			pr_err("[selinux_hide] restore status open: %d\n", err);
+			pr_err("restore status open: %d\n", err);
 			ret = ret ? ret : err;
 		} else {
 			status_open_slot = NULL;
@@ -639,7 +639,7 @@ static int nksu_hide_unhook(void)
 		err = nksu_patch_text(policy_read_slot, &orig_policy_read,
 				      sizeof(orig_policy_read));
 		if (err) {
-			pr_err("[selinux_hide] restore policy read: %d\n", err);
+			pr_err("restore policy read: %d\n", err);
 			ret = ret ? ret : err;
 		} else {
 			policy_read_slot = NULL;
@@ -649,7 +649,7 @@ static int nksu_hide_unhook(void)
 
 	nksu_lsm_unhook(&nksu_setprocattr_hook);
 	if (nksu_setprocattr_hook.entry) {
-		pr_err("[selinux_hide] restore setprocattr hook failed\n");
+		pr_err("restore setprocattr hook failed\n");
 		ret = ret ? ret : -EIO;
 	}
 
@@ -663,13 +663,13 @@ static int nksu_hide_enable(void)
 	int ret;
 
 	if (!nksu_orig_policy_get()) {
-		pr_err("[selinux_hide] no original policy available\n");
+		pr_err("no original policy available\n");
 		return -EAGAIN;
 	}
 
 	write_op = (write_op_fn *)NKSU_KSYM_LOOKUP("write_op");
 	if (!write_op) {
-		pr_err("[selinux_hide] symbol 'write_op' not found\n");
+		pr_err("symbol 'write_op' not found\n");
 		return -ENOSYS;
 	}
 
@@ -698,17 +698,17 @@ static int nksu_hide_enable(void)
 	nksu_bounded_transition_fn = (typeof(nksu_bounded_transition_fn))NKSU_KSYM_TRY_LOOKUP(
 		"security_bounded_transition");
 	if (!nksu_bounded_transition_fn)
-		pr_warn("[selinux_hide] security_bounded_transition not found\n");
+		pr_warn("security_bounded_transition not found\n");
 
 	nksu_current_is_single_threaded_fn =
 		(typeof(nksu_current_is_single_threaded_fn))NKSU_KSYM_TRY_LOOKUP(
 			"current_is_single_threaded");
 	if (!nksu_current_is_single_threaded_fn)
-		pr_warn("[selinux_hide] current_is_single_threaded not found\n");
+		pr_warn("current_is_single_threaded not found\n");
 
 	ret = nksu_clean_policy_prepare();
 	if (ret) {
-		pr_err("[selinux_hide] cannot prepare the clean policy: %d\n", ret);
+		pr_err("cannot prepare the clean policy: %d\n", ret);
 		return ret;
 	}
 	nksu_hide_hooked = true;
@@ -722,12 +722,12 @@ static int nksu_hide_enable(void)
 		orig_policy_read = *policy_read_slot;
 		ret = nksu_patch_text(policy_read_slot, &new_read, sizeof(new_read));
 		if (ret) {
-			pr_err("[selinux_hide] patch policy read: %d\n", ret);
+			pr_err("patch policy read: %d\n", ret);
 			policy_read_slot = NULL;
 			orig_policy_read = NULL;
 		}
 	} else {
-		pr_warn("[selinux_hide] sel_policy_ops not found\n");
+		pr_warn("sel_policy_ops not found\n");
 	}
 
 	context_write_slot = &write_op[SEL_CONTEXT];
@@ -735,7 +735,7 @@ static int nksu_hide_enable(void)
 	new_write = nksu_write_context;
 	ret = nksu_patch_text(context_write_slot, &new_write, sizeof(new_write));
 	if (ret) {
-		pr_err("[selinux_hide] patch context write: %d\n", ret);
+		pr_err("patch context write: %d\n", ret);
 		context_write_slot = NULL;
 		goto fail;
 	}
@@ -745,7 +745,7 @@ static int nksu_hide_enable(void)
 	new_write = nksu_write_access;
 	ret = nksu_patch_text(access_write_slot, &new_write, sizeof(new_write));
 	if (ret) {
-		pr_err("[selinux_hide] patch access write: %d\n", ret);
+		pr_err("patch access write: %d\n", ret);
 		access_write_slot = NULL;
 		goto fail;
 	}
@@ -758,12 +758,12 @@ static int nksu_hide_enable(void)
 		orig_status_open = *status_open_slot;
 		ret = nksu_patch_text(status_open_slot, &new_open, sizeof(new_open));
 		if (ret) {
-			pr_err("[selinux_hide] patch status open: %d\n", ret);
+			pr_err("patch status open: %d\n", ret);
 			status_open_slot = NULL;
 			orig_status_open = NULL;
 		}
 	} else {
-		pr_warn("[selinux_hide] sel_handle_status_ops not found\n");
+		pr_warn("sel_handle_status_ops not found\n");
 	}
 
 	static_key_enable(&nksu_fake_status_init_key.key);
@@ -778,14 +778,14 @@ static int nksu_hide_enable(void)
      */
 	ret = nksu_lsm_hook(&nksu_setprocattr_hook);
 	if (ret)
-		pr_warn("[selinux_hide] setprocattr hook not installed: %d\n", ret);
+		pr_warn("setprocattr hook not installed: %d\n", ret);
 
-	pr_info("[selinux_hide] enabled\n");
+	pr_info("enabled\n");
 	return 0;
 
 fail:
 	if (nksu_hide_unhook())
-		pr_err("[selinux_hide] rollback incomplete\n");
+		pr_err("rollback incomplete\n");
 	else
 		nksu_hide_hooked = false;
 	return ret;
@@ -800,13 +800,13 @@ static int nksu_hide_disable(void)
 
 	ret = nksu_hide_unhook();
 	if (ret) {
-		pr_err("[selinux_hide] disable failed, hooks still installed: %d\n", ret);
+		pr_err("disable failed, hooks still installed: %d\n", ret);
 		return ret;
 	}
 	nksu_hide_hooked = false;
 	if (nksu_hide_running) {
 		static_key_disable(&nksu_fake_status_init_key.key);
-		pr_info("[selinux_hide] disabled\n");
+		pr_info("disabled\n");
 	}
 	return 0;
 }
@@ -849,7 +849,7 @@ out:
 		int persist_ret = nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
 
 		if (persist_ret)
-			pr_err("[selinux_hide] cannot persist feature state: %d\n", persist_ret);
+			pr_err("cannot persist feature state: %d\n", persist_ret);
 	}
 
 	return ret;
@@ -873,16 +873,16 @@ int nksu_selinux_hide_init(void)
 
 	ret = nksu_feature_register(&nksu_hide_feature);
 	if (ret)
-		pr_warn("[selinux_hide] feature register failed: %d\n", ret);
+		pr_warn("feature register failed: %d\n", ret);
 
 	if (!nksu_feature_persist_has(NKSU_HIDE_FEATURE_NAME)) {
-		pr_info("[selinux_hide] not in the enabled feature set, off\n");
+		pr_info("not in the enabled feature set, off\n");
 		return 0;
 	}
 
 	ret = nksu_hide_apply(1, false);
 	if (ret)
-		pr_warn("[selinux_hide] enable from the feature set failed: %d\n", ret);
+		pr_warn("enable from the feature set failed: %d\n", ret);
 
 	return 0;
 }
@@ -896,7 +896,7 @@ void nksu_selinux_hide_exit(void)
 	if (!ret)
 		nksu_hide_running = false;
 	else
-		pr_emerg("[selinux_hide] cannot restore hooks, keeping state: %d\n", ret);
+		pr_emerg("cannot restore hooks, keeping state: %d\n", ret);
 	mutex_unlock(&nksu_hide_mutex);
 
 	if (ret)

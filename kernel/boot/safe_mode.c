@@ -62,7 +62,7 @@ static void nksu_safe_event(struct input_handle *handle, unsigned int type, unsi
 	if (type == EV_KEY && code == KEY_VOLUMEUP && value == 1) {
 		if (atomic_inc_return(&nksu_safe_presses) >= NKSU_SAFE_PRESSES) {
 			WRITE_ONCE(nksu_safe_requested, true);
-			pr_alert("[safe_mode] volume-up pressed %d times, safe mode requested\n",
+			pr_alert("volume-up pressed %d times, safe mode requested\n",
 				 NKSU_SAFE_PRESSES);
 		}
 	}
@@ -132,7 +132,7 @@ void nksu_safe_mode_disable(void)
 		return;
 
 	WRITE_ONCE(nksu_safe_disarmed, true);
-	pr_info("[safe_mode] volume-up watcher disarmed\n");
+	pr_info("volume-up watcher disarmed\n");
 }
 
 int nksu_safe_mode_init(void)
@@ -155,12 +155,12 @@ int nksu_safe_mode_init(void)
 	 */
 	ret = input_register_handler(&nksu_safe_handler);
 	if (ret) {
-		pr_err("[safe_mode] input handler registration failed: %d\n", ret);
+		pr_err("input handler registration failed: %d\n", ret);
 		return 0;
 	}
 	nksu_safe_input_registered = true;
 
-	pr_info("[safe_mode] watching volume-up keys for safe mode\n");
+	pr_info("watching volume-up keys for safe mode\n");
 	return 0;
 }
 

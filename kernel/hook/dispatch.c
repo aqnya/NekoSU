@@ -49,7 +49,7 @@ static int hook_and_save(int nr, syscall_fn_t new_fn, const char *tag)
 
 	WRITE_ONCE(nksu_orig_table[nr], orig);
 
-	pr_info("[syscall]: slot %d hooked: orig=%ps new=%ps\n", nr, orig, new_fn);
+	pr_info("slot %d hooked: orig=%ps new=%ps\n", nr, orig, new_fn);
 	return 0;
 }
 

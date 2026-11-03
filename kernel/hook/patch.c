@@ -107,7 +107,7 @@ static __nocfi int nksu_do_patch(struct nksu_patch_info *p)
 
 	phy = nksu_patch_phys(addr, &err);
 	if (err) {
-		pr_err("nksu: patch: no mapping for 0x%lx\n", addr);
+		pr_err("no mapping for 0x%lx\n", addr);
 		return err;
 	}
 
@@ -162,7 +162,7 @@ int nksu_patch_text(void *slot, const void *newval, size_t size)
 
 	ret = nksu_patch_init();
 	if (ret) {
-		pr_err("nksu: patch: init_mm unavailable\n");
+		pr_err("patch: init_mm unavailable\n");
 		return ret;
 	}
 

@@ -59,7 +59,7 @@ static int record_slot(unsigned long addr, void *hook_fn, void **previous)
 		spin_lock_irqsave(&hook_lock, flags);
 		hook_count--;
 		spin_unlock_irqrestore(&hook_lock, flags);
-		pr_err("nksu: patch failed: %d\n", ret);
+		pr_err("patch failed: %d\n", ret);
 	}
 	return ret;
 }
@@ -78,7 +78,7 @@ static int restore_slot(unsigned long addr)
 	}
 	if (i < 0) {
 		spin_unlock_irqrestore(&hook_lock, flags);
-		pr_debug("nksu: restore: slot not recorded\n");
+		pr_debug("restore: slot not recorded\n");
 		return -ENOENT;
 	}
 	previous = (syscall_fn_t)hook_table[i].previous;
@@ -87,7 +87,7 @@ static int restore_slot(unsigned long addr)
 
 	ret = patch_slot((void *)addr, (void *)previous);
 	if (ret)
-		pr_err("nksu: restore patch failed: %d\n", ret);
+		pr_err("restore patch failed: %d\n", ret);
 	return ret;
 }
 
@@ -123,10 +123,10 @@ int syscall_slot_hook(int nr, syscall_fn_t fn, syscall_fn_t *previous, const cha
 	ret = record_slot(addr, (void *)fn, (void **)previous);
 
 	if (ret) {
-		pr_err("nksu: failed to hook %s: %d\n", tag, ret);
+		pr_err("failed to hook %s: %d\n", tag, ret);
 		return ret;
 	}
-	pr_info("nksu: hooked %s\n", tag);
+	pr_info("hooked %s\n", tag);
 	return 0;
 }
 
@@ -154,9 +154,9 @@ int syscall_slot_hook_native(int nr, void *fn, void **previous, const char *tag)
 	addr = (unsigned long)&syscall_table[nr];
 	ret = record_slot(addr, fn, previous);
 	if (ret)
-		pr_err("nksu: failed to hook %s: %d\n", tag, ret);
+		pr_err("failed to hook %s: %d\n", tag, ret);
 	else
-		pr_info("nksu: hooked %s\n", tag);
+		pr_info("hooked %s\n", tag);
 	return ret;
 }
 
@@ -168,15 +168,15 @@ int syscall_table_resolve(void)
      */
 	int ret = nksu_patch_init();
 	if (ret) {
-		pr_err("nksu: failed to find init_mm\n");
+		pr_err("failed to find init_mm\n");
 		return ret;
 	}
 
 	syscall_table = (syscall_fn_t *)NKSU_KSYM_LOOKUP("sys_call_table");
 	if (!syscall_table) {
-		pr_err("nksu: failed to find sys_call_table\n");
+		pr_err("failed to find sys_call_table\n");
 		return -ENOENT;
 	}
-	pr_info("nksu: syscall table at %px\n", syscall_table);
+	pr_info("syscall table at %px\n", syscall_table);
 	return 0;
 }

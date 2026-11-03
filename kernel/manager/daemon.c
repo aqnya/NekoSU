@@ -51,7 +51,7 @@ static void nksu_daemon_attach(struct callback_head *cb)
 
 	ret = fmac_ctlfd_get();
 	if (ret < 0)
-		pr_err("[daemon] cannot attach control fd to pid %d: %d\n", current->pid, ret);
+		pr_err("cannot attach control fd to pid %d: %d\n", current->pid, ret);
 	kfree(work);
 	module_put(THIS_MODULE);
 }
@@ -77,10 +77,10 @@ static void nksu_daemon_exec(void *data, struct task_struct *p, pid_t old_pid,
 	set_tsk_thread_flag(p, TIF_SYSCALL_TRACEPOINT);
 	set_tsk_thread_flag(p, NKSU_TIF_NCORE);
 	nksu_path_install_task(p);
-	pr_info("[daemon] marked %s (pid %d) as ncore\n", bprm ? bprm->filename : "?", p->pid);
+	pr_info("marked %s (pid %d) as ncore\n", bprm ? bprm->filename : "?", p->pid);
 
 	if (!try_module_get(THIS_MODULE)) {
-		pr_warn("[daemon] cannot pin module for pid %d task_work\n", p->pid);
+		pr_warn("cannot pin module for pid %d task_work\n", p->pid);
 		return;
 	}
 
@@ -156,25 +156,25 @@ int nksu_daemon_fd_init(void)
 	tp_sched_exec = nksu_find_tracepoint("sched_process_exec");
 	tp_sched_fork = nksu_find_tracepoint("sched_process_fork");
 	if (!tp_sched_exec || !tp_sched_fork) {
-		pr_err("[daemon] sched tracepoints not found\n");
+		pr_err("sched tracepoints not found\n");
 		return -ENOENT;
 	}
 
 	ret = tracepoint_probe_register(tp_sched_exec, nksu_daemon_exec, NULL);
 	if (ret) {
-		pr_err("[daemon] register sched_process_exec failed: %d\n", ret);
+		pr_err("register sched_process_exec failed: %d\n", ret);
 		return ret;
 	}
 
 	ret = tracepoint_probe_register(tp_sched_fork, nksu_daemon_fork, NULL);
 	if (ret) {
-		pr_err("[daemon] register sched_process_fork failed: %d\n", ret);
+		pr_err("register sched_process_fork failed: %d\n", ret);
 		tracepoint_probe_unregister(tp_sched_exec, nksu_daemon_exec, NULL);
 		return ret;
 	}
 
 	nksu_daemon_hooked = true;
-	pr_info("[daemon] ncore tracepoint marking active\n");
+	pr_info("ncore tracepoint marking active\n");
 	return 0;
 }
 
@@ -187,5 +187,5 @@ void nksu_daemon_fd_exit(void)
 	tracepoint_probe_unregister(tp_sched_fork, nksu_daemon_fork, NULL);
 	tracepoint_synchronize_unregister();
 	nksu_daemon_hooked = false;
-	pr_info("[daemon] ncore tracepoint marking stopped\n");
+	pr_info("ncore tracepoint marking stopped\n");
 }

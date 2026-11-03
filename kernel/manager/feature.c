@@ -274,7 +274,7 @@ int nksu_feature_persist_set(const char *name, bool enabled)
 			}
 		}
 		if (ret)
-			pr_err("[feature] save %s failed: %d\n", NKSU_FEATURE_FILE, ret);
+			pr_err("save %s failed: %d\n", NKSU_FEATURE_FILE, ret);
 	}
 
 out:

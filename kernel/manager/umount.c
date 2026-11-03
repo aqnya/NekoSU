@@ -192,7 +192,7 @@ nksu_umount_take_snapshot(size_t *count, struct nksu_umount_snapshot *inline_buf
 	} else {
 		snapshot = kmalloc_array(n, sizeof(*snapshot), GFP_KERNEL);
 		if (!snapshot) {
-			pr_warn_ratelimited("[umount] cannot allocate snapshot\n");
+			pr_warn_ratelimited("cannot allocate snapshot\n");
 			return NULL;
 		}
 	}
@@ -256,7 +256,7 @@ static void nksu_umount_run(void)
 
 	old = nksu_borrow_creds_begin();
 	if (!old) {
-		pr_err_ratelimited("[umount] cannot borrow nksu creds\n");
+		pr_err_ratelimited("cannot borrow nksu creds\n");
 		failed = true;
 		goto out;
 	}
@@ -267,23 +267,23 @@ static void nksu_umount_run(void)
 
 		ret = kern_path(target, 0, &path);
 		if (ret) {
-			pr_debug("[umount] %s: kern_path failed: %d\n", target, ret);
+			pr_debug("%s: kern_path failed: %d\n", target, ret);
 			continue;
 		}
 		if (path.dentry != path.mnt->mnt_root) {
-			pr_debug("[umount] %s is not a mount root, skip\n", target);
+			pr_debug("%s is not a mount root, skip\n", target);
 			path_put(&path);
 			continue;
 		}
 		if (!nksu_umount_module_root(path.dentry)) {
-			pr_debug("[umount] %s is not under the module store, skip\n", target);
+			pr_debug("%s is not under the module store, skip\n", target);
 			path_put(&path);
 			continue;
 		}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 		if (!nksu_path_umount) {
-			pr_err("[umount] path_umount is unresolved\n");
+			pr_err("path_umount is unresolved\n");
 			path_put(&path);
 			failed = true;
 			continue;
@@ -291,7 +291,7 @@ static void nksu_umount_run(void)
 		ret = path_umount(&path, snapshot[i].flags);
 #else
 		if (!nksu_sys_umount) {
-			pr_err("[umount] sys_umount is unresolved\n");
+			pr_err("sys_umount is unresolved\n");
 			path_put(&path);
 			failed = true;
 			continue;
@@ -305,10 +305,10 @@ static void nksu_umount_run(void)
 		}
 #endif
 		if (ret) {
-			pr_info("[umount] %s failed: %d\n", target, ret);
+			pr_info("%s failed: %d\n", target, ret);
 			failed = true;
 		} else {
-			pr_info_ratelimited("[umount] removed %s (pid %d)\n", target, current->pid);
+			pr_info_ratelimited("removed %s (pid %d)\n", target, current->pid);
 		}
 	}
 out:
@@ -349,20 +349,20 @@ void nksu_umount_schedule(void)
 		return;
 
 	if (!try_module_get(THIS_MODULE)) {
-		pr_warn_ratelimited("[umount] cannot pin module for task_work\n");
+		pr_warn_ratelimited("cannot pin module for task_work\n");
 		return;
 	}
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
 	if (!work) {
 		module_put(THIS_MODULE);
-		pr_warn_ratelimited("[umount] cannot allocate task_work\n");
+		pr_warn_ratelimited("cannot allocate task_work\n");
 		return;
 	}
 	init_task_work(&work->cb, nksu_umount_work_fn);
 	if (task_work_add(current, &work->cb, TWA_RESUME)) {
 		module_put(THIS_MODULE);
-		pr_warn_ratelimited("[umount] cannot queue task_work\n");
+		pr_warn_ratelimited("cannot queue task_work\n");
 		kfree(work);
 	}
 }
@@ -911,14 +911,14 @@ static int nksu_umount_start(void)
 
 	nksu_umount_tp_sys_enter = nksu_umount_find_tracepoint("sys_enter");
 	if (!nksu_umount_tp_sys_enter) {
-		pr_err("[umount] cannot find sys_enter tracepoint\n");
+		pr_err("cannot find sys_enter tracepoint\n");
 		mutex_unlock(&nksu_umount_init_lock);
 		return -ENOENT;
 	}
 
 	ret = tracepoint_probe_register(nksu_umount_tp_sys_enter, nksu_umount_sys_enter, NULL);
 	if (ret) {
-		pr_err("[umount] register sys_enter probe failed: %d\n", ret);
+		pr_err("register sys_enter probe failed: %d\n", ret);
 		mutex_unlock(&nksu_umount_init_lock);
 		return ret;
 	}
@@ -942,7 +942,7 @@ static int nksu_umount_start(void)
 			pr_warn("[mount-id] probes not ready: %d\n", ret);
 	}
 
-	pr_info("[umount] sys_enter probe active\n");
+	pr_info("sys_enter probe active\n");
 	return 0;
 }
 
@@ -984,7 +984,7 @@ static int nksu_umount_apply(u64 value, bool persist)
 	mutex_unlock(&nksu_umount_state_lock);
 
 	if (!ret && persist && nksu_feature_persist_set(NKSU_UMOUNT_DISABLED_NAME, !value))
-		pr_warn("[umount] cannot persist feature state\n");
+		pr_warn("cannot persist feature state\n");
 
 	return ret;
 }
@@ -1007,7 +1007,7 @@ int nksu_umount_init(void)
 
 	ret = nksu_feature_register(&nksu_umount_feature);
 	if (ret && ret != -EEXIST) {
-		pr_err("[umount] feature register failed: %d\n", ret);
+		pr_err("feature register failed: %d\n", ret);
 		return ret;
 	}
 
@@ -1030,7 +1030,7 @@ int nksu_umount_feature_init(void)
 	if (!nksu_feature_persist_has(NKSU_UMOUNT_DISABLED_NAME))
 		return 0;
 
-	pr_info("[umount] disabled by persisted feature state\n");
+	pr_info("disabled by persisted feature state\n");
 	return nksu_umount_apply(0, false);
 }
 

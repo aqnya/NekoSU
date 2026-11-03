@@ -192,7 +192,7 @@ int set_domain(const char *domain, struct cred *new_cred)
 	int rc = resolve_domain_sid(domain, &newsid);
 
 	if (rc) {
-		pr_err("nksu: failed to get SID for %s: %d\n", domain, rc);
+		pr_err("failed to get SID for %s: %d\n", domain, rc);
 		return rc;
 	}
 
@@ -304,7 +304,7 @@ static void resolve_file_sid(void)
 	int rc = context_to_sid(DOMAIN_FILE_CTX, &nksu_file_sid);
 
 	if (rc) {
-		pr_err("nksu: failed to get SID for %s: %d\n", DOMAIN_FILE_CTX, rc);
+		pr_err("failed to get SID for %s: %d\n", DOMAIN_FILE_CTX, rc);
 		nksu_file_sid = 0;
 	}
 }
@@ -365,7 +365,7 @@ void nksu_relabel_path(const char *path)
 					   strlen(DOMAIN_FILE_CTX) + 1, 0);
 #endif
 		if (rc)
-			pr_warn("nksu: cannot persist label on %s: %d\n", path, rc);
+			pr_warn("cannot persist label on %s: %d\n", path, rc);
 	}
 }
 
@@ -380,12 +380,12 @@ static bool do_allow(struct policydb *db, const char *type_name)
 
 	type = (struct type_datum *)symtab_search(&db->p_types, type_name);
 	if (!type) {
-		pr_err("[selinux]: type '%s' not found, cannot set permissive\n", type_name);
+		pr_err("type '%s' not found, cannot set permissive\n", type_name);
 		return false;
 	}
 
 	if (ebitmap_set_bit(&db->permissive_map, type->value, true)) {
-		pr_err("[selinux]: failed to set permissive bit for '%s'\n", type_name);
+		pr_err("failed to set permissive bit for '%s'\n", type_name);
 		return false;
 	}
 
@@ -409,13 +409,13 @@ int load_hook(void)
 #endif
 
 	if (!getenforce()) {
-		pr_info("[selinux]: enforcing is false, enabling\n");
+		pr_info("enforcing is false, enabling\n");
 		setenforce(true);
 	}
 
 	rc = sepolicy_dup_and_apply();
 	if (rc) {
-		pr_err("[selinux]: failed to dup policy (%d), aborting\n", rc);
+		pr_err("failed to dup policy (%d), aborting\n", rc);
 		return rc;
 	}
 
@@ -424,20 +424,20 @@ int load_hook(void)
 	/*
 	rc = sepolicy_make_audit();
 	if (rc) {
-		pr_err("[selinux]: failed to make audit: %d\n", rc);
+		pr_err("failed to make audit: %d\n", rc);
 		return rc;
 	}*/
 #endif
 
 	rc = sepolicy_add_domain(DOMAIN);
 	if (rc) {
-		pr_err("[selinux]: Failed to add domain '%s': %d\n", DOMAIN, rc);
+		pr_err("Failed to add domain '%s': %d\n", DOMAIN, rc);
 		return rc;
 	}
 
 	rc = sepolicy_init();
 	if (rc) {
-		pr_err("[selinux]: Failed to apply rules for '%s': %d\n", DOMAIN, rc);
+		pr_err("Failed to apply rules for '%s': %d\n", DOMAIN, rc);
 		return rc;
 	}
 
@@ -445,7 +445,7 @@ int load_hook(void)
 	resolve_file_sid();
 
 #ifdef CONFIG_NKSU_DEBUG
-	pr_info("[selinux]: debug mode, setting permissive for '%s'\n", DOMAIN);
+	pr_info("debug mode, setting permissive for '%s'\n", DOMAIN);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
 	scoped_guard(nksu_mutex, &selinux_state.policy_mutex)
 	{
@@ -472,7 +472,7 @@ static int nksu_selinux_init_thread(void *data)
 	int timeout_ms = 30 * 1000;
 	int ret = -ETIMEDOUT;
 
-	pr_info("[selinux]: waiting for SELinux policy...\n");
+	pr_info("waiting for SELinux policy...\n");
 
 	while (timeout_ms > 0) {
 		if (kthread_should_stop())
@@ -486,10 +486,10 @@ static int nksu_selinux_init_thread(void *data)
 	}
 
 	if (policy_ready()) {
-		pr_info("[selinux]: SELinux policy ready, continuing init\n");
+		pr_info("SELinux policy ready, continuing init\n");
 		ret = load_hook();
 	} else {
-		pr_err("[selinux]: SELinux policy not ready after 30s, giving up\n");
+		pr_err("SELinux policy not ready after 30s, giving up\n");
 	}
 
 	/*
@@ -506,8 +506,7 @@ int init_selinux_hook(void)
 	if (!policy_ready()) {
 		nksu_init_thread = kthread_run(nksu_selinux_init_thread, NULL, "nksu-selinux-init");
 		if (IS_ERR(nksu_init_thread)) {
-			pr_err("[selinux]: failed to start init thread: %ld\n",
-			       PTR_ERR(nksu_init_thread));
+			pr_err("failed to start init thread: %ld\n", PTR_ERR(nksu_init_thread));
 			return PTR_ERR(nksu_init_thread);
 		}
 		return 0;
@@ -518,7 +517,7 @@ int init_selinux_hook(void)
 
 void selinux_exit(void)
 {
-	pr_info("[selinux]: sepolicy exit – restoring original policy\n");
+	pr_info("sepolicy exit – restoring original policy\n");
 
 	if (nksu_init_thread) {
 		kthread_stop(nksu_init_thread);

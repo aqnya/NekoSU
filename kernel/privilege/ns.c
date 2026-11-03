@@ -51,7 +51,7 @@ int switch_to_init_ns(void)
 	int ret;
 
 	if (unlikely(!init_task.fs)) {
-		pr_err("[ns]: init_task.fs is NULL\n");
+		pr_err("init_task.fs is NULL\n");
 		return -EINVAL;
 	}
 
@@ -60,9 +60,9 @@ int switch_to_init_ns(void)
 
 	ret = sync_fs_root(&init_task);
 	if (ret)
-		pr_warn("[ns]: mnt_ns root sync failed: %d\n", ret);
+		pr_warn("mnt_ns root sync failed: %d\n", ret);
 	else
-		pr_info("[ns]: PID %d switched to init_ns\n", task_pid_nr(current));
+		pr_info("PID %d switched to init_ns\n", task_pid_nr(current));
 
 	return ret;
 }

@@ -96,9 +96,9 @@ static void revoke_manager(void)
 	manager_kuid = INVALID_UID;
 	ret = nksu_profile_clear(__kuid_val(old));
 	if (ret && ret != -ENOENT)
-		pr_err("[manager] cannot revoke UID %u profile: %d\n", __kuid_val(old), ret);
+		pr_err("cannot revoke UID %u profile: %d\n", __kuid_val(old), ret);
 	else
-		pr_info("[manager] revoked manager UID %u\n", __kuid_val(old));
+		pr_info("revoked manager UID %u\n", __kuid_val(old));
 }
 
 /*
@@ -196,31 +196,30 @@ static enum manager_verify_result verify_package_signature(struct abx_package *p
 	enum abx_result abx_ret;
 
 	if (IS_ERR(fp)) {
-		pr_err("[manager] cannot open %s: %ld\n", PACKAGES_XML_PATH, PTR_ERR(fp));
+		pr_err("cannot open %s: %ld\n", PACKAGES_XML_PATH, PTR_ERR(fp));
 		return MANAGER_VERIFY_ERROR;
 	}
 
 	fsize = i_size_read(fp->f_inode);
 	if (fsize < 4 || fsize > MAX_PACKAGES_XML_SIZE) {
-		pr_err("[manager] invalid %s size: %zu\n", PACKAGES_XML_PATH, fsize);
+		pr_err("invalid %s size: %zu\n", PACKAGES_XML_PATH, fsize);
 		return MANAGER_VERIFY_ERROR;
 	}
 
 	u8 *buf __free(nksu_kvfree) = kvmalloc(fsize, GFP_KERNEL);
 	if (!buf) {
-		pr_err("[manager] cannot allocate %zu bytes for %s\n", fsize, PACKAGES_XML_PATH);
+		pr_err("cannot allocate %zu bytes for %s\n", fsize, PACKAGES_XML_PATH);
 		return MANAGER_VERIFY_ERROR;
 	}
 
 	rd = nksu_kread(fp, buf, fsize, &pos);
 	if (rd != (ssize_t)fsize) {
-		pr_err("[manager] short read from %s: %zd of %zu bytes\n", PACKAGES_XML_PATH, rd,
-		       fsize);
+		pr_err("short read from %s: %zd of %zu bytes\n", PACKAGES_XML_PATH, rd, fsize);
 		return MANAGER_VERIFY_ERROR;
 	}
 
 	if (sha256_hasher_init(&hasher)) {
-		pr_err("[manager] cannot initialize SHA-256 for manager scan\n");
+		pr_err("cannot initialize SHA-256 for manager scan\n");
 		return MANAGER_VERIFY_ERROR;
 	}
 
@@ -229,14 +228,13 @@ static enum manager_verify_result verify_package_signature(struct abx_package *p
 
 	switch (abx_ret) {
 	case ABX_PACKAGE_FOUND:
-		pr_info("[manager] %s (uid %u) has the manager signature\n", paths->name,
-			paths->uid);
+		pr_info("%s (uid %u) has the manager signature\n", paths->name, paths->uid);
 		return MANAGER_VERIFY_OK;
 	case ABX_PACKAGE_NOT_FOUND:
-		pr_err("[manager] no package signed with the manager certificate\n");
+		pr_err("no package signed with the manager certificate\n");
 		return MANAGER_VERIFY_ABSENT;
 	default:
-		pr_err("[manager] cannot parse %s\n", PACKAGES_XML_PATH);
+		pr_err("cannot parse %s\n", PACKAGES_XML_PATH);
 		return MANAGER_VERIFY_ERROR;
 	}
 }
@@ -377,9 +375,8 @@ static int mark_zygote(void)
 			label = p->comm;
 		} else {
 			if (get_task_cmdline(p, cmdline_buf, 256) <= 0) {
-				pr_warn_ratelimited(
-					"[manager] cannot read cmdline for pid=%d uid=%u\n", pid,
-					uid);
+				pr_warn_ratelimited("cannot read cmdline for pid=%d uid=%u\n", pid,
+						    uid);
 				goto next;
 			}
 			if (strncmp(cmdline_buf, "zygote", 6) != 0 &&
@@ -390,7 +387,7 @@ static int mark_zygote(void)
 		}
 
 		nksu_mark_threads_by_pid(pid);
-		pr_info("[manager] : marked %s (pid=%d, uid=%u)\n", label, pid, uid);
+		pr_info(": marked %s (pid=%d, uid=%u)\n", label, pid, uid);
 	next:
 		put_task_struct(p);
 	}
@@ -558,7 +555,7 @@ static int kfile_copy(const char *src, const char *dst)
 	}
 
 	if (err)
-		pr_err("[manager] copy %s -> %s failed: %d\n", src, dst, err);
+		pr_err("copy %s -> %s failed: %d\n", src, dst, err);
 	if (err)
 		kfile_remove(out);
 
@@ -604,8 +601,7 @@ static void __nocfi kfile_remove(struct file *file)
 	dput(parent);
 
 	if (ret && ret != -ENOENT)
-		pr_warn("[manager] cannot remove partial %s: %d\n",
-			file->f_path.dentry->d_name.name, ret);
+		pr_warn("cannot remove partial %s: %d\n", file->f_path.dentry->d_name.name, ret);
 }
 
 /* codePath is either the package dir or .../base.apk; reduce it to the dir. */
@@ -633,12 +629,11 @@ static bool resolve_lib_dir(const struct abx_package *paths, char *out, size_t c
 	char cand[320];
 	char base[256];
 
-	pr_info("[manager] package paths: native='%s' code='%s'\n", paths->native_lib_path,
-		paths->code_path);
+	pr_info("package paths: native='%s' code='%s'\n", paths->native_lib_path, paths->code_path);
 
 	if (paths->native_lib_path[0]) {
 		snprintf(cand, sizeof(cand), "%s/%s", paths->native_lib_path, NKSU_DAEMON_LIB_NAME);
-		pr_info("[manager] trying %s\n", cand);
+		pr_info("trying %s\n", cand);
 		if (kfile_exists(cand)) {
 			strscpy(out, paths->native_lib_path, cap);
 			return true;
@@ -649,13 +644,13 @@ static bool resolve_lib_dir(const struct abx_package *paths, char *out, size_t c
 		code_path_base(paths->code_path, base, sizeof(base));
 
 		snprintf(cand, sizeof(cand), "%s/lib/arm64/%s", base, NKSU_DAEMON_LIB_NAME);
-		pr_info("[manager] trying %s\n", cand);
+		pr_info("trying %s\n", cand);
 		if (kfile_exists(cand)) {
 			snprintf(out, cap, "%s/lib/arm64", base);
 			return true;
 		}
 		snprintf(cand, sizeof(cand), "%s/lib/arm/%s", base, NKSU_DAEMON_LIB_NAME);
-		pr_info("[manager] trying %s\n", cand);
+		pr_info("trying %s\n", cand);
 		if (kfile_exists(cand)) {
 			snprintf(out, cap, "%s/lib/arm", base);
 			return true;
@@ -677,13 +672,11 @@ static int install_daemon_from_manager(const struct abx_package *paths)
 		 * longer ships libncore.so.  Keep it, but only when it exists.
 		 */
 		if (!kfile_exists(NKSU_DAEMON_BOOT_PATH)) {
-			pr_err("[manager] cannot locate %s in the manager install\n",
-			       NKSU_DAEMON_LIB_NAME);
+			pr_err("cannot locate %s in the manager install\n", NKSU_DAEMON_LIB_NAME);
 			return -ENOENT;
 		}
 
-		pr_warn("[manager] cannot verify %s, keeping the installed copy\n",
-			NKSU_DAEMON_BOOT_PATH);
+		pr_warn("cannot verify %s, keeping the installed copy\n", NKSU_DAEMON_BOOT_PATH);
 		nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
 		WRITE_ONCE(daemon_ready, true);
 		return 0;
@@ -703,16 +696,16 @@ static int install_daemon_from_manager(const struct abx_package *paths)
 	}
 
 	if (kfile_exists(NKSU_DAEMON_BOOT_PATH))
-		pr_warn("[manager] %s is incomplete, reinstalling\n", NKSU_DAEMON_BOOT_PATH);
+		pr_warn("%s is incomplete, reinstalling\n", NKSU_DAEMON_BOOT_PATH);
 
 	err = kdir_mkdir_p("/data/adb/nksu");
 	if (err && err != -EEXIST) {
-		pr_err("[manager] mkdir /data/adb/nksu failed: %d\n", err);
+		pr_err("mkdir /data/adb/nksu failed: %d\n", err);
 		return err;
 	}
 	err = kdir_mkdir_p(NKSU_DAEMON_BIN_DIR);
 	if (err && err != -EEXIST) {
-		pr_err("[manager] mkdir %s failed: %d\n", NKSU_DAEMON_BIN_DIR, err);
+		pr_err("mkdir %s failed: %d\n", NKSU_DAEMON_BIN_DIR, err);
 		return err;
 	}
 
@@ -723,7 +716,7 @@ static int install_daemon_from_manager(const struct abx_package *paths)
 	/* Label it nksu_file so init's injected init.rc can exec it. */
 	nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
 
-	pr_info("[manager] installed ncore from %s\n", lib_dir);
+	pr_info("installed ncore from %s\n", lib_dir);
 	WRITE_ONCE(daemon_ready, true);
 	return 0;
 }
@@ -750,14 +743,14 @@ static int scan_and_apply(void)
      */
 	struct abx_package *paths __free(nksu_kfree) = kzalloc(sizeof(*paths), GFP_KERNEL);
 	if (!paths) {
-		pr_err("[manager] cannot allocate manager scan state\n");
+		pr_err("cannot allocate manager scan state\n");
 		return -ENOMEM;
 	}
 
 	guard(nksu_mutex)(&appscan_mutex);
 	old = nksu_borrow_creds_begin();
 	if (!old) {
-		pr_err("[manager] cannot borrow credentials for manager scan\n");
+		pr_err("cannot borrow credentials for manager scan\n");
 		return -ENOMEM;
 	}
 
@@ -785,14 +778,14 @@ static int scan_and_apply(void)
 			 * next packages.xml event retry the scan.
 			 */
 			ret = -EIO;
-			pr_err("[manager] verification unavailable; keeping current authorization\n");
+			pr_err("verification unavailable; keeping current authorization\n");
 		}
 		goto out;
 	}
 
 	uid = paths->has_uid ? (uid_t)paths->uid : get_uid_from_packages_list(paths->name);
 	if (uid == (uid_t)-1) {
-		pr_err("[manager] Could not find UID for %s\n", paths->name);
+		pr_err("Could not find UID for %s\n", paths->name);
 		ret = -ENOENT;
 		revoke_manager();
 		goto out;
@@ -800,13 +793,13 @@ static int scan_and_apply(void)
 
 	kuid = make_kuid(current_user_ns(), uid);
 	if (!uid_valid(kuid)) {
-		pr_err("[manager] invalid manager UID %u\n", uid);
+		pr_err("invalid manager UID %u\n", uid);
 		ret = -EINVAL;
 		revoke_manager();
 		goto out;
 	}
 
-	pr_info("[manager] Verification passed. "
+	pr_info("Verification passed. "
 		"Granting privileges to UID %u\n",
 		uid);
 	/*
@@ -823,11 +816,10 @@ static int scan_and_apply(void)
 		if (uid_valid(previous)) {
 			clear_ret = nksu_profile_clear(__kuid_val(previous));
 			if (clear_ret && clear_ret != -ENOENT)
-				pr_err("[manager] cannot revoke previous UID %u profile: %d\n",
+				pr_err("cannot revoke previous UID %u profile: %d\n",
 				       __kuid_val(previous), clear_ret);
 			else
-				pr_info("[manager] revoked previous manager UID %u\n",
-					__kuid_val(previous));
+				pr_info("revoked previous manager UID %u\n", __kuid_val(previous));
 		}
 		manager_kuid = kuid;
 	}
@@ -836,13 +828,13 @@ static int scan_and_apply(void)
 	 * /data/adb/nksu exists for the first save. */
 	install_ret = install_daemon_from_manager(paths);
 	if (install_ret) {
-		pr_err("[manager] ncore bootstrap failed: %d\n", install_ret);
+		pr_err("ncore bootstrap failed: %d\n", install_ret);
 		ret = install_ret;
 	}
 
 	install_ret = nksu_profile_set_default(uid);
 	if (install_ret) {
-		pr_err("[manager] cannot grant profile to UID %u: %d\n", uid, install_ret);
+		pr_err("cannot grant profile to UID %u: %d\n", uid, install_ret);
 		revoke_manager();
 		ret = install_ret;
 		goto out;
@@ -850,7 +842,7 @@ static int scan_and_apply(void)
 
 	install_ret = mark_zygote();
 	if (install_ret)
-		pr_warn("[manager] cannot mark zygote: %d\n", install_ret);
+		pr_warn("cannot mark zygote: %d\n", install_ret);
 	nksu_path_sync_all();
 
 out:
@@ -916,7 +908,7 @@ static void appscan_defer_scan(void)
 		return;
 
 	if (!try_module_get(THIS_MODULE)) {
-		pr_warn_ratelimited("[manager] cannot pin module for package scan\n");
+		pr_warn_ratelimited("cannot pin module for package scan\n");
 		return;
 	}
 
@@ -937,7 +929,7 @@ static void appscan_defer_scan(void)
 
 	/* kthread, allocation failure or exiting task: defer off this context. */
 	if (!schedule_work(&appscan_work)) {
-		pr_debug("[manager] package scan already pending\n");
+		pr_debug("package scan already pending\n");
 		module_put(THIS_MODULE);
 	}
 }
@@ -1066,11 +1058,11 @@ static int __nocfi appscan_observer_init(void)
 	}
 
 	appscan_mark = mark;
-	pr_info("[manager] watching %s/%s\n", APPSCAN_WATCH_DIR, APPSCAN_WATCH_NAME);
+	pr_info("watching %s/%s\n", APPSCAN_WATCH_DIR, APPSCAN_WATCH_NAME);
 	return 0;
 
 out_group:
-	pr_warn("[manager] package observer unavailable (%d)\n", ret);
+	pr_warn("package observer unavailable (%d)\n", ret);
 	fsnotify_put_group(appscan_group);
 	appscan_group = NULL;
 	return ret;
@@ -1080,11 +1072,11 @@ int appscan_init(void)
 {
 	int ret;
 
-	pr_info("[manager] Module starting scan...\n");
+	pr_info("Module starting scan...\n");
 
 	ret = parse_cert_hash(NKSU_MANAGER_CERTHASH_STR, manager_cert_hash);
 	if (ret) {
-		pr_err("[manager] initial manager CERTHASH failed: %d\n", ret);
+		pr_err("initial manager CERTHASH failed: %d\n", ret);
 		return -EINVAL;
 	}
 	/*
@@ -1094,11 +1086,11 @@ int appscan_init(void)
      * so no retry loop is needed.
      */
 	if (appscan_observer_init())
-		pr_warn("[manager] package observer unavailable, scanning boot only\n");
+		pr_warn("package observer unavailable, scanning boot only\n");
 
 	ret = scan_and_apply();
 	if (ret)
-		pr_err("[manager] initial manager scan failed: %d\n", ret);
+		pr_err("initial manager scan failed: %d\n", ret);
 	return 0;
 }
 

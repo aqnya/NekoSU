@@ -188,7 +188,7 @@ static void nksu_rc_install(struct file *file)
 
 	file->f_op = &nksu_fops_proxy;
 
-	pr_info("nksu: init.rc hooked, appending %zu bytes\n", nksu_rc_len);
+	pr_info("init.rc hooked, appending %zu bytes\n", nksu_rc_len);
 }
 
 /* __NR_read: detect init reading init.rc before the real read runs */
@@ -224,7 +224,7 @@ static long nksu_sys_fstat(const struct pt_regs *regs)
 		if (!copy_from_user(&size, st_size_ptr, sizeof(long))) {
 			new_size = size + (long)nksu_rc_len;
 			if (copy_to_user(st_size_ptr, &new_size, sizeof(long)))
-				pr_warn("nksu: cannot patch init.rc size\n");
+				pr_warn("cannot patch init.rc size\n");
 		}
 	}
 
@@ -267,7 +267,7 @@ static long nksu_sys_fstat_native(unsigned int fd, struct stat __user *statbuf)
 		if (!get_user(size, &statbuf->st_size)) {
 			new_size = size + (long)nksu_rc_len;
 			if (put_user(new_size, &statbuf->st_size))
-				pr_warn("nksu: cannot patch init.rc size\n");
+				pr_warn("cannot patch init.rc size\n");
 		}
 	}
 
@@ -282,13 +282,13 @@ int nksu_init_rc_init(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 	ret = syscall_slot_hook(__NR_read, nksu_sys_read, &nksu_orig_read_sys, "nksu_rc_read");
 	if (ret) {
-		pr_err("nksu: cannot hook __NR_read: %d\n", ret);
+		pr_err("cannot hook __NR_read: %d\n", ret);
 		return ret;
 	}
 
 	ret = syscall_slot_hook(__NR_fstat, nksu_sys_fstat, &nksu_orig_fstat_sys, "nksu_rc_fstat");
 	if (ret) {
-		pr_err("nksu: cannot hook __NR_fstat: %d\n", ret);
+		pr_err("cannot hook __NR_fstat: %d\n", ret);
 		syscall_slot_unhook(__NR_read);
 		return ret;
 	}
@@ -296,14 +296,14 @@ int nksu_init_rc_init(void)
 	ret = syscall_slot_hook_native(__NR_read, (void *)nksu_sys_read_native,
 				       (void **)&nksu_orig_read_native, "nksu_rc_read");
 	if (ret) {
-		pr_err("nksu: cannot hook __NR_read: %d\n", ret);
+		pr_err("cannot hook __NR_read: %d\n", ret);
 		return ret;
 	}
 
 	ret = syscall_slot_hook_native(__NR_fstat, (void *)nksu_sys_fstat_native,
 				       (void **)&nksu_orig_fstat_native, "nksu_rc_fstat");
 	if (ret) {
-		pr_err("nksu: cannot hook __NR_fstat: %d\n", ret);
+		pr_err("cannot hook __NR_fstat: %d\n", ret);
 		syscall_slot_unhook(__NR_read);
 		return ret;
 	}

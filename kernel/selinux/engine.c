@@ -44,12 +44,12 @@ int nksu_engine_init(void)
 	security_dump_masked_av_fn =
 		(typeof(security_dump_masked_av_fn))NKSU_KSYM_TRY_LOOKUP("security_dump_masked_av");
 	if (!security_dump_masked_av_fn)
-		pr_warn("[selinux_hide] security_dump_masked_av not found\n");
+		pr_warn("security_dump_masked_av not found\n");
 
 	context_struct_compute_av_fn = (typeof(context_struct_compute_av_fn))NKSU_KSYM_TRY_LOOKUP(
 		"context_struct_compute_av");
 	if (!context_struct_compute_av_fn)
-		pr_warn("[selinux_hide] context_struct_compute_av not found\n");
+		pr_warn("context_struct_compute_av not found\n");
 
 	return 0;
 }
@@ -254,7 +254,7 @@ int nksu_engine_sid_to_context(struct selinux_policy *policy, u32 sid, char **sc
 
 	entry = sidtab_search_entry(sidtab, sid);
 	if (!entry) {
-		pr_err("SELinux: %s:  unrecognized SID %d\n", __func__, sid);
+		pr_err("%s:  unrecognized SID %d\n", __func__, sid);
 		rc = -EINVAL;
 		goto out_unlock;
 	}
@@ -538,7 +538,7 @@ static void __nocfi context_struct_compute_av(struct policydb *policydb, struct 
 	}
 
 	if (unlikely(!tclass || tclass > policydb->p_classes.nprim)) {
-		pr_warn_ratelimited("SELinux:  Invalid class %u\n", tclass);
+		pr_warn_ratelimited(" Invalid class %u\n", tclass);
 		return;
 	}
 
@@ -625,7 +625,7 @@ void __nocfi nksu_engine_compute_av(struct selinux_policy *policy, u32 ssid, u32
 
 	scontext = sidtab_search(sidtab, ssid);
 	if (!scontext) {
-		pr_err("SELinux: %s:  unrecognized SID %d\n", __func__, ssid);
+		pr_err("%s:  unrecognized SID %d\n", __func__, ssid);
 		goto out;
 	}
 
@@ -635,7 +635,7 @@ void __nocfi nksu_engine_compute_av(struct selinux_policy *policy, u32 ssid, u32
 
 	tcontext = sidtab_search(sidtab, tsid);
 	if (!tcontext) {
-		pr_err("SELinux: %s:  unrecognized SID %d\n", __func__, tsid);
+		pr_err("%s:  unrecognized SID %d\n", __func__, tsid);
 		goto out;
 	}
 

@@ -122,17 +122,17 @@ static void watch_exec(struct pt_regs *regs, unsigned int argv_argno)
 	if (unlikely(current->pid == 1)) {
 		n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
 		if (n < 0) {
-			pr_warn("nksu: get_argvx failed: %d\n", n);
+			pr_warn("get_argvx failed: %d\n", n);
 			return;
 		}
 
 		if (argv_eq(arg1, n, sizeof(arg1), "selinux_setup")) {
 			WRITE_ONCE(boot_stage, INIT_SELINUX_SETUP);
-			pr_info("nksu: init entered selinux_setup\n");
+			pr_info("init entered selinux_setup\n");
 			notify_stage();
 		} else if (argv_eq(arg1, n, sizeof(arg1), "second_stage")) {
 			WRITE_ONCE(boot_stage, INIT_SECOND_STAGE);
-			pr_info("nksu: init entered second_stage\n");
+			pr_info("init entered second_stage\n");
 			notify_stage();
 		}
 		return;
@@ -157,7 +157,7 @@ static void watch_exec(struct pt_regs *regs, unsigned int argv_argno)
 	n = read_argv1(regs, argv_argno, arg1, sizeof(arg1));
 	if (n > 0 && argv_eq(arg1, n, sizeof(arg1), "-Xzygote")) {
 		WRITE_ONCE(zygote_seen, true);
-		pr_info("nksu: zygote is starting\n");
+		pr_info("zygote is starting\n");
 		notify_stage();
 	}
 }
@@ -204,8 +204,7 @@ int load_temp_syscall(void)
 	for (i = 0; i < ARRAY_SIZE(boot_syscall_hooks); i++) {
 		ret = nksu_redirect_syscall(boot_syscall_hooks[i].nr);
 		if (ret) {
-			pr_err("[hook]: can't redirect syscall %d: %d\n", boot_syscall_hooks[i].nr,
-			       ret);
+			pr_err("can't redirect syscall %d: %d\n", boot_syscall_hooks[i].nr, ret);
 			goto err;
 		}
 	}
@@ -214,7 +213,7 @@ int load_temp_syscall(void)
 		ret = nksu_register_handler(boot_syscall_hooks[i].nr,
 					    boot_syscall_hooks[i].handler);
 		if (ret) {
-			pr_err("[hook]: can't register handler for syscall %d: %d\n",
+			pr_err("can't register handler for syscall %d: %d\n",
 			       boot_syscall_hooks[i].nr, ret);
 			goto err;
 		}
@@ -291,7 +290,7 @@ static void nksu_boot_exec(void *data, struct task_struct *p, pid_t old_pid,
 		return;
 
 	WRITE_ONCE(zygote_seen, true);
-	pr_info("nksu: zygote is starting\n");
+	pr_info("zygote is starting\n");
 	notify_stage();
 }
 
@@ -304,13 +303,13 @@ int load_temp_syscall(void)
 
 	for_each_kernel_tracepoint(nksu_boot_tp_cb, &ctx);
 	if (!tp_boot_exec) {
-		pr_err("[hook]: sched_process_exec tracepoint not found\n");
+		pr_err("sched_process_exec tracepoint not found\n");
 		return -ENOENT;
 	}
 
 	ret = tracepoint_probe_register(tp_boot_exec, nksu_boot_exec, NULL);
 	if (ret) {
-		pr_err("[hook]: cannot register boot exec probe: %d\n", ret);
+		pr_err("cannot register boot exec probe: %d\n", ret);
 		tp_boot_exec = NULL;
 		return ret;
 	}
@@ -342,9 +341,9 @@ static int init_thread_fn(void *data)
 	 * then only wait for zygote to bring the feature stage up.
 	 */
 	if (nksu_components_init(NKSU_STAGE_EARLY))
-		pr_err("nksu: early component init failed\n");
+		pr_err("early component init failed\n");
 	if (nksu_components_init(NKSU_STAGE_SELINUX))
-		pr_err("nksu: SELinux hook init failed\n");
+		pr_err("SELinux hook init failed\n");
 #endif
 
 	/*
@@ -374,9 +373,9 @@ static int init_thread_fn(void *data)
          */
 		if (READ_ONCE(boot_stage) == INIT_SECOND_STAGE) {
 			if (nksu_components_init(NKSU_STAGE_EARLY))
-				pr_err("nksu: early component init failed\n");
+				pr_err("early component init failed\n");
 			if (nksu_components_init(NKSU_STAGE_SELINUX))
-				pr_err("nksu: SELinux hook init failed\n");
+				pr_err("SELinux hook init failed\n");
 		}
 
 		if (READ_ONCE(zygote_seen)) {
@@ -390,9 +389,9 @@ static int init_thread_fn(void *data)
 			msleep(100);
 
 			if (nksu_components_init(NKSU_STAGE_SELINUX))
-				pr_err("nksu: SELinux hook init failed\n");
+				pr_err("SELinux hook init failed\n");
 			if (nksu_components_init(NKSU_STAGE_FEATURE))
-				pr_err("nksu: feature init failed\n");
+				pr_err("feature init failed\n");
 
 			/* Zygote was the last boot stage to watch for. */
 			break;
@@ -410,7 +409,7 @@ static int start_init_thread(void)
 	if (IS_ERR(init_thread)) {
 		int ret = PTR_ERR(init_thread);
 		init_thread = NULL;
-		pr_err("nksu: create init thread failed: %d\n", ret);
+		pr_err("create init thread failed: %d\n", ret);
 		return ret;
 	}
 	return 0;
@@ -452,7 +451,7 @@ int hook_init(void)
      */
 	ret = nksu_init_rc_init();
 	if (ret) {
-		pr_err("nksu: init.rc injection failed: %d\n", ret);
+		pr_err("init.rc injection failed: %d\n", ret);
 		goto err_thread;
 	}
 

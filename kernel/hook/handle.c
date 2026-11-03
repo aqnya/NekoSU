@@ -57,12 +57,12 @@ long handle_prctl_hooks(struct pt_regs *regs)
 	switch (option) {
 	case NKSU_PRCTL_GET_SHM_FD:
 		if (fmac_anonfd_get() < 0)
-			pr_err_ratelimited("[manager] cannot attach shared-memory fd\n");
+			pr_err_ratelimited("cannot attach shared-memory fd\n");
 		return 1;
 
 	case NKSU_PRCTL_GET_CTL_FD:
 		if (fmac_ctlfd_get() < 0)
-			pr_err_ratelimited("[manager] cannot attach control fd\n");
+			pr_err_ratelimited("cannot attach control fd\n");
 		return 1;
 
 	default:
@@ -328,8 +328,8 @@ static void nksu_path_work_fn(struct callback_head *cb)
 
 	ret = nksu_path_map_current();
 	if (ret && ret != -ESRCH)
-		pr_err_ratelimited("[hook]: cannot map su redirect page for pid %d: %d\n",
-				   current->pid, ret);
+		pr_err_ratelimited("cannot map su redirect page for pid %d: %d\n", current->pid,
+				   ret);
 
 	kfree(work);
 	module_put(THIS_MODULE);
@@ -344,22 +344,21 @@ static void nksu_path_queue(struct task_struct *task)
 		return;
 
 	if (!try_module_get(THIS_MODULE)) {
-		pr_warn_ratelimited("[hook]: cannot pin module for path task_work\n");
+		pr_warn_ratelimited("cannot pin module for path task_work\n");
 		return;
 	}
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
 	if (!work) {
 		module_put(THIS_MODULE);
-		pr_warn_ratelimited("[hook]: cannot allocate path task_work\n");
+		pr_warn_ratelimited("cannot allocate path task_work\n");
 		return;
 	}
 
 	init_task_work(&work->cb, nksu_path_work_fn);
 	ret = task_work_add(task, &work->cb, TWA_RESUME);
 	if (ret) {
-		pr_warn_ratelimited("[hook]: cannot queue path task_work for pid %d: %d\n",
-				    task->pid, ret);
+		pr_warn_ratelimited("cannot queue path task_work for pid %d: %d\n", task->pid, ret);
 		kfree(work);
 		module_put(THIS_MODULE);
 	}
@@ -415,14 +414,14 @@ int __nocfi nksu_path_init(void)
 	int ret;
 
 	if (REDIRECT_TARGET_LEN > NKSU_PATH_SH_OFF || NKSU_PATH_SH_OFF + SH_PATH_LEN > PAGE_SIZE) {
-		pr_err("[hook]: redirect paths do not fit the staging page\n");
+		pr_err("redirect paths do not fit the staging page\n");
 		return -EINVAL;
 	}
 
 	nksu_shmem_kernel_file_setup =
 		(typeof(nksu_shmem_kernel_file_setup))NKSU_KSYM_LOOKUP("shmem_kernel_file_setup");
 	if (unlikely(!nksu_shmem_kernel_file_setup)) {
-		pr_err("[hook]: unresolved shmem_kernel_file_setup\n");
+		pr_err("unresolved shmem_kernel_file_setup\n");
 		return -ENOENT;
 	}
 
@@ -442,7 +441,7 @@ int __nocfi nksu_path_init(void)
 	written = nksu_kwrite(file, page, PAGE_SIZE, &pos);
 	kfree(page);
 	if (written != (ssize_t)PAGE_SIZE) {
-		pr_err("[hook]: cannot stage redirect page: %zd\n", written);
+		pr_err("cannot stage redirect page: %zd\n", written);
 		fput(file);
 		return written < 0 ? (int)written : -EIO;
 	}
@@ -459,27 +458,27 @@ int __nocfi nksu_path_init(void)
 	tp_path_fork = nksu_find_tracepoint("sched_process_fork");
 	tp_path_exit = nksu_find_tracepoint("sched_process_exit");
 	if (!tp_path_exec || !tp_path_fork || !tp_path_exit) {
-		pr_err("[hook]: scheduler tracepoints not found\n");
+		pr_err("scheduler tracepoints not found\n");
 		ret = -ENOENT;
 		goto err_page;
 	}
 
 	ret = tracepoint_probe_register(tp_path_exec, nksu_path_exec, NULL);
 	if (ret) {
-		pr_err("[hook]: register path exec probe failed: %d\n", ret);
+		pr_err("register path exec probe failed: %d\n", ret);
 		goto err_page;
 	}
 
 	ret = tracepoint_probe_register(tp_path_fork, nksu_path_fork, NULL);
 	if (ret) {
-		pr_err("[hook]: register path fork probe failed: %d\n", ret);
+		pr_err("register path fork probe failed: %d\n", ret);
 		tracepoint_probe_unregister(tp_path_exec, nksu_path_exec, NULL);
 		goto err_page;
 	}
 
 	ret = tracepoint_probe_register(tp_path_exit, nksu_path_task_exit, NULL);
 	if (ret) {
-		pr_err("[hook]: register path exit probe failed: %d\n", ret);
+		pr_err("register path exit probe failed: %d\n", ret);
 		tracepoint_probe_unregister(tp_path_fork, nksu_path_fork, NULL);
 		tracepoint_probe_unregister(tp_path_exec, nksu_path_exec, NULL);
 		goto err_page;
@@ -487,7 +486,7 @@ int __nocfi nksu_path_init(void)
 
 	smp_store_release(&nksu_path_ready, true);
 
-	pr_info("[hook]: staged su redirect paths in a private shmem page\n");
+	pr_info("staged su redirect paths in a private shmem page\n");
 	return 0;
 
 err_page:
@@ -591,7 +590,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
 
 	if (unlikely(!smp_load_acquire(&nksu_path_ready))) {
 		*map_missing = true;
-		pr_err_ratelimited("[hook]: su redirect paths are not staged\n");
+		pr_err_ratelimited("su redirect paths are not staged\n");
 		return 0;
 	}
 
@@ -600,7 +599,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
 		base = nksu_path_user_addr(current->mm, true);
 	if (unlikely(!base)) {
 		*map_missing = true;
-		pr_warn_ratelimited("[hook]: pid %d has no su redirect mapping\n", current->pid);
+		pr_warn_ratelimited("pid %d has no su redirect mapping\n", current->pid);
 		return 0;
 	}
 
@@ -616,8 +615,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
  */
 static void fail_redirect(struct pt_regs *regs, unsigned int arg_index)
 {
-	pr_err_ratelimited("[hook]: refusing su exec without redirect mapping (pid %d)\n",
-			   current->pid);
+	pr_err_ratelimited("refusing su exec without redirect mapping (pid %d)\n", current->pid);
 	regs->regs[arg_index] = ~0UL;
 }
 
@@ -733,7 +731,7 @@ int init_syscall_hook(void)
 	 * dispatcher this path installs.  Refuse instead of corrupting every
 	 * syscall; the tracepoint dispatcher (CONFIG_NKSU_SYSCALL=n) works.
 	 */
-	pr_err("[hook]: syscall-table hooking needs Linux >= 4.17; use the tracepoint hook\n");
+	pr_err("syscall-table hooking needs Linux >= 4.17; use the tracepoint hook\n");
 	return -EOPNOTSUPP;
 #else
 	int ret, i;
@@ -745,7 +743,7 @@ int init_syscall_hook(void)
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++) {
 		ret = nksu_redirect_syscall(syscall_hooks[i].nr);
 		if (ret) {
-			pr_err("[hook]: can't redirect syscall %d: %d\n", syscall_hooks[i].nr, ret);
+			pr_err("can't redirect syscall %d: %d\n", syscall_hooks[i].nr, ret);
 			goto err;
 		}
 	}
@@ -753,13 +751,13 @@ int init_syscall_hook(void)
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++) {
 		ret = nksu_register_handler(syscall_hooks[i].nr, syscall_hooks[i].handler);
 		if (ret) {
-			pr_err("[hook]: can't register handler for syscall %d: %d\n",
-			       syscall_hooks[i].nr, ret);
+			pr_err("can't register handler for syscall %d: %d\n", syscall_hooks[i].nr,
+			       ret);
 			goto err;
 		}
 	}
 
-	pr_info("[hook]: loaded syscall hook\n");
+	pr_info("loaded syscall hook\n");
 	return 0;
 
 err:
@@ -777,7 +775,7 @@ void exit_syscall_hook(void)
 	for (i = 0; i < ARRAY_SIZE(syscall_hooks); i++)
 		nksu_unhook_syscall(syscall_hooks[i].nr);
 
-	pr_info("[hook]: unloaded syscall hook\n");
+	pr_info("unloaded syscall hook\n");
 }
 #endif /* CONFIG_NKSU_SYSCALL */
 

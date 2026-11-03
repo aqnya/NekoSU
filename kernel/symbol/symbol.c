@@ -137,7 +137,7 @@ static int ksym_resolve_lookup_name(void)
 	kln_kp = (struct kprobe){ .symbol_name = "kallsyms_lookup_name" };
 	ret = register_kprobe(&kln_kp);
 	if (ret < 0) {
-		pr_err("[ksym] register_kprobe(kallsyms_lookup_name) failed: %d\n", ret);
+		pr_err("register_kprobe(kallsyms_lookup_name) failed: %d\n", ret);
 		return ret;
 	}
 
@@ -145,7 +145,7 @@ static int ksym_resolve_lookup_name(void)
 	unregister_kprobe(&kln_kp);
 
 	if (!ksym_lookup_name) {
-		pr_err("[ksym] kallsyms_lookup_name not found\n");
+		pr_err("kallsyms_lookup_name not found\n");
 		return -EINVAL;
 	}
 
@@ -218,7 +218,7 @@ void nksu_ksym_dump(void)
 
 	guard(nksu_mutex)(&ksym_lock);
 	hash_for_each(ksym_htable, bkt, e, node)
-		pr_info("[ksym] %s = 0x%lx\n", e->name, e->addr);
+		pr_info("%s = 0x%lx\n", e->name, e->addr);
 }
 #else
 void nksu_ksym_dump(void)

@@ -118,14 +118,14 @@ typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #endif
 typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
 
-#define NKSU_RESOLVE(ptr, sym)                                   \
-	do {                                                     \
-		NKSU_SYMBOL_EXPORT(sym);                         \
-		(ptr) = (typeof(ptr))nksu_ksym_lookup(sym);      \
-		if (!(ptr)) {                                    \
-			pr_err("[ksym] unresolved %s\n", (sym)); \
-			missing++;                               \
-		}                                                \
+#define NKSU_RESOLVE(ptr, sym)                              \
+	do {                                                \
+		NKSU_SYMBOL_EXPORT(sym);                    \
+		(ptr) = (typeof(ptr))nksu_ksym_lookup(sym); \
+		if (!(ptr)) {                               \
+			pr_err("unresolved %s\n", (sym));   \
+			missing++;                          \
+		}                                           \
 	} while (0)
 
 /*
@@ -264,12 +264,12 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_seccomp_filter_release, "seccomp_filter_release");
 
 	if (missing) {
-		pr_err("[ksym] %d unexported symbol(s) unresolved, cache=%lu\n", missing,
+		pr_err("%d unexported symbol(s) unresolved, cache=%lu\n", missing,
 		       nksu_ksym_count());
 		return -ENOENT;
 	}
 
-	pr_info("[ksym] all unexported symbols resolved, cache=%lu\n", nksu_ksym_count());
+	pr_info("all unexported symbols resolved, cache=%lu\n", nksu_ksym_count());
 	return 0;
 }
 
