@@ -189,6 +189,8 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            keepDebugSymbols += "**/*.so"
+            // strip on rust build, no here
         }
         resources {
             excludes += "DebugProbesKt.bin"
