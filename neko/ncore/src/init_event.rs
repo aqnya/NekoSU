@@ -166,8 +166,6 @@ pub fn on_services() {
     }
 
     info!("on_services triggered!");
-    // Retry in case packages.xml was still being rewritten at post-fs-data.
-    crate::manager::cli::run_boot_scan();
     setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
 }
