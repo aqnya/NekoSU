@@ -31,7 +31,7 @@
 #include <linux/types.h>
 #include <linux/version.h>
 
-#include "manager/ncore_signature.h"
+#include "signature.h"
 
 /* Last: redirects filp_open/kernel_read to the resolved-symbol pointers. */
 #include "symbol/symbol_compat.h"
