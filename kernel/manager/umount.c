@@ -468,7 +468,7 @@ static int __nocfi nksu_ida_alloc_pre(struct kprobe *p, struct pt_regs *regs)
 	id = nksu_ida_alloc_range(nksu_mnt_id_ida, NKSU_MNT_ID_MIN, INT_MAX - 1, GFP_ATOMIC);
 	nksu_task_clear_ida_alloc(task);
 	if (id < 0) {
-		pr_warn_ratelimited("[mount-id] high id allocation failed: %d\n", id);
+		pr_warn_ratelimited("high id allocation failed: %d\n", id);
 		if (clone)
 			nksu_task_clear_clone_mnt(task);
 		return 0;
@@ -592,7 +592,7 @@ static int nksu_resolve_probe_symbols(void)
 
 	if (!nksu_register_kprobe || !nksu_unregister_kprobe || !nksu_ida_alloc_range ||
 	    !nksu_mnt_id_ida) {
-		pr_err("[mount-id] unresolved kprobe/ida symbols\n");
+		pr_err("unresolved kprobe/ida symbols\n");
 		return -ENOENT;
 	}
 	return 0;
@@ -607,12 +607,12 @@ static int __nocfi nksu_register_one(struct kprobe *kp, const char *name, bool r
 	ret = nksu_register_kprobe(kp);
 	if (ret) {
 		if (required)
-			pr_err("[mount-id] register_kprobe(%s) failed: %d\n", name, ret);
+			pr_err("register_kprobe(%s) failed: %d\n", name, ret);
 		else
-			pr_warn("[mount-id] register_kprobe(%s) failed: %d\n", name, ret);
+			pr_warn("register_kprobe(%s) failed: %d\n", name, ret);
 		return ret;
 	}
-	pr_info("[mount-id] hooked %s\n", name);
+	pr_info("hooked %s\n", name);
 	return 0;
 }
 
@@ -667,7 +667,7 @@ static int nksu_mount_probes_register_locked(void)
 	}
 
 	if (!show_ok) {
-		pr_err("[mount-id] no mountinfo reader could be hooked\n");
+		pr_err("no mountinfo reader could be hooked\n");
 		return -ENOENT;
 	}
 
@@ -702,7 +702,7 @@ int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 
 	WRITE_ONCE(nksu_mount_layout_ready, true);
 	mutex_unlock(&nksu_mount_layout_lock);
-	pr_info("[mount-id] active (mnt_id@%u, mnt@%u)\n", mnt_id_off, mnt_off);
+	pr_info("active (mnt_id@%u, mnt@%u)\n", mnt_id_off, mnt_off);
 	return 0;
 }
 
@@ -751,7 +751,7 @@ static DEFINE_MUTEX(nksu_mount_layout_lock);
 
 int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
 {
-	pr_err("[mount-id] CONFIG_KPROBES is disabled\n");
+	pr_err("CONFIG_KPROBES is disabled\n");
 	return -EOPNOTSUPP;
 }
 
@@ -939,7 +939,7 @@ static int nksu_umount_start(void)
 			WRITE_ONCE(nksu_mount_layout_ready, true);
 		mutex_unlock(&nksu_mount_layout_lock);
 		if (ret)
-			pr_warn("[mount-id] probes not ready: %d\n", ret);
+			pr_warn("probes not ready: %d\n", ret);
 	}
 
 	pr_info("sys_enter probe active\n");
