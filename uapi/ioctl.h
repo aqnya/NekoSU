@@ -85,6 +85,7 @@ enum fmac_flag {
      * the first module mount script.
      */
 	IOC_SET_MNT_LAYOUT = 23,
+	IOC_SET_MANAGER_UID = 24,
 };
 
 #define NKSU_PROFILE_TEXT_MAX (64 * 1024)
