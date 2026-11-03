@@ -36,14 +36,35 @@ static void disable_seccomp(void)
 {
 #if defined(CONFIG_SECCOMP) && defined(CONFIG_SECCOMP_FILTER)
 	struct task_struct *task = current;
+	struct sighand_struct *saved_sighand;
 
-	if (task->seccomp.mode == SECCOMP_MODE_DISABLED)
+	if (READ_ONCE(task->seccomp.mode) == SECCOMP_MODE_DISABLED)
 		return;
 
 	spin_lock_irq(&task->sighand->siglock);
-	task->seccomp.mode = SECCOMP_MODE_DISABLED;
-	clear_thread_flag(TIF_SECCOMP);
-	spin_unlock_irq(&task->sighand->siglock);
+
+	if (task->seccomp.mode == SECCOMP_MODE_DISABLED) {
+		spin_unlock_irq(&task->sighand->siglock);
+		return;
+	}
+
+	if (task->seccomp.mode == SECCOMP_MODE_DEAD) {
+		spin_unlock_irq(&task->sighand->siglock);
+		pr_warn("seccomp: PID %d is in DEAD mode, cannot disable\n",
+			task->pid);
+		return;
+	}
+
+	clear_task_syscall_work(task, SECCOMP);
+	WRITE_ONCE(task->seccomp.mode, SECCOMP_MODE_DISABLED);
+	atomic_set(&task->seccomp.filter_count, 0);
+
+	saved_sighand = task->sighand;
+	task->sighand = NULL;
+
+	spin_unlock_irq(&saved_sighand->siglock);
+	seccomp_filter_release(task);
+	task->sighand = saved_sighand;
 
 	pr_info("seccomp disabled for PID %d\n", task->pid);
 #endif
