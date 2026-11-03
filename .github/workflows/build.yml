@@ -171,6 +171,49 @@ jobs:
         fi
         mkdir -p signing
         printf '%s' "$KEYSTORE_BASE64" | base64 -d > signing/release.keystore
+        
+    - name: Derive manager cert hash
+      id: certhash
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      run: |
+        set -euo pipefail
+        keystore=signing/release.keystore
+        if [ ! -f "$keystore" ]; then
+          echo "::warning::release keystore missing; NKSU_MANAGER_CERTHASH will be empty"
+          echo "NKSU_MANAGER_CERTHASH=" >> "$GITHUB_ENV"
+          echo "value=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [ -z "${KEYSTORE_PASSWORD:-}" ]; then
+          echo "::error::KEYSTORE_PASSWORD is not set but $keystore exists"
+          exit 1
+        fi
+
+        args=(-list -v -keystore "$keystore" -storepass "$KEYSTORE_PASSWORD")
+        if [ -n "${KEY_ALIAS:-}" ]; then
+          args+=(-alias "$KEY_ALIAS")
+        fi
+
+        out="$(keytool "${args[@]}" 2>/dev/null || true)"
+        hash="$(printf '%s\n' "$out" \
+          | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*\([0-9A-Fa-f:]*\).*/\1/p' \
+          | head -n1 \
+          | tr -d ':' \
+          | tr 'A-F' 'a-f')"
+    
+        if [ "${#hash}" -ne 64 ]; then
+          echo "::error::failed to extract SHA-256 from $keystore (got '$hash')"
+          echo "--- keytool output ---"
+          printf '%s\n' "$out"
+          exit 1
+        fi
+
+        echo "NKSU_MANAGER_CERTHASH=$hash" >> "$GITHUB_ENV"
+        echo "value=$hash" >> "$GITHUB_OUTPUT"
+        echo "manager cert hash: $hash"
 
     - name: Determine version channel
       id: version
