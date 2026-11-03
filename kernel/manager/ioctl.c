@@ -393,7 +393,7 @@ static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
 static long ioc_disarm_safemode(void)
 {
 	nksu_safe_mode_disable();
-    nksu_daemon_fd_exit();
+	nksu_daemon_fd_exit();
 	return 0;
 }
 

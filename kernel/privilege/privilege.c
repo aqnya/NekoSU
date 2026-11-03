@@ -12,9 +12,6 @@
 #include <linux/nsproxy.h>
 #include <linux/seccomp.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-#endif
-
 #include <fmac.h>
 
 #include "symbol/symbol_compat.h"
@@ -44,15 +41,13 @@ static void disable_seccomp(void)
 
 	spin_lock_irq(&task->sighand->siglock);
 
-	if (task->seccomp.mode == SECCOMP_MODE_DISABLED) {
-		spin_unlock_irq(&task->sighand->siglock);
-		return;
-	}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	clear_task_syscall_work(task, SECCOMP);
+#else
+	clear_tsk_thread_flag(task, TIF_SECCOMP);
+#endif
 	WRITE_ONCE(task->seccomp.mode, SECCOMP_MODE_DISABLED);
 	atomic_set(&task->seccomp.filter_count, 0);
-
 	saved_sighand = task->sighand;
 	task->sighand = NULL;
 

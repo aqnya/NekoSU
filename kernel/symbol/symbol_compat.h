@@ -388,8 +388,8 @@ NKSU_SYMBOL_VOID_FN(selnl_notify_policyload, (u32 seqno), (seqno))
  * __nocfi wrapper is called with an identical type under CFI.
  */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
-NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload,
-		    (struct selinux_state * state, int seqno), (state, seqno))
+NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload, (struct selinux_state * state, int seqno),
+		    (state, seqno))
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 NKSU_SYMBOL_VOID_FN(selinux_status_update_policyload, (int seqno), (seqno))
 #else
