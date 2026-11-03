@@ -68,7 +68,7 @@ fun StatusCard(
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
-        shape = ContinuousCornerShape(28.dp),
+        shape = ContinuousCornerShape(20.dp),
         containerColor = containerColor,
         contentColor = contentColor,
     ) {
