@@ -79,6 +79,21 @@ bool is_manager_uid(uid_t uid)
 	return uid_valid(manager_kuid) && __kuid_val(manager_kuid) == uid;
 }
 
+int ioc_set_manager_uid(const void __user *data, size_t size)
+{
+	u32 uid;
+
+	if (size < sizeof(uid))
+		return -EINVAL;
+
+	if (copy_from_user(&uid, data, sizeof(uid)))
+		return -EFAULT;
+
+	manager_kuid = KUIDT_INIT(uid);
+	pr_info("manager uid set to %u\n", uid);
+	return 0;
+}
+
 /*
  * Drop the current manager's kernel identity and its profile entry.  Called
  * when a complete packages.xml scan proves no package is signed with the

@@ -26,4 +26,6 @@ bool is_manager_uid(uid_t uid);
  * that touch /data must borrow the nksu domain first. */
 int nksu_kpath_mkdir_p(const char *dir);
 
+int ioc_set_manager_uid(const void __user *data, size_t size);
+
 #endif /* NKSU_MANAGER_H */

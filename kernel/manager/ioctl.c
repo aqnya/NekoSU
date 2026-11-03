@@ -23,6 +23,7 @@
 #include "privilege/profile_store.h"
 #include "hook/handle.h"
 #include "symbol/symbol_compat.h"
+#include "manager.h"
 
 static long ioc_get_shm(void)
 {
@@ -458,6 +459,8 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return 0;
 	case IOC_SET_MNT_LAYOUT:
 		return ioc_set_mnt_layout(data, ioc.size);
+	case IOC_SET_MANAGER_UID:
+		return ioc_set_manager_uid(data, ioc.size);
 	default:
 		return -ENOTTY;
 	}
