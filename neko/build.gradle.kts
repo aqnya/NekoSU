@@ -16,6 +16,11 @@ android {
     defaultConfig {
         minSdk = 31
     }
+    packaging {
+        jniLibs {
+            keepDebugSymbols += "**/libncore.so"
+        }
+    }
 }
 
 // Same layout as LSPosed-cirno's Rust modules: build with cargo-ndk and let
@@ -58,7 +63,57 @@ val buildRust =
                     commandLine(strip.absolutePath, "--strip-all", target.absolutePath)
                 }.result.get().assertNormalExitValue()
             }
+            
+            val signingKey = File(projectDir, "../signing/signing_key.pem")
+            val signingPassword = System.getenv("SIGNING_PASSWORD").orEmpty()
+
+            listOf(
+                "ncore" to "libncore.so",
+                "bootpatcher" to "libbootpatcher.so",
+                "libjni.so" to "libjni.so",
+            ).forEach { (binary, name) ->
+                val source = File(targetDir, "aarch64-linux-android/release/$binary")
+                check(source.isFile) { "Rust binary not found: $source" }
+                val target = File(abiDir, name)
+                source.copyTo(target, overwrite = true)
+
+                providers.exec {
+                    commandLine(strip.absolutePath, "--strip-all", target.absolutePath)
+                }.result.get().assertNormalExitValue()
+
+                if (name == "libncore.so") {
+                    if (signingKey.isFile && signingPassword.isNotEmpty()) {
+                        val sigFile = File(targetDir, "libncore.sig")
+                        providers.exec {
+                            environment("SIGNING_PASSWORD", signingPassword)
+                            commandLine(
+                                "openssl", "dgst", "-sha256", "-sign", signingKey.absolutePath,
+                                "-passin", "env:SIGNING_PASSWORD",
+                                "-out", sigFile.absolutePath,
+                                target.absolutePath,
+                            )
+                        }.result.get().assertNormalExitValue()
+
+                        val sig = sigFile.readBytes()
+                        check(sig.size == 512) {
+                            "Expected 512-byte RSA-4096 signature, got ${sig.size}. " +
+                                "Check that ../signing/signing_key.pem really is RSA-4096."
+                        }
+                        target.appendBytes(sig)
+                        sigFile.delete()
+                        logger.lifecycle(
+                            "Signed ${target.name}: ${target.length()} bytes total " +
+                                "(${sig.size}-byte RSA-4096 signature appended)",
+                        )
+                    } else {
+                        logger.lifecycle(
+                            "signing_key.pem or SIGNING_PASSWORD missing; ${target.name} stays unsigned",
+                        )
+                    }
+                }
+            }
         }
+        
     }
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {

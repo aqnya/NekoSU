@@ -162,6 +162,7 @@ jobs:
     - name: Decode Release Keystore
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        SIGNING_KEY: ${{secrets.SIGNING_KEY}}
       run: |
         set -euo pipefail
         if [ -z "${KEYSTORE_BASE64:-}" ]; then
@@ -171,6 +172,13 @@ jobs:
         fi
         mkdir -p signing
         printf '%s' "$KEYSTORE_BASE64" | base64 -d > signing/release.keystore
+        if [ -z "${SIGNING_KEY:-}" ]; then
+          echo "signing key unavailable; this build will be unsigned"
+          rm -f signing/signing_key.pem
+          exit 0
+        fi
+        printf '%s\n' "$SIGNING_KEY" > signing/signing_key.pem
+        chmod 600 signing/signing_key.pem
         
     - name: Derive manager cert hash
       id: certhash
@@ -260,6 +268,7 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        SIGNING_PASSWORD: ${{secrets.SIGNING_PASSWORD}}
         VERSION_CHANNEL: ${{ steps.version.outputs.channel }}
         VERSION_NAME: ${{ steps.version.outputs.version_name }}
       # manager/ is the Gradle root, so the wrapper runs from there.
