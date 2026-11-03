@@ -217,7 +217,7 @@ static DEFINE_MUTEX(nksu_domain_cred_lock);
 
 /*
  * 4.9's fscrypt looks the master key up in the credentials' keyrings.  The
- * cached cred may be built in a kernel thread (manager scan / profile load),
+ * cached cred may be built in a kernel thread (ncore bootstrap / profile load),
  * where the session keyring is NULL, so file I/O would then fail with
  * -ENOKEY even after the user has unlocked /data.  Android installs the
  * fscrypt keys into init's session keyring, so adopt that keyring (and its
@@ -318,11 +318,11 @@ static void resolve_file_sid(void)
  * This is what lets init's injected init.rc exec /data/adb/ncore.
  *
  * The in-memory SID alone is not enough: init runs the injected init.rc exec
- * at post-fs-data, before the manager scan relabels the cached inode, and the
+ * at post-fs-data, before the ncore bootstrap relabels the cached inode, and the
  * in-memory change is lost on reboot.  So also write the security.selinux
  * xattr, making the label persist so post-fs-data can exec the daemon on the
  * next boot (the first boot after install still cannot: the daemon does not
- * exist until the manager scan runs, after post-fs-data).
+ * exist until the ncore bootstrap runs, after post-fs-data).
  */
 void nksu_relabel_path(const char *path)
 {

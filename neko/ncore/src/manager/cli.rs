@@ -54,3 +54,25 @@ pub fn resolve_cert_hash(cli: String) -> Result<String> {
          or set NKSU_MANAGER_CERTHASH at build time"
     ))
 }
+
+/// Best-effort manager scan for the boot stages.
+///
+/// The kernel verifies this executable against the ncore signing key before
+/// accepting the UID, so only a genuine ncore can authorize the manager.  A
+/// missing manager or an unreadable packages.xml must never abort the boot,
+/// hence the errors are only logged.
+pub fn run_boot_scan() {
+    let hash = match resolve_cert_hash(String::new()) {
+        Ok(hash) => hash,
+        Err(e) => {
+            log::warn!("manager scan skipped: {e:#}");
+            return;
+        }
+    };
+
+    match run_manager_scan(&hash, None) {
+        Ok(()) => log::info!("manager authorized through the kernel"),
+        Err(e) => log::warn!("manager scan failed: {e:#}"),
+    }
+}
+

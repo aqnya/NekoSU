@@ -15,7 +15,7 @@
  * module loading; it then disarms the watcher with IOC_DISARM_SAFEMODE (see
  * userspace/ncore).
  *
- * The watcher also stops when the manager scan finds no ncore at all (without
+ * The watcher also stops when the ncore bootstrap finds no ncore at all (without
  * it no module can run, so safe mode has nothing to protect).  There is no
  * timeout window.
  */
@@ -28,7 +28,7 @@ bool nksu_safe_mode_requested(void);
 
 /* Stop counting volume-up.  Idempotent; safe to call before init (the state
  * is then noticed by nksu_safe_mode_init).  Backs IOC_DISARM_SAFEMODE and the
- * manager scan when ncore is unavailable. */
+ * ncore bootstrap when ncore is unavailable. */
 void nksu_safe_mode_disable(void);
 
 #endif /* NKSU_BOOT_SAFE_MODE_H */

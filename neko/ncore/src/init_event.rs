@@ -16,6 +16,10 @@ pub fn on_post_fs_data() -> Result<()> {
 
     ksucalls::report_post_fs_data();
 
+    // Let the kernel verify this ncore image and authorize the manager
+    // package before any module or app can run.  Best effort.
+    crate::manager::cli::run_boot_scan();
+
     utils::umask(0);
 
     // Must run before any script can mount: the kernel needs the struct mount
@@ -162,6 +166,8 @@ pub fn on_services() {
     }
 
     info!("on_services triggered!");
+    // Retry in case packages.xml was still being rewritten at post-fs-data.
+    crate::manager::cli::run_boot_scan();
     setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
 }

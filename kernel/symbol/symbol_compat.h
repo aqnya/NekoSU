@@ -144,7 +144,8 @@ extern typeof(security_context_str_to_sid) *nksu_security_context_str_to_sid;
 extern typeof(security_compute_av_user) *nksu_security_compute_av_user;
 #endif
 
-/* VFS helpers used to bootstrap /data/adb/nksu in the manager scan.  vfs_mkdir
+/* VFS helpers used to bootstrap /data/adb/nksu in the ncore bootstrap.
+ * vfs_mkdir
  * and lookup_one_len are not part of every GKI export set, so reach them
  * through kallsyms like the rest. */
 extern typeof(vfs_mkdir) *nksu_vfs_mkdir;

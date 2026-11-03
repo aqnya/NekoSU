@@ -104,7 +104,7 @@ static void nksu_daemon_fork(void *data, struct task_struct *parent, struct task
 		set_tsk_thread_flag(child, NKSU_TIF_NCORE);
 }
 
-/* Used by the manager scan to mark every thread of zygote. */
+/* Used by the ncore bootstrap to mark every thread of zygote. */
 void nksu_mark_threads_by_pid(pid_t pid)
 {
 	struct task_struct *task, *t;

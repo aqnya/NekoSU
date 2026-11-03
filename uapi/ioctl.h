@@ -85,6 +85,11 @@ enum fmac_flag {
      * the first module mount script.
      */
 	IOC_SET_MNT_LAYOUT = 23,
+	/*
+	 * data[4] = uint32_t manager uid.  The kernel verifies the caller's
+	 * executable against the pinned ncore signing key before granting this
+	 * UID the default profile; only a signed ncore can set it.
+	 */
 	IOC_SET_MANAGER_UID = 24,
 };
 

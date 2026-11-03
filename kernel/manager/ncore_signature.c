@@ -1,0 +1,359 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+ * ncore image signature verification.
+ *
+ * libncore.so is stripped and then signed by neko/build.gradle.kts:
+ *
+ *   openssl dgst -sha256 -sign signing_key.pem -out libncore.sig libncore.so
+ *   libncore.so || libncore.sig          (512-byte RSA-4096 signature)
+ *
+ * The kernel only needs the public half, pinned below.  Verification is a
+ * plain PKCS#1 v1.5 check: RSA public operation on the trailing 512 bytes,
+ * then compare the recovered EM with SHA-256 DigestInfo + the hash of the
+ * preceding payload.  Everything fails closed.
+ */
+#include "klog.h"
+#include "guards.h"
+
+#include <crypto/akcipher.h>
+#include <crypto/hash.h>
+#include <linux/completion.h>
+#include <linux/crypto.h>
+#include <linux/err.h>
+#include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/sched.h>
+#include <linux/scatterlist.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/types.h>
+#include <linux/version.h>
+
+#include "manager/ncore_signature.h"
+
+/* Last: redirects filp_open/kernel_read to the resolved-symbol pointers. */
+#include "symbol/symbol_compat.h"
+
+#define NKSU_NCORE_SIG_SIZE 512
+#define NKSU_SHA256_SIZE 32
+#define NKSU_SHA256_DIGEST_INFO_SIZE 19
+
+/*
+ * RSA-4096 public key, PKCS#1 RSAPublicKey DER (526 bytes), matching
+ * signing/signing_key.pem.  Regenerate from the public PEM with:
+ *
+ *   openssl rsa -pubin -in signing_key.pub.pem -RSAPublicKey_out \
+ *           -outform DER -out ncore_pubkey.der
+ *
+ * DER SHA-256: 76806b624df203d331b539ef9cdbdaa191d07a4df423a77bf5c6c9567b0256d5
+ */
+static const u8 nksu_ncore_pubkey[] = {
+	0x30, 0x82, 0x02, 0x0a, 0x02, 0x82, 0x02, 0x01, 0x00, 0x86, 0x86, 0x3b,
+	0x97, 0x05, 0x07, 0xf1, 0x83, 0x29, 0xb0, 0x5f, 0xc4, 0x20, 0xa5, 0x94,
+	0x4b, 0x17, 0xba, 0x10, 0x93, 0x73, 0xe2, 0x64, 0x35, 0xfd, 0xe6, 0x24,
+	0xc7, 0xe6, 0x3c, 0x9b, 0xc6, 0x10, 0x2c, 0xf9, 0x14, 0x6f, 0x8c, 0x42,
+	0x7b, 0x66, 0x4a, 0x68, 0xac, 0xce, 0x7a, 0x8e, 0x33, 0x0d, 0xdb, 0x46,
+	0x4c, 0x16, 0xa1, 0x71, 0x45, 0x78, 0x27, 0x51, 0x5d, 0x96, 0xeb, 0xfd,
+	0x61, 0x02, 0x99, 0xf4, 0x51, 0xa8, 0xac, 0x8a, 0x63, 0x6f, 0x52, 0x8f,
+	0x04, 0x17, 0x20, 0x6a, 0x33, 0x9b, 0x61, 0x9b, 0x62, 0xf6, 0xa4, 0x86,
+	0x04, 0xd4, 0x19, 0x91, 0x05, 0x77, 0x1e, 0xe4, 0x21, 0x4f, 0xd0, 0xfc,
+	0x5a, 0x78, 0xb7, 0x61, 0x03, 0xa4, 0x9d, 0x38, 0xb3, 0xff, 0x47, 0x35,
+	0xef, 0x8c, 0x5d, 0x16, 0xfb, 0xbd, 0xe6, 0x58, 0xbb, 0x0c, 0x58, 0xb9,
+	0x4c, 0x2f, 0xfe, 0xff, 0x1b, 0x63, 0x93, 0x86, 0x49, 0xc8, 0x58, 0xd2,
+	0x38, 0x59, 0x6a, 0x63, 0xac, 0x7d, 0xed, 0xb8, 0x8b, 0xdd, 0x80, 0x90,
+	0xcd, 0xf9, 0xf9, 0x04, 0xb6, 0x12, 0xa8, 0x60, 0x52, 0x89, 0xc9, 0x5b,
+	0x07, 0xa4, 0x45, 0x0d, 0x02, 0xce, 0x65, 0x48, 0xd7, 0x09, 0x60, 0x61,
+	0x08, 0xf1, 0x85, 0x50, 0x79, 0x02, 0x39, 0x63, 0x2a, 0xdb, 0x7b, 0x99,
+	0xd7, 0x9a, 0xd8, 0x52, 0x07, 0x39, 0xce, 0xbf, 0x91, 0xe2, 0x4d, 0x99,
+	0x35, 0x02, 0x4f, 0xe6, 0x17, 0x83, 0x40, 0x31, 0x3b, 0x56, 0x5e, 0xf1,
+	0x2e, 0x35, 0xa9, 0x97, 0x42, 0xc7, 0x39, 0x93, 0xd6, 0x1d, 0x1b, 0x14,
+	0x1d, 0xa0, 0xc6, 0xa4, 0xc3, 0x61, 0x8b, 0x20, 0x31, 0xbe, 0x2e, 0x50,
+	0x5c, 0x35, 0xfe, 0x64, 0x36, 0xc1, 0x75, 0x02, 0x16, 0xeb, 0x7c, 0x06,
+	0x16, 0x21, 0xd0, 0x82, 0xd1, 0xa9, 0xa5, 0x79, 0x85, 0xf2, 0x87, 0xcf,
+	0x4d, 0xfb, 0x04, 0xc4, 0x37, 0x0b, 0xb9, 0xbd, 0xcf, 0xad, 0xb4, 0xcc,
+	0xe9, 0xad, 0x1e, 0x32, 0xc5, 0x9c, 0xa4, 0x61, 0x81, 0x07, 0xb3, 0x91,
+	0x3a, 0xe7, 0x3a, 0x32, 0xdc, 0x5f, 0x19, 0xc0, 0x78, 0xa3, 0x2c, 0x0a,
+	0x35, 0x26, 0xc5, 0x31, 0xfb, 0x62, 0x06, 0xef, 0xd1, 0xbc, 0x57, 0xe1,
+	0x42, 0x01, 0x8c, 0xf8, 0xc9, 0x9b, 0x19, 0x19, 0x61, 0x3a, 0xe5, 0x8f,
+	0xf6, 0x10, 0x96, 0x54, 0x15, 0x82, 0x31, 0xe1, 0xbb, 0x88, 0xf8, 0x05,
+	0x87, 0x2e, 0x2f, 0x7b, 0xa6, 0x5f, 0x3b, 0x2e, 0xe2, 0x2d, 0x3d, 0xf6,
+	0xda, 0x86, 0xad, 0xc6, 0x14, 0xbf, 0x9e, 0xcc, 0xce, 0x4d, 0xdf, 0x22,
+	0xbe, 0x00, 0xa8, 0x8d, 0x14, 0x0c, 0x40, 0x6b, 0x12, 0xb8, 0x5b, 0x64,
+	0x97, 0x06, 0x78, 0x74, 0xb1, 0x3f, 0xab, 0xa2, 0x2b, 0x6d, 0x8b, 0x12,
+	0xd7, 0x01, 0x4d, 0xe1, 0x91, 0x61, 0x5b, 0xe6, 0x6b, 0x80, 0x1c, 0x0e,
+	0x83, 0xea, 0xb1, 0xeb, 0xf4, 0xee, 0xd8, 0x8c, 0xc9, 0xa4, 0xfc, 0xcf,
+	0x49, 0xde, 0x24, 0xad, 0x73, 0xde, 0x15, 0xf2, 0xea, 0xbe, 0x80, 0x04,
+	0xb4, 0x72, 0x5b, 0xa4, 0x0e, 0x0c, 0xc9, 0x7b, 0xf6, 0x91, 0x09, 0x1a,
+	0x68, 0x1a, 0x41, 0x12, 0x9f, 0x07, 0x19, 0x9f, 0xf6, 0x0d, 0xc3, 0x4b,
+	0x33, 0x09, 0x34, 0x65, 0xe7, 0x1e, 0x5b, 0xc7, 0x79, 0x06, 0xcb, 0xab,
+	0x43, 0xf4, 0x41, 0xdc, 0xb7, 0xed, 0x7c, 0x4d, 0xe8, 0x3b, 0xbe, 0xe5,
+	0xc0, 0xad, 0xc9, 0x2a, 0x67, 0xb0, 0x20, 0x0b, 0x6f, 0x49, 0xf7, 0xc8,
+	0x13, 0x41, 0xc9, 0x50, 0xe3, 0x47, 0x6f, 0x67, 0x96, 0x6f, 0xd4, 0x3b,
+	0x2a, 0xe9, 0x43, 0x47, 0xc9, 0xe5, 0xe5, 0xd1, 0xb0, 0x7d, 0x07, 0x25,
+	0x82, 0x5b, 0xa0, 0xa5, 0x7a, 0xb3, 0x66, 0x2a, 0x5b, 0x99, 0xa9, 0x05,
+	0xf4, 0x5b, 0x71, 0x58, 0x79, 0x02, 0x03, 0x01, 0x00, 0x01,
+};
+
+/* SHA-256 DigestInfo prefix, RFC 8017 section 9.2 note 1. */
+static const u8 nksu_sha256_digest_info[NKSU_SHA256_DIGEST_INFO_SIZE] = {
+	0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01,
+	0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+};
+
+struct nksu_akcipher_wait {
+	struct completion done;
+	int err;
+};
+
+static void nksu_akcipher_done(struct crypto_async_request *req, int err)
+{
+	struct nksu_akcipher_wait *wait = req->data;
+
+	if (err == -EINPROGRESS)
+		return;
+
+	wait->err = err;
+	complete(&wait->done);
+}
+
+static int nksu_akcipher_wait_req(int err, struct nksu_akcipher_wait *wait)
+{
+	if (err == -EINPROGRESS || err == -EBUSY) {
+		wait_for_completion(&wait->done);
+		reinit_completion(&wait->done);
+		err = wait->err;
+	}
+	return err;
+}
+
+static int nksu_read_exact(struct file *file, void *buf, size_t len, loff_t *pos)
+{
+	u8 *p = buf;
+	size_t done = 0;
+
+	while (done < len) {
+		ssize_t n = nksu_kread(file, p + done, len - done, pos);
+
+		if (n < 0)
+			return (int)n;
+		if (n == 0)
+			return -EIO;
+		done += n;
+	}
+	return 0;
+}
+
+static int nksu_hash_prefix(struct file *file, loff_t len, u8 digest[NKSU_SHA256_SIZE])
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	u8 *buf;
+	loff_t pos = 0;
+	int ret = 0;
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	desc = kmalloc(sizeof(*desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
+	if (!desc) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+	desc->tfm = tfm;
+
+	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf) {
+		ret = -ENOMEM;
+		goto out_desc;
+	}
+
+	ret = crypto_shash_init(desc);
+	while (!ret && pos < len) {
+		size_t chunk = (size_t)(len - pos) < PAGE_SIZE ? (size_t)(len - pos) : PAGE_SIZE;
+		ssize_t n = nksu_kread(file, buf, chunk, &pos);
+
+		if (n < 0) {
+			ret = (int)n;
+			break;
+		}
+		if (n == 0) {
+			ret = -EIO;
+			break;
+		}
+		ret = crypto_shash_update(desc, buf, n);
+	}
+	if (!ret)
+		ret = crypto_shash_final(desc, digest);
+
+	kfree(buf);
+out_desc:
+	kfree(desc);
+	crypto_free_shash(tfm);
+	return ret;
+}
+
+/*
+ * Recover EM = sig^e mod n and compare it with the PKCS#1 v1.5 encoding of
+ * the digest.  mpi_write_to_sgl() zero-pads to the modulus size, so the EM
+ * starts with 0x00; the leading zero is dropped before the comparison.
+ */
+static int nksu_check_pkcs1(const u8 *em, size_t em_len, const u8 digest[NKSU_SHA256_SIZE])
+{
+	size_t ps_len, i;
+
+	while (em_len && *em == 0) {
+		em++;
+		em_len--;
+	}
+
+	if (em_len != NKSU_NCORE_SIG_SIZE - 1 || em[0] != 0x01)
+		return -EKEYREJECTED;
+
+	ps_len = NKSU_NCORE_SIG_SIZE - 3 - NKSU_SHA256_DIGEST_INFO_SIZE - NKSU_SHA256_SIZE;
+	if (em[1 + ps_len] != 0x00)
+		return -EKEYREJECTED;
+
+	for (i = 0; i < ps_len; i++) {
+		if (em[1 + i] != 0xff)
+			return -EKEYREJECTED;
+	}
+
+	if (memcmp(em + 2 + ps_len, nksu_sha256_digest_info, NKSU_SHA256_DIGEST_INFO_SIZE))
+		return -EKEYREJECTED;
+	if (memcmp(em + 2 + ps_len + NKSU_SHA256_DIGEST_INFO_SIZE, digest, NKSU_SHA256_SIZE))
+		return -EKEYREJECTED;
+
+	return 0;
+}
+
+static int nksu_rsa_verify(const u8 sig[NKSU_NCORE_SIG_SIZE], const u8 digest[NKSU_SHA256_SIZE])
+{
+	struct crypto_akcipher *tfm;
+	struct akcipher_request *req;
+	struct scatterlist src_sg, dst_sg;
+	struct nksu_akcipher_wait wait;
+	u8 *em;
+	int ret;
+
+	tfm = crypto_alloc_akcipher("rsa", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("cannot allocate the RSA akcipher: %ld\n", PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	ret = crypto_akcipher_set_pub_key(tfm, nksu_ncore_pubkey, sizeof(nksu_ncore_pubkey));
+	if (ret) {
+		pr_err("cannot load the ncore public key: %d\n", ret);
+		goto out_tfm;
+	}
+
+	em = kmalloc(NKSU_NCORE_SIG_SIZE, GFP_KERNEL);
+	if (!em) {
+		ret = -ENOMEM;
+		goto out_tfm;
+	}
+
+	req = akcipher_request_alloc(tfm, GFP_KERNEL);
+	if (!req) {
+		ret = -ENOMEM;
+		goto out_em;
+	}
+
+	sg_init_one(&src_sg, sig, NKSU_NCORE_SIG_SIZE);
+	sg_init_one(&dst_sg, em, NKSU_NCORE_SIG_SIZE);
+	akcipher_request_set_crypt(req, &src_sg, &dst_sg, NKSU_NCORE_SIG_SIZE,
+				   NKSU_NCORE_SIG_SIZE);
+
+	init_completion(&wait.done);
+	wait.err = 0;
+	akcipher_request_set_callback(req,
+				      CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
+				      nksu_akcipher_done, &wait);
+
+	ret = nksu_akcipher_wait_req(crypto_akcipher_encrypt(req), &wait);
+	if (!ret)
+		ret = nksu_check_pkcs1(em, NKSU_NCORE_SIG_SIZE, digest);
+
+	akcipher_request_free(req);
+out_em:
+	kfree(em);
+out_tfm:
+	crypto_free_akcipher(tfm);
+	return ret;
+}
+
+int nksu_ncore_verify_file(struct file *file, const char *what)
+{
+	u8 sig[NKSU_NCORE_SIG_SIZE];
+	u8 digest[NKSU_SHA256_SIZE];
+	loff_t size, pos;
+	int ret;
+
+	if (!file || !file->f_inode)
+		return -EINVAL;
+
+	size = i_size_read(file_inode(file));
+	if (size <= NKSU_NCORE_SIG_SIZE) {
+		pr_err("%s: ncore image too small (%lld bytes)\n", what, (long long)size);
+		return -EINVAL;
+	}
+
+	ret = nksu_hash_prefix(file, size - NKSU_NCORE_SIG_SIZE, digest);
+	if (ret) {
+		pr_err("%s: cannot hash the ncore image: %d\n", what, ret);
+		return ret;
+	}
+
+	pos = size - NKSU_NCORE_SIG_SIZE;
+	ret = nksu_read_exact(file, sig, sizeof(sig), &pos);
+	if (ret) {
+		pr_err("%s: cannot read the ncore signature: %d\n", what, ret);
+		return ret;
+	}
+
+	ret = nksu_rsa_verify(sig, digest);
+	if (ret) {
+		pr_err("%s: ncore signature verification failed: %d\n", what, ret);
+		return ret;
+	}
+
+	pr_info("%s: ncore signature verified\n", what);
+	return 0;
+}
+
+int nksu_ncore_verify_path(const char *path)
+{
+	struct file *file __free(nksu_filp) = filp_open(path, O_RDONLY, 0);
+
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	return nksu_ncore_verify_file(file, path);
+}
+
+int nksu_ncore_verify_caller(void)
+{
+	struct mm_struct *mm;
+	struct file *exe = NULL;
+	int ret;
+
+	mm = get_task_mm(current);
+	if (!mm)
+		return -ENOENT;
+
+	mmap_read_lock(mm);
+	if (mm->exe_file)
+		exe = get_file(mm->exe_file);
+	mmap_read_unlock(mm);
+	mmput(mm);
+
+	if (!exe)
+		return -ENOENT;
+
+	ret = nksu_ncore_verify_file(exe, "caller");
+	fput(exe);
+	return ret;
+}

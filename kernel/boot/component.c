@@ -51,7 +51,7 @@ static const struct nksu_component nksu_components[] = {
 #ifndef CONFIG_NKSU_SYSCALL
 	NKSU_FEATURE_COMPONENT("tracepoint hook", load_tracepoint_hook, unload_tracepoint_hook),
 #endif
-	NKSU_FEATURE_COMPONENT("manager scan", appscan_init, appscan_exit),
+	NKSU_FEATURE_COMPONENT("ncore bootstrap", ncore_boot_init, ncore_boot_exit),
 	NKSU_FEATURE_COMPONENT("SELinux hide", nksu_selinux_hide_init, nksu_selinux_hide_exit),
 	NKSU_FEATURE_COMPONENT("umount config", nksu_umount_feature_init, NULL),
 #ifdef CONFIG_NKSU_SYSCALL

@@ -38,7 +38,7 @@ int boot_stage = INIT_FIRST_STAGE;
  *                                   init.rc proxy is installed from the
  *                                   first init.rc read (see kernel/boot/init_rc.c)
  *   execve(app_process -Xzygote) -> feature components (profile, tracepoint,
- *                                   manager scan...).  Module loading is not
+ *                                   ncore bootstrap...).  Module loading is not
  *                                   started here: it is driven entirely by
  *                                   the injected init.rc, which execs the
  *                                   userspace loader at post-fs-data and

@@ -583,7 +583,7 @@ static unsigned long try_redirect_path(struct pt_regs *regs, unsigned int arg_in
      * KernelSU gates the su→daemon redirect on the daemon existing; without a target
      * there is nothing to exec, so run the real su instead of escalating into
      * a failed exec.  This must not sleep (the tracepoint path runs with
-     * preemption disabled), so use the flag the manager scan publishes.
+     * preemption disabled), so use the flag the ncore bootstrap publishes.
      */
 	if (require_target && !is_daemon_ready())
 		return 0;

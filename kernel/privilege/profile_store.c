@@ -89,7 +89,7 @@ static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns, con
 	char line[160];
 	int n;
 
-	/* The manager's entry is re-granted by the boot scan, never restored. */
+	/* The manager's entry is re-granted by ncore's verified scan, never restored. */
 	if (is_manager_uid(uid))
 		return;
 

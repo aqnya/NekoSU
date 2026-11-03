@@ -140,7 +140,7 @@ int nksu_safe_mode_init(void)
 	int ret;
 
 	/*
-	 * The manager scan may have already disarmed the watcher before this
+	 * The ncore bootstrap may have already disarmed the watcher before this
 	 * component came up; in that case stay off (the flag is not reset here).
 	 */
 	if (READ_ONCE(nksu_safe_disarmed))
