@@ -18,7 +18,7 @@
 #include "klog.h"
 #include "guards.h"
 #include "manager/manager.h"
-#include "manager/ncore_signature.h"
+#include "signing/signature.h"
 #include "boot/safe_mode.h"
 #include <linux/module.h>
 #include <linux/fs.h>

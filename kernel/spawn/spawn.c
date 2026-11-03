@@ -32,6 +32,7 @@
 #include <linux/completion.h>
 
 #include <fmac.h>
+#include "signing/signature.h"
 #include "symbol/symbol_compat.h"
 
 /*
@@ -245,6 +246,12 @@ int __nocfi nksu_spawn(const struct nksu_spawn_args *args)
 
 	if (!args || !args->path || !args->path[0])
 		return -EINVAL;
+
+	ret = nksu_ncore_verify_path(args->path);
+	if (ret) {
+		pr_err("refusing to run %s: is not signed!: %d\n", args->path, ret);
+		return ret;
+	}
 
 	switch (args->wait) {
 	case NKSU_SPAWN_NOWAIT:
