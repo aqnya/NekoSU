@@ -49,6 +49,7 @@
 #include <linux/pid.h>
 #include <asm/fixmap.h>
 #include <linux/seccomp.h>
+#include <crypto/akcipher.h>
 
 #include "kernel_compat.h"
 
