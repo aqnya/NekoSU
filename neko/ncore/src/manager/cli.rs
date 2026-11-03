@@ -1,7 +1,7 @@
 use crate::defs;
 use crate::ksucalls::set_manager_uid;
 use crate::manager;
-use anyhow::{Ok, Result, anyhow};
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// `packages.list` always sits next to `packages.xml`; keep them together
@@ -75,4 +75,3 @@ pub fn run_boot_scan() {
         Err(e) => log::warn!("manager scan failed: {e:#}"),
     }
 }
-
