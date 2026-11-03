@@ -107,7 +107,7 @@ struct nksu_akcipher_wait {
 	int err;
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 static void nksu_akcipher_done(void *ctx, int err)
 {
 	struct nksu_akcipher_wait *wait = ctx;
