@@ -10,6 +10,7 @@
 #include <linux/uidgid.h>
 #include <linux/version.h>
 #include <linux/nsproxy.h>
+#include <linux/seccomp.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #endif
@@ -45,13 +46,6 @@ static void disable_seccomp(void)
 
 	if (task->seccomp.mode == SECCOMP_MODE_DISABLED) {
 		spin_unlock_irq(&task->sighand->siglock);
-		return;
-	}
-
-	if (task->seccomp.mode == SECCOMP_MODE_DEAD) {
-		spin_unlock_irq(&task->sighand->siglock);
-		pr_warn("seccomp: PID %d is in DEAD mode, cannot disable\n",
-			task->pid);
 		return;
 	}
 
