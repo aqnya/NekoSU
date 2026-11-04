@@ -10,10 +10,16 @@ use std::sync::{Mutex, Once};
 
 use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
+use jni::objects::JByteArray;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
+use prost::Message;
 
 use kzcall::*;
+
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/me.nekosu.aqnya.proto.rs"));
+}
 
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
@@ -74,23 +80,35 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfile(
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfileProto(
     mut env: EnvUnowned,
     _this: JObject,
-    uid: jint,
-    root_uid: jint,
-    caps: jlong,
-    domain: JString,
-    ns: jint,
+    data: JByteArray,
 ) -> jint {
-    let domain = get_utf(&mut env, &domain).unwrap_or_default();
-    match set_profile(uid, root_uid, caps as u64, &domain, ns) {
-        Ok(()) => 0,
-        Err(e) => {
-            log::error!("set_profile failed: {e:#}");
-            -1
+    env.with_env(|env| -> jni::errors::Result<jint> {
+        let bytes = env.convert_byte_array(&data)?;
+        let profile = match proto::ProfileEntry::decode(&bytes[..]) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("decode ProfileEntry failed: {e:#}");
+                return Ok(-1);
+            }
+        };
+        match set_profile(
+            profile.uid as i32,
+            profile.root_uid as i32,
+            profile.caps as u64,
+            &profile.domain,
+            profile.ns,
+        ) {
+            Ok(()) => Ok(0),
+            Err(e) => {
+                log::error!("set_profile failed: {e:#}");
+                Ok(-1)
+            }
         }
-    }
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[unsafe(no_mangle)]

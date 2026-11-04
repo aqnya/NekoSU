@@ -2,6 +2,7 @@
 package me.nekosu.aqnya.core
 
 import android.util.Log
+import me.nekosu.aqnya.proto.profileEntry
 
 object NcoreLoader {
     private const val TAG = "ncore_loader"
@@ -55,13 +56,24 @@ object Ncore {
         invert: Boolean,
     ): Int
 
-    external fun setProfile(
+    external fun setProfileProto(data: ByteArray): Int
+
+    fun setProfile(
         uid: Int,
         rootUid: Int,
         caps: Long,
         domain: String,
         namespace: Int,
-    ): Int
+    ): Int =
+        setProfileProto(
+            profileEntry {
+                this.uid = uid
+                this.rootUid = rootUid
+                this.caps = caps
+                this.domain = domain
+                this.ns = namespace
+            }.toByteArray(),
+        )
 
     external fun listProfiles(): String?
 
