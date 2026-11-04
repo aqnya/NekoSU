@@ -6,6 +6,7 @@ pub mod ioctl;
 mod utils;
 use crate::defs::*;
 use anyhow::Result;
+use proto::ProfileEntry;
 use std::sync::OnceLock;
 use uapi::*;
 use utils::*;
@@ -67,16 +68,20 @@ pub fn get_info() -> ksu_get_info_cmd {
     })
 }
 
-pub fn set_profile(uid: i32, root_uid: i32, caps: u64, domain: &str, ns: i32) -> Result<()> {
+pub fn set_profile(profile: &ProfileEntry) -> Result<()> {
     let mut data = [0u8; FMAC_DATA_PROFILE as usize];
-    put_u32(&mut data, FMAC_OFF_UID as usize, uid as u32);
-    put_u64(&mut data, FMAC_OFF_CAPS as usize, caps);
+    put_u32(&mut data, FMAC_OFF_UID as usize, profile.uid as u32);
+    put_u64(&mut data, FMAC_OFF_CAPS as usize, profile.caps);
     put_cstr(
         &mut data[FMAC_OFF_DOMAIN as usize..FMAC_OFF_NS as usize],
-        domain,
+        &profile.domain,
     );
-    put_u32(&mut data, FMAC_OFF_NS as usize, ns as u32);
-    put_u32(&mut data, FMAC_OFF_ROOT_UID as usize, root_uid as u32);
+    put_u32(&mut data, FMAC_OFF_NS as usize, profile.ns as u32);
+    put_u32(
+        &mut data,
+        FMAC_OFF_ROOT_UID as usize,
+        profile.root_uid as u32,
+    );
     ioctl::call(fmac_flag_IOC_SET_PROFILE, &mut data)?;
     Ok(())
 }

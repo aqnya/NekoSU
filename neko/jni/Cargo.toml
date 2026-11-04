@@ -15,7 +15,4 @@ libc = "0.2"
 log.workspace = true
 android_logger = "0.15"
 kzcall = {path = "../kzcall"}
-prost = "0.14.4"
-
-[build-dependencies]
-prost-build = "0.14.4"
+proto = {path = "../proto"}

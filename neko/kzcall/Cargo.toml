@@ -8,3 +8,4 @@ license.workspace = true
 anyhow.workspace = true
 libc = "0.2.191"
 uapi = {path = "../uapi"}
+proto = {path = "../proto"}

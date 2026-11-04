@@ -13,13 +13,8 @@ use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::JByteArray;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
-use prost::Message;
-
 use kzcall::*;
-
-pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/me.nekosu.aqnya.proto.rs"));
-}
+use proto::ProfileEntry;
 
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
@@ -87,20 +82,16 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfileProto(
 ) -> jint {
     env.with_env(|env| -> jni::errors::Result<jint> {
         let bytes = env.convert_byte_array(&data)?;
-        let profile = match proto::ProfileEntry::decode(&bytes[..]) {
+
+        let profile = match ProfileEntry::from_bytes(&bytes) {
             Ok(p) => p,
             Err(e) => {
-                log::error!("decode ProfileEntry failed: {e:#}");
+                log::error!("decode ProfileEntry failed: {e}");
                 return Ok(-1);
             }
         };
-        match set_profile(
-            profile.uid as i32,
-            profile.root_uid as i32,
-            profile.caps as u64,
-            &profile.domain,
-            profile.ns,
-        ) {
+
+        match set_profile(&profile) {
             Ok(()) => Ok(0),
             Err(e) => {
                 log::error!("set_profile failed: {e:#}");
