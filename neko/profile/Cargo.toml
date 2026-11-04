@@ -1,0 +1,11 @@
+[package]
+name = "profile"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+proto = { path = "../proto" }
+log.workspace = true
+kzcall = {path = "../kzcall"}
+libc = "0.2.191"

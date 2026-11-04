@@ -14,6 +14,7 @@ use jni::objects::JByteArray;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
 use kzcall::*;
+use profile::*;
 use proto::ProfileEntry;
 
 const READER_MAX_PATH: usize = 4096;
@@ -91,10 +92,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfileProto(
             }
         };
 
-        match set_profile(&profile) {
+        if let Err(e) = set_profile(&profile) {
+            log::error!("set_profile failed: {e:#}");
+        }
+        match save(&profile) {
             Ok(()) => Ok(0),
             Err(e) => {
-                log::error!("set_profile failed: {e:#}");
+                log::error!("save_profile failed: {e:#}");
                 Ok(-1)
             }
         }

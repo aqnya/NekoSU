@@ -11,3 +11,8 @@ message ProfileEntry {
     int32 ns = 4;
     string domain = 5;
 }
+
+message ProfileStore {
+  repeated ProfileEntry entries = 1;
+  uint32 total = 2;
+}

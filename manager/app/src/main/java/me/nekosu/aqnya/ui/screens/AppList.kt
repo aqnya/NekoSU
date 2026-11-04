@@ -325,7 +325,6 @@ class AppViewModel(
         rebuildConfigs()
         updateFilteredApps()
 
-        // 只把变更下发给内核；内核负责落盘（allow.profile），管理器不再保存。
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 if (config.allowed) {
