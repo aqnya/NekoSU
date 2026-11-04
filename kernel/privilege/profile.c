@@ -753,6 +753,49 @@ void nksu_profile_foreach(nksu_profile_iter_fn fn, void *ctx)
 	rcu_read_unlock();
 }
 
+struct save_ctx {
+	char *buf;
+	size_t cap;
+	size_t len;
+	bool overflow;
+};
+
+static inline u64 encode_caps(kernel_cap_t caps)
+{
+	u64 value = 0;
+
+	memcpy(&value, &caps, min_t(size_t, sizeof(value), sizeof(caps)));
+	return value;
+}
+
+static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns, const char *domain,
+		       size_t domain_len, void *ctx)
+{
+	struct save_ctx *s = ctx;
+	char line[160];
+	int n;
+
+	/* The manager's entry is re-granted by ncore's verified scan, never restored. */
+	if (is_manager_uid(uid))
+		return;
+
+	if (domain_len > 0)
+		n = scnprintf(line, sizeof(line), "%u %016llx %d %u %.*s\n", uid,
+			      (unsigned long long)encode_caps(caps), ns, (unsigned)root_uid,
+			      (int)min_t(size_t, domain_len, 64), domain);
+	else
+		n = scnprintf(line, sizeof(line), "%u %016llx %d %u -\n", uid,
+			      (unsigned long long)encode_caps(caps), ns, (unsigned)root_uid);
+	if (n <= 0)
+		return;
+	if (s->len + (size_t)n >= s->cap) {
+		s->overflow = true;
+		return;
+	}
+	memcpy(s->buf + s->len, line, (size_t)n);
+	s->len += (size_t)n;
+}
+
 int nksu_profile_to_text(char *buf, size_t cap)
 {
 	struct save_ctx s = { .buf = buf, .cap = cap, .len = 0, .overflow = false };
