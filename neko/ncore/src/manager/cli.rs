@@ -1,7 +1,7 @@
 use crate::defs;
-use crate::ksucalls::set_manager_uid;
 use crate::manager;
 use anyhow::{Result, anyhow};
+use kzcall::set_manager_uid;
 use std::path::PathBuf;
 
 /// `packages.list` always sits next to `packages.xml`; keep them together

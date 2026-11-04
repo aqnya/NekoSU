@@ -126,8 +126,6 @@ pub fn run() -> Result<()> {
             .with_tag("NekoSU"),
     );
 
-    ksucalls::setup_sigsys_handler();
-
     // The kernel redirects an execve() of /system/bin/su to this binary while
     // keeping argv[0] intact.
     let arg0 = std::env::args().next().unwrap_or_default();

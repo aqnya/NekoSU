@@ -11,7 +11,7 @@
  * crate (NKSU_* names); the KSU_* aliases below are kept so existing
  * ncore call sites don't have to change.
  */
-#![allow(nonstandard_style, dead_code)]
+#![allow(nonstandard_style)]
 use uapi::*;
 
 pub const KERNEL_SU_UAPI_VERSION: u32 = 5;

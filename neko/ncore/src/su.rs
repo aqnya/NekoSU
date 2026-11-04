@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use crate::{
-    defs, ksucalls,
+    defs,
     utils::{self, umask},
 };
 use anyhow::{Context, Ok, Result, anyhow};
 use getopts::Options;
+use rustix::{
+    process::getuid,
+    thread::{Gid, Uid, set_thread_res_gid, set_thread_res_uid},
+};
+use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::{cmp::Ordering, env};
 use std::{
     ffi::{CStr, CString},
     process::Command,
-};
-
-use rustix::{
-    process::getuid,
-    thread::{Gid, Uid, set_thread_res_gid, set_thread_res_uid},
 };
 
 fn print_usage(program: &str, opts: &Options) {
@@ -59,11 +59,6 @@ fn set_selinux_context(context: &str) -> Result<()> {
 #[allow(clippy::similar_names)]
 pub fn root_shell() -> Result<()> {
     // The kernel has already applied the selected root profile.
-
-    // A su-session driver fd deliberately survives the exec into ncore. Claim
-    // it before handling any arguments and restore FD_CLOEXEC so it cannot
-    // leak into the target shell, including when fd wrapping is disabled.
-    ksucalls::claim_inherited_driver_fd().context("claim inherited KernelSU driver fd")?;
 
     let env_args: Vec<String> = env::args().collect();
     let program = env_args[0].clone();
@@ -272,7 +267,7 @@ pub fn root_shell() -> Result<()> {
     }
 
     if no_new_privs {
-        ksucalls::set_no_new_privs().context("set NO_NEW_PRIVS")?;
+        set_no_new_privs().context("set NO_NEW_PRIVS")?;
     }
 
     // escape from the current cgroup and become session leader
@@ -304,5 +299,13 @@ fn add_path_to_env(path: &str) -> Result<()> {
     paths.push(new_path);
     let new_path_env = env::join_paths(paths)?;
     unsafe { env::set_var("PATH", new_path_env) };
+    Ok(())
+}
+
+fn set_no_new_privs() -> anyhow::Result<()> {
+    let ret = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
+    if ret != 0 {
+        return Err(io::Error::last_os_error().into());
+    }
     Ok(())
 }

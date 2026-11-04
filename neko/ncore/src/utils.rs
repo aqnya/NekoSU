@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::defs::KSU_TEMP_BACKUP_DIR_NAME;
-use crate::{assets, defs, ksucalls, restorecon};
+use crate::{assets, defs, restorecon};
 #[allow(unused_imports)]
 use std::fs::{Permissions, set_permissions};
 use std::os::unix::prelude::PermissionsExt;
@@ -127,7 +127,7 @@ pub fn is_safe_mode() -> bool {
     if safemode {
         return true;
     }
-    let safemode = ksucalls::check_kernel_safemode();
+    let safemode = kzcall::check_kernel_safemode();
     log::info!("kernel_safemode: {safemode}");
     safemode
 }
@@ -247,7 +247,7 @@ pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Resul
 
 pub fn detach_process_group(use_init_pgrp: bool) {
     if use_init_pgrp {
-        if let Err(e) = ksucalls::set_init_pgrp() {
+        if let Err(e) = kzcall::set_init_pgrp() {
             log::error!("failed to switch to init group: {e:?}");
         } else {
             return;

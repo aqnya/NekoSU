@@ -14,8 +14,6 @@ pub fn on_post_fs_data() -> Result<()> {
         return Ok(());
     }
 
-    ksucalls::report_post_fs_data();
-
     // Let the kernel verify this ncore image and authorize the manager
     // package before any module or app can run.  Best effort.
     crate::manager::cli::run_boot_scan();
@@ -153,18 +151,6 @@ pub fn on_services() {
         return;
     }
 
-    match ksucalls::report_services() {
-        Ok(true) => {}
-        Ok(false) => {
-            info!("services already started, skipping");
-            return;
-        }
-        Err(e) => {
-            error!("Failed to report services: {e:#}");
-            return;
-        }
-    }
-
     info!("on_services triggered!");
     setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
@@ -181,7 +167,7 @@ pub fn on_boot_completed() {
     crate::preinit::on_boot_completed();
 
     run_stage("boot-completed", ScriptWait::NoWait);
-    ksucalls::report_boot_complete();
+    kzcall::report_boot_complete();
 }
 
 fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
@@ -223,7 +209,7 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 
 fn setup_mount_layout() {
     match crate::btf::read_mount_layout() {
-        Ok(layout) => match ksucalls::set_mount_layout(layout.mnt_id_off, layout.mnt_off) {
+        Ok(layout) => match kzcall::set_mount_layout(layout.mnt_id_off, layout.mnt_off) {
             Ok(()) => info!(
                 "mount layout: mnt_id@{}, mnt@{}",
                 layout.mnt_id_off, layout.mnt_off
@@ -232,7 +218,7 @@ fn setup_mount_layout() {
         },
         Err(e) => {
             warn!("cannot read mount layout: {e:#}");
-            if let Err(e) = ksucalls::set_mount_layout(0, 0) {
+            if let Err(e) = kzcall::set_mount_layout(0, 0) {
                 warn!("mark ncore for mount handling failed: {e:#}");
             }
         }

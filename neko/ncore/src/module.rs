@@ -31,6 +31,7 @@ use std::{
 use zip_extensions::inflate::zip_extract::zip_extract_file_to_memory;
 
 use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
+use crate::ksu_uapi;
 use crate::module::ModuleType::{Active, All};
 use std::os::unix::{prelude::PermissionsExt, process::CommandExt};
 
@@ -68,7 +69,7 @@ pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, Str
         ("KSU_KERNEL_VER_CODE", ksucalls::get_version().to_string()),
         ("KSU_VER_CODE", defs::VERSION_CODE.to_string()),
         ("KSU_VER", defs::VERSION_NAME.to_string()),
-        ("KSU_UAPI_VER", ksucalls::uapi_version().to_string()),
+        ("KSU_UAPI_VER", ksu_uapi::KERNEL_SU_UAPI_VERSION.to_string()),
         ("KSU_RUNTIME_MODE", ksucalls::runtime_mode().to_string()),
         (
             "PATH",
