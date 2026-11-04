@@ -491,12 +491,7 @@ static int ncore_bootstrap(void)
 	}
 
 	if (kfile_exists(NKSU_DAEMON_BOOT_PATH)) {
-		/*
-		 * Already installed.  Re-assert the label every boot: an older
-		 * build created this as adb_data_file, which init cannot
-		 * execute, and this also repairs a lost xattr.
-		 */
-		nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
+		pr_info("ncore exists, skip!");
 		WRITE_ONCE(daemon_ready, true);
 		goto out;
 	}
