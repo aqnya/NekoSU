@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{error, info, warn};
+use profile::*;
 use std::{path::Path, time::Instant};
 
 pub fn on_post_fs_data() -> Result<()> {
@@ -114,6 +115,9 @@ pub fn on_post_fs_data() -> Result<()> {
 
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
+    if let Err(e) = load() {
+        warn!("load profile failed: {e}");
+    }
     Ok(())
 }
 
