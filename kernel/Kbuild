@@ -6,7 +6,6 @@ nksu-y += hook/handle.o hook/syscall.o hook/dispatch.o hook/get_arg.o hook/patch
 nksu-y += manager/manager.o manager/ioctl.o manager/feature.o manager/daemon.o manager/umount.o
 nksu-y += signing/signature.o 
 nksu-y += privilege/privilege.o privilege/profile.o privilege/ns.o
-nksu-y += privilege/profile_store.o
 nksu-y += spawn/spawn.o
 nksu-y += symbol/symbol.o symbol/symbol_compat.o
 nksu-y += fd/anonfd.o fd/eventfd.o fd/shm_hash.o
@@ -41,7 +40,6 @@ ifeq ($(CONFIG_LTO_CLANG),y)
     CFLAGS_selinux/hide.o := -flto=thin
     CFLAGS_selinux/engine.o := -flto=thin
     CFLAGS_privilege/profile.o := -flto=thin
-    CFLAGS_privilege/profile_store.o := -flto=thin
     CFLAGS_privilege/ns.o := -flto=thin
     CFLAGS_hook/handle.o := -flto=thin -O3
     CFLAGS_hook/patch.o := -flto=thin -O3
