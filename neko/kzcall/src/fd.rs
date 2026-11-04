@@ -10,10 +10,6 @@ fn init_driver_fd() -> Option<RawFd> {
     if let Ok(Some(fd)) = scan_driver_fd() {
         return Some(fd);
     }
-
-    // The kernel attaches the control fd via task_work when this ncore binary
-    // (or libncore.so) is exec'd, so it is already in /proc/self/fd here.
-    scan_driver_fd().ok().flatten()
 }
 
 fn scan_driver_fd() -> io::Result<Option<RawFd>> {
