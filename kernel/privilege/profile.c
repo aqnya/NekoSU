@@ -768,6 +768,8 @@ static inline u64 encode_caps(kernel_cap_t caps)
 	return value;
 }
 
+#include "manager/manager.h"
+
 static void save_entry(uid_t uid, uid_t root_uid, kernel_cap_t caps, int ns, const char *domain,
 		       size_t domain_len, void *ctx)
 {
