@@ -37,3 +37,6 @@
 
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 -keepattributes AnnotationDefault, Signature, InnerClasses, EnclosingMethod
+
+# Protobuf-lite
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
