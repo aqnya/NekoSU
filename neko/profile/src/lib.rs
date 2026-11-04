@@ -141,6 +141,32 @@ pub fn save(entry: &ProfileEntry) -> io::Result<()> {
     Ok(())
 }
 
+pub fn del(uid: u32) -> io::Result<()> {
+    ensure_root()?;
+    let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let mut store = read_store()?;
+
+    let before = store.entries.len();
+    store.entries.retain(|e| e.uid != uid);
+
+    if store.entries.len() == before {
+        log::debug!("profile del: uid={uid} not found");
+        return Ok(());
+    }
+
+    store.total = u32::try_from(store.entries.len()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("too many profile entries: {}", store.entries.len()),
+        )
+    })?;
+
+    write_store(&store)?;
+    log::info!("profile deleted: uid={uid}, total={}", store.entries.len());
+    Ok(())
+}
+
 pub fn save_replace(entries: &[ProfileEntry]) -> io::Result<()> {
     let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 

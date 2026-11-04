@@ -127,7 +127,15 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_deluid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    match del_uid(uid) {
+    if uid < 0 {
+        log::error!("del_uid: negative uid {uid}");
+        return -1;
+    }
+    if let Err(e) = del_uid(uid) {
+        log::error!("del_uid failed: {e:#}");
+        return -1;
+    }
+    match del(uid as u32) {
         Ok(()) => 0,
         Err(e) => {
             log::error!("del_uid failed: {e:#}");
