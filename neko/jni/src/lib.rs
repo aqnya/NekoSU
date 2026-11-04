@@ -2,7 +2,6 @@
 #![cfg(target_os = "android")]
 //! Rust replacement for the manager's former C++ JNI layer.
 #![allow(dead_code)]
-mod ioc;
 
 use std::ffi::{CStr, CString};
 use std::os::fd::RawFd;
@@ -13,6 +12,8 @@ use jni::EnvUnowned;
 use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
+
+use kzcall::*;
 
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
@@ -60,7 +61,11 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
     _this: JObject,
     value: jint,
 ) -> jint {
-    ioc::ctl(value)
+    let mut data = [];
+    match kzcall::ioctl::call(value as u32, &mut data) {
+        Ok(ret) => ret,
+        Err(_) => -1,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -73,13 +78,13 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfile(
     domain: JString,
     ns: jint,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
     let domain = get_utf(&mut env, &domain).unwrap_or_default();
-    match fd.set_profile(uid, root_uid, caps as u64, &domain, ns) {
+    match set_profile(uid, root_uid, caps as u64, &domain, ns) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("set_profile failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -89,12 +94,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_adduid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.add_uid(uid) {
+    match add_uid(uid) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("add_uid failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -104,12 +109,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_deluid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.del_uid(uid) {
+    match del_uid(uid) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("del_uid failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -119,10 +124,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_hasuid(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.has_uid(uid) {
+    match has_uid(uid) {
         Some(true) => 1,
         Some(false) => 0,
         None => -1,
@@ -136,12 +138,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setCap(
     uid: jint,
     caps: jlong,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.set_cap(uid, caps as u64) {
+    match set_cap(uid, caps as u64) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("set_cap failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -151,10 +153,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_getCap(
     _this: JObject,
     uid: jint,
 ) -> jlong {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.get_cap(uid) {
+    match get_cap(uid) {
         Some(caps) => caps as jlong,
         None => -1,
     }
@@ -166,12 +165,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_delCap(
     _this: JObject,
     uid: jint,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.del_cap(uid) {
+    match del_cap(uid) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("del_cap failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -186,16 +185,16 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_addSelinuxRule(
     effect: jint,
     invert: jboolean,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
     let src = get_utf(&mut env, &src).unwrap_or_default();
     let tgt = get_utf(&mut env, &tgt).unwrap_or_default();
     let cls = get_utf(&mut env, &cls).unwrap_or_default();
     let perm = get_utf(&mut env, &perm).unwrap_or_default();
-    match fd.add_selinux_rule(&src, &tgt, &cls, &perm, effect, jboolean_is_true(invert)) {
+    match add_selinux_rule(&src, &tgt, &cls, &perm, effect, jboolean_is_true(invert)) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("add_selinux_rule failed: {e:#}");
+            -1
+        }
     }
 }
 
@@ -223,10 +222,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_listProfiles(
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jstring {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return ptr::null_mut();
-    };
-    match fd.list_profiles() {
+    match list_profiles() {
         Some(text) => put_string(&mut env, &text),
         None => {
             log::error!("listProfiles failed");
@@ -240,10 +236,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_moduleVersion(
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jstring {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return ptr::null_mut();
-    };
-    match fd.module_version() {
+    match module_version() {
         Some(text) => put_string(&mut env, &text),
         None => ptr::null_mut(),
     }
@@ -254,10 +247,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureList(
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jstring {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return ptr::null_mut();
-    };
-    match fd.feature_list() {
+    match feature_list() {
         Some(text) => put_string(&mut env, &text),
         None => ptr::null_mut(),
     }
@@ -269,10 +259,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureGet(
     _this: JObject,
     id: jint,
 ) -> jlong {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.feature_get(id) {
+    match feature_get(id) {
         Some(value) => value as jlong,
         None => -1,
     }
@@ -285,12 +272,12 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
     id: jint,
     value: jlong,
 ) -> jint {
-    let Some(fd) = ioc::get_ctl_fd() else {
-        return -1;
-    };
-    match fd.feature_set(id, value as u64) {
+    match feature_set(id, value as u64) {
         Ok(()) => 0,
-        Err(()) => -1,
+        Err(e) => {
+            log::error!("feature_set failed: {e:#}");
+            -1
+        }
     }
 }
 

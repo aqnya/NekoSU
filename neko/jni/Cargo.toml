@@ -14,4 +14,4 @@ jni = "0.22"
 libc = "0.2"
 log.workspace = true
 android_logger = "0.15"
-uapi = {path = "../uapi"}
+kzcall = {path = "../kzcall"}
