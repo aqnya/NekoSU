@@ -9,6 +9,8 @@ use crate::defs::*;
 fn init_driver_fd() -> Option<RawFd> {
     if let Ok(Some(fd)) = scan_driver_fd() {
         return Some(fd);
+    } else {
+        return None;
     }
 }
 
