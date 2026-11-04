@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     kotlin("plugin.serialization") version embeddedKotlinVersion
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.protobuf)
 }
 
 // The Gradle root is manager/, so repository-level inputs (git metadata, uapi
@@ -115,6 +116,23 @@ val requireReleaseSigning: Boolean =
 
 if (requireReleaseSigning && !hasReleaseSigning) {
     error("release signing is required but signing/release.keystore or signing environment variables are missing")
+}
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+    }
+    generateProtoTasks {
+        all().configureEach {
+            builtins {
+                create("java") {
+                    option("lite")
+                }
+                create("kotlin") {
+                    option("lite")
+                }
+            }
+        }
+    }
 }
 
 android {
@@ -233,6 +251,7 @@ dependencies {
     implementation(libs.kyant.backdrop)
     implementation(libs.kyant.capsule)
     implementation(libs.androidx.graphics.shapes)
+    implementation(libs.protobuf.kotlin.lite)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
