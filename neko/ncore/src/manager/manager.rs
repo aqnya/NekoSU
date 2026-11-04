@@ -56,7 +56,7 @@ pub fn verify_package_signature(packages_xml: &Path, cert_hash: &CertHash) -> Re
 
     let buf = fs::read(packages_xml).with_context(|| format!("read {}", packages_xml.display()))?;
 
-    match abx::find_package_by_cert(&buf, |cert| {
+    match abx::find_package_by_cert(buf, |cert| {
         let hash = Sha256::digest(cert);
         hash[..] == cert_hash[..]
     }) {

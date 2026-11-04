@@ -48,13 +48,13 @@ pub enum AbxOutcome {
     ParseError,
 }
 
-struct Reader<'a> {
-    buf: &'a [u8],
+struct Reader {
+    buf: Vec<u8>,
     pos: usize,
-    interned: Vec<&'a [u8]>,
+    interned: Vec<Vec<u8>>,
 }
 
-impl<'a> Reader<'a> {
+impl Reader {
     fn read_byte(&mut self) -> Option<u8> {
         let b = *self.buf.get(self.pos)?;
         self.pos += 1;
@@ -82,17 +82,17 @@ impl<'a> Reader<'a> {
         Some(v)
     }
 
-    fn read_utf(&mut self) -> Option<&'a [u8]> {
+    fn read_utf(&mut self) -> Option<Vec<u8>> {
         let n = self.read_u16()? as usize;
         if self.pos + n > self.buf.len() {
             return None;
         }
-        let s = &self.buf[self.pos..self.pos + n];
+        let s = self.buf[self.pos..self.pos + n].to_vec();
         self.pos += n;
         Some(s)
     }
 
-    fn read_interned(&mut self) -> Option<&'a [u8]> {
+    fn read_interned(&mut self) -> Option<Vec<u8>> {
         let r = self.read_u16()?;
         if r == ABX_INTERNED_SENTINEL {
             let s = self.read_utf()?;
@@ -100,9 +100,9 @@ impl<'a> Reader<'a> {
                 return None;
             }
             self.interned.push(s);
-            Some(s)
+            self.interned.last().cloned()
         } else {
-            self.interned.get(r as usize).copied()
+            self.interned.get(r as usize).cloned()
         }
     }
 }
@@ -113,7 +113,7 @@ fn truncate_to_string(data: &[u8], max: usize) -> String {
 }
 
 /// Find the first `<package>` whose certificate is accepted by `match_fn`.
-pub fn find_package_by_cert<F>(buf: &[u8], mut match_fn: F) -> AbxOutcome
+pub fn find_package_by_cert<F>(buf: Vec<u8>, mut match_fn: F) -> AbxOutcome
 where
     F: FnMut(&[u8]) -> bool,
 {
@@ -132,7 +132,7 @@ where
     let mut sigs_depth: i32 = -1;
 
     let mut pkg = Package::default();
-    let mut cert: Option<&[u8]> = None;
+    let mut cert: Option<Vec<u8>> = None;
     let mut cert_checked = false;
 
     let mut document_complete = false;
@@ -161,12 +161,13 @@ where
                 let is_sigs = pkg_depth > 0
                     && sigs_depth < 0
                     && depth == pkg_depth + 1
-                    && tag_name == b"sigs";
-                let is_cert = sigs_depth > 0 && depth == sigs_depth + 1 && tag_name == b"cert";
+                    && tag_name.as_slice() == b"sigs";
+                let is_cert =
+                    sigs_depth > 0 && depth == sigs_depth + 1 && tag_name.as_slice() == b"cert";
 
-                let mut name_attr: Option<&[u8]> = None;
-                let mut code_attr: Option<&[u8]> = None;
-                let mut nlib_attr: Option<&[u8]> = None;
+                let mut name_attr: Option<Vec<u8>> = None;
+                let mut code_attr: Option<Vec<u8>> = None;
+                let mut nlib_attr: Option<Vec<u8>> = None;
                 let mut shared_uid: u32 = 0;
                 let mut own_uid: u32 = 0;
                 let mut shared_seen = false;
@@ -194,7 +195,7 @@ where
                     if !read_attr(
                         &mut r,
                         typ2,
-                        aname,
+                        &aname,
                         is_cert,
                         &mut cert,
                         &mut name_attr,
@@ -209,7 +210,7 @@ where
                     }
                 }
 
-                let is_pkg = pkg_depth < 0 && tag_name == b"package";
+                let is_pkg = pkg_depth < 0 && tag_name.as_slice() == b"package";
 
                 if is_pkg {
                     pkg_depth = depth;
@@ -217,9 +218,9 @@ where
                     cert_checked = false;
                     pkg = Package {
                         cert: Vec::new(),
-                        name: truncate_to_string(name_attr.unwrap_or_default(), 255),
-                        code_path: truncate_to_string(code_attr.unwrap_or_default(), 255),
-                        native_lib_path: truncate_to_string(nlib_attr.unwrap_or_default(), 255),
+                        name: truncate_to_string(&name_attr.unwrap_or_default(), 255),
+                        code_path: truncate_to_string(&code_attr.unwrap_or_default(), 255),
+                        native_lib_path: truncate_to_string(&nlib_attr.unwrap_or_default(), 255),
                         uid: if shared_seen { shared_uid } else { own_uid },
                         has_uid: shared_seen || own_seen,
                     };
@@ -228,15 +229,14 @@ where
                     sigs_depth = depth;
                 }
 
-                if let Some(c) = cert {
+                if let Some(c) = cert.take() {
                     if !cert_checked {
                         cert_checked = true;
-                        if match_fn(c) {
-                            pkg.cert = c.to_vec();
+                        if match_fn(&c) {
+                            pkg.cert = c;
                             return AbxOutcome::Found(pkg);
                         }
                     }
-                    cert = None;
                 }
             }
             ABX_TOKEN_END_TAG => {
@@ -288,15 +288,15 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn read_attr<'a>(
-    r: &mut Reader<'a>,
+fn read_attr(
+    r: &mut Reader,
     typ: u8,
     aname: &[u8],
     is_cert: bool,
-    cert: &mut Option<&'a [u8]>,
-    name_attr: &mut Option<&'a [u8]>,
-    code_attr: &mut Option<&'a [u8]>,
-    nlib_attr: &mut Option<&'a [u8]>,
+    cert: &mut Option<Vec<u8>>,
+    name_attr: &mut Option<Vec<u8>>,
+    code_attr: &mut Option<Vec<u8>>,
+    nlib_attr: &mut Option<Vec<u8>>,
     shared_uid: &mut u32,
     own_uid: &mut u32,
     shared_seen: &mut bool,
@@ -312,7 +312,7 @@ fn read_attr<'a>(
                 return false;
             }
             if is_cert && aname == b"key" {
-                *cert = Some(&r.buf[r.pos..r.pos + blen]);
+                *cert = Some(r.buf[r.pos..r.pos + blen].to_vec());
             }
             r.pos += blen;
         }
@@ -366,12 +366,12 @@ fn read_attr<'a>(
     true
 }
 
-fn assign_string<'a>(
+fn assign_string(
     aname: &[u8],
-    s: &'a [u8],
-    name_attr: &mut Option<&'a [u8]>,
-    code_attr: &mut Option<&'a [u8]>,
-    nlib_attr: &mut Option<&'a [u8]>,
+    s: Vec<u8>,
+    name_attr: &mut Option<Vec<u8>>,
+    code_attr: &mut Option<Vec<u8>>,
+    nlib_attr: &mut Option<Vec<u8>>,
 ) {
     if aname == b"name" {
         *name_attr = Some(s);
