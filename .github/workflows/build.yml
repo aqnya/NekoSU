@@ -135,6 +135,12 @@ jobs:
         rustup toolchain install stable --profile minimal
         rustup default stable
         rustup target add aarch64-linux-android
+        
+    - name: Install protoc (system)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler
+        protoc --version
 
     # bootparse generates its header bindings with bindgen at build time, so
     # the runner needs libclang on top of the Rust toolchain.
