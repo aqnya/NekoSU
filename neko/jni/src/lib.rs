@@ -55,17 +55,22 @@ fn jboolean_is_true(value: jboolean) -> bool {
     value != jboolean::default()
 }
 
+const PR_GET_SHM_FD: libc::c_int = 201;
+const PR_GET_CTL_FD: libc::c_int = 203;
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
     _env: EnvUnowned,
     _this: JObject,
     value: jint,
 ) -> jint {
-    let mut data = [];
-    match kzcall::ioctl::call(value as u32, &mut data) {
-        Ok(ret) => ret,
-        Err(_) => -1,
-    }
+    let cmd = match value {
+        1 => PR_GET_SHM_FD,
+        3 => PR_GET_CTL_FD,
+        _ => return -1,
+    };
+    unsafe { libc::prctl(cmd, 0, 0, 0, 0) };
+    0
 }
 
 #[unsafe(no_mangle)]
