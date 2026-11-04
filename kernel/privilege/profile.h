@@ -166,10 +166,6 @@ typedef void (*nksu_profile_iter_fn)(uid_t uid, uid_t root_uid, kernel_cap_t cap
 				     const char *domain, size_t domain_len, void *ctx);
 void nksu_profile_foreach(nksu_profile_iter_fn fn, void *ctx);
 
-/*
- * Persistence hook, implemented by the profile store (privilege/profile_store.c).
- * Called after every successful mutation so the on-disk copy stays in sync.
- */
-void nksu_profile_persist(void);
+int nksu_profile_to_text(char *buf, size_t cap);
 
 #endif /* __NKSU_PROFILE_H */

@@ -24,7 +24,6 @@
 #include "manager/manager.h"
 #include "manager/umount.h"
 #include "privilege/profile.h"
-#include "privilege/profile_store.h"
 #include "selinux/hide.h"
 #include "selinux/selinux.h"
 #include "symbol/symbol_compat.h"
@@ -47,7 +46,6 @@ static const struct nksu_component nksu_components[] = {
 	/* FEATURE: everything that needs the policy, /data and the zygote. */
 	NKSU_FEATURE_COMPONENT("anonymous fd", fmac_anonfd_init, fmac_anonfd_exit),
 	NKSU_FEATURE_COMPONENT("uid profile", nksu_profile_init, nksu_profile_exit),
-	NKSU_FEATURE_COMPONENT("profile store", nksu_profile_store_init, nksu_profile_store_exit),
 #ifndef CONFIG_NKSU_SYSCALL
 	NKSU_FEATURE_COMPONENT("tracepoint hook", load_tracepoint_hook, unload_tracepoint_hook),
 #endif

@@ -594,19 +594,6 @@ out:
 	return ret;
 }
 
-/*
- * Every successful mutation is mirrored to disk so the table survives a
- * reboot; the store is what makes the manager's per-startup sync unnecessary.
- */
-static int blob_update_and_persist(blob_modify_fn mod, void *ctx)
-{
-	int ret = blob_update(mod, ctx);
-
-	if (ret == 0)
-		nksu_profile_persist();
-	return ret;
-}
-
 int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps, const char *domain, int ns)
 {
 	struct set_all_ctx ctx = {
@@ -617,7 +604,7 @@ int nksu_profile_set(uid_t uid, uid_t root_uid, kernel_cap_t caps, const char *d
 		.ns = ns,
 	};
 
-	return blob_update_and_persist(__set_all, &ctx);
+	return blob_update(__set_all, &ctx);
 }
 
 int nksu_profile_set_caps(uid_t uid, kernel_cap_t caps)
@@ -627,7 +614,7 @@ int nksu_profile_set_caps(uid_t uid, kernel_cap_t caps)
 		.caps = caps,
 	};
 
-	return blob_update_and_persist(__set_caps, &ctx);
+	return blob_update(__set_caps, &ctx);
 }
 
 int nksu_profile_set_domain(uid_t uid, const char *domain)
@@ -637,7 +624,7 @@ int nksu_profile_set_domain(uid_t uid, const char *domain)
 		.domain = domain,
 	};
 
-	return blob_update_and_persist(__set_domain, &ctx);
+	return blob_update(__set_domain, &ctx);
 }
 
 int nksu_profile_set_ns(uid_t uid, int ns)
@@ -647,7 +634,7 @@ int nksu_profile_set_ns(uid_t uid, int ns)
 		.ns = ns,
 	};
 
-	return blob_update_and_persist(__set_ns, &ctx);
+	return blob_update(__set_ns, &ctx);
 }
 
 /*
@@ -668,14 +655,14 @@ int nksu_profile_clear(uid_t uid)
 {
 	struct clear_ctx ctx = { .uid = uid };
 
-	return blob_update_and_persist(__clear_entry, &ctx);
+	return blob_update(__clear_entry, &ctx);
 }
 
 void nksu_profile_clear_all(void)
 {
 	struct clear_ctx ctx = { .clear_all = true };
 
-	blob_update_and_persist(__clear_entry, &ctx);
+	blob_update(__clear_entry, &ctx);
 }
 
 void nksu_profile_exit(void)
@@ -764,4 +751,26 @@ void nksu_profile_foreach(nksu_profile_iter_fn fn, void *ctx)
 		}
 	}
 	rcu_read_unlock();
+}
+
+int nksu_profile_to_text(char *buf, size_t cap)
+{
+	struct save_ctx s = { .buf = buf, .cap = cap, .len = 0, .overflow = false };
+	int head;
+
+	if (!buf || cap == 0)
+		return -ENOSPC;
+
+	head = scnprintf(buf, cap,
+			 "# nksu allow.profile v1\n"
+			 "# <uid> <caps_hex> <ns> <root_uid> <selinux_domain>\n");
+	if (head > 0)
+		s.len = (size_t)head;
+
+	nksu_profile_foreach(save_entry, &s);
+
+	if (s.overflow || s.len + 1 > cap)
+		return -ENOSPC;
+	buf[s.len] = '\0';
+	return (int)s.len;
 }

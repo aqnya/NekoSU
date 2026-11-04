@@ -20,7 +20,7 @@
 #include "nksu.h"
 #include "nksu_task.h"
 #include "boot/safe_mode.h"
-#include "privilege/profile_store.h"
+#include "privilege/profile.h"
 #include "hook/handle.h"
 #include "symbol/symbol_compat.h"
 #include "manager.h"
