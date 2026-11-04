@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package me.nekosu.aqnya.proto;
+option java_package = "me.nekosu.aqnya.proto";
+option java_multiple_files = true;
+
+message ProfileEntry {
+    uint32 uid = 1;
+    uint32 root_uid = 2;
+    uint64 caps = 3;
+    int32 ns = 4;
+    string domain = 5;
+}
