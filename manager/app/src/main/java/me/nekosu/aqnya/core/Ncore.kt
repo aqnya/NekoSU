@@ -2,15 +2,22 @@
 package me.nekosu.aqnya.core
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
 import me.nekosu.aqnya.proto.profileEntry
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 
 object NcoreLoader {
     private const val TAG = "ncore_loader"
+
+    @Volatile
     private var isLibraryLoaded = false
 
+    @Synchronized
     fun init() {
         if (isLibraryLoaded) return
-
         try {
             System.loadLibrary("jni")
             isLibraryLoaded = true
@@ -21,33 +28,73 @@ object NcoreLoader {
 }
 
 object Ncore {
-    external fun helloLog()
+    private const val JNI_THREAD_NAME = "ncore-jni"
 
-    external fun ctl(value: Int): Int
+    private val onJniThread = ThreadLocal.withInitial { false }
 
-    external fun adduid(value: Int): Int
+    private val jniExecutor =
+        Executors.newSingleThreadExecutor { r ->
+            Thread({
+                onJniThread.set(true)
+                r.run()
+            }, JNI_THREAD_NAME).apply { isDaemon = true }
+        }
 
-    external fun deluid(value: Int): Int
+    private val jniDispatcher: CoroutineDispatcher = jniExecutor.asCoroutineDispatcher()
 
-    external fun hasuid(value: Int): Int
+    private fun <T> runJni(block: () -> T): T {
+        NcoreLoader.init()
+        if (onJniThread.get()) return block()
+        return try {
+            jniExecutor.submit(block).get()
+        } catch (e: ExecutionException) {
+            throw e.cause ?: e
+        }
+    }
 
-    external fun addRule(
+    private suspend fun <T> runJniAsync(block: () -> T): T {
+        NcoreLoader.init()
+        return withContext(jniDispatcher) { block() }
+    }
+
+    @JvmName("helloLog")
+    private external fun nativeHelloLog()
+
+    @JvmName("ctl")
+    private external fun nativeCtl(value: Int): Int
+
+    @JvmName("adduid")
+    private external fun nativeAdduid(value: Int): Int
+
+    @JvmName("deluid")
+    private external fun nativeDeluid(value: Int): Int
+
+    @JvmName("hasuid")
+    private external fun nativeHasuid(value: Int): Int
+
+    @JvmName("addRule")
+    private external fun nativeAddRule(
         path: String,
         statusBits: Long,
     ): Int
 
-    external fun delRule(path: String): Int
+    @JvmName("delRule")
+    private external fun nativeDelRule(path: String): Int
 
-    external fun setCap(
+    @JvmName("setCap")
+    private external fun nativeSetCap(
         uid: Int,
         caps: Long,
     ): Int
 
-    external fun getCap(uid: Int): Long
+    @JvmName("getCap")
+    private external fun nativeGetCap(uid: Int): Long
 
-    external fun delCap(uid: Int): Int
+    @JvmName("delCap")
+    private external fun nativeDelCap(uid: Int): Int
 
-    external fun addSelinuxRule(
+    @JvmName("addSelinuxRule")
+    private external fun nativeAddSelinuxRule(
         src: String?,
         tgt: String?,
         cls: String?,
@@ -56,7 +103,111 @@ object Ncore {
         invert: Boolean,
     ): Int
 
-    external fun setProfileProto(data: ByteArray): Int
+    @JvmName("setProfileProto")
+    private external fun nativeSetProfileProto(data: ByteArray): Int
+
+    @JvmName("listProfiles")
+    private external fun nativeListProfiles(): String?
+
+    @JvmName("readFile")
+    private external fun nativeReadFile(path: String): ByteArray?
+
+    @JvmName("readFilePersistent")
+    private external fun nativeReadFilePersistent(path: String): ByteArray?
+
+    @JvmName("writeBlock")
+    private external fun nativeWriteBlock(
+        srcPath: String,
+        dstPath: String,
+    ): Boolean
+
+    @JvmName("isGki")
+    private external fun nativeIsGki(): Boolean
+
+    @JvmName("kernelVersion")
+    private external fun nativeKernelVersion(): String?
+
+    @JvmName("kernelRelease")
+    private external fun nativeKernelRelease(): String?
+
+    @JvmName("moduleVersion")
+    private external fun nativeModuleVersion(): String?
+
+    @JvmName("featureList")
+    private external fun nativeFeatureList(): String?
+
+    @JvmName("featureGet")
+    private external fun nativeFeatureGet(id: Int): Long
+
+    @JvmName("featureSet")
+    private external fun nativeFeatureSet(
+        id: Int,
+        value: Long,
+    ): Int
+
+    @JvmName("getSlotSuffix")
+    private external fun nativeGetSlotSuffix(): String?
+
+    @JvmName("findVendorBoot")
+    private external fun nativeFindVendorBoot(
+        slotSuffix: String,
+        allowSlotless: Boolean,
+    ): String?
+
+    @JvmName("findBoot")
+    private external fun nativeFindBoot(
+        slotSuffix: String,
+        allowSlotless: Boolean,
+    ): String?
+
+    @JvmName("helloLogApi")
+    fun helloLog(): Unit = runJni { nativeHelloLog() }
+
+    @JvmName("ctlApi")
+    fun ctl(value: Int): Int = runJni { nativeCtl(value) }
+
+    @JvmName("adduidApi")
+    fun adduid(value: Int): Int = runJni { nativeAdduid(value) }
+
+    @JvmName("deluidApi")
+    fun deluid(value: Int): Int = runJni { nativeDeluid(value) }
+
+    @JvmName("hasuidApi")
+    fun hasuid(value: Int): Int = runJni { nativeHasuid(value) }
+
+    @JvmName("addRuleApi")
+    fun addRule(
+        path: String,
+        statusBits: Long,
+    ): Int = runJni { nativeAddRule(path, statusBits) }
+
+    @JvmName("delRuleApi")
+    fun delRule(path: String): Int = runJni { nativeDelRule(path) }
+
+    @JvmName("setCapApi")
+    fun setCap(
+        uid: Int,
+        caps: Long,
+    ): Int = runJni { nativeSetCap(uid, caps) }
+
+    @JvmName("getCapApi")
+    fun getCap(uid: Int): Long = runJni { nativeGetCap(uid) }
+
+    @JvmName("delCapApi")
+    fun delCap(uid: Int): Int = runJni { nativeDelCap(uid) }
+
+    @JvmName("addSelinuxRuleApi")
+    fun addSelinuxRule(
+        src: String?,
+        tgt: String?,
+        cls: String?,
+        perm: String?,
+        effect: Int,
+        invert: Boolean,
+    ): Int = runJni { nativeAddSelinuxRule(src, tgt, cls, perm, effect, invert) }
+
+    @JvmName("setProfileProtoApi")
+    fun setProfileProto(data: ByteArray): Int = runJni { nativeSetProfileProto(data) }
 
     fun setProfile(
         uid: Int,
@@ -75,56 +226,73 @@ object Ncore {
             }.toByteArray(),
         )
 
-    external fun listProfiles(): String?
+    @JvmName("listProfilesApi")
+    fun listProfiles(): String? = runJni { nativeListProfiles() }
 
-    external fun readFile(path: String): ByteArray?
+    @JvmName("readFileApi")
+    fun readFile(path: String): ByteArray? = runJni { nativeReadFile(path) }
 
-    /**
-     * 经常驻 root 子进程读取文件：只 fork 一次，之后按请求走管道，避免 WebUI
-     * 每读一个资源都要 fork。返回空数组表示文件不存在或为空；返回 null 表示读取器
-     * 本身失败，调用方应回退到 [readFile]。
-     */
-    external fun readFilePersistent(path: String): ByteArray?
+    @JvmName("readFilePersistentApi")
+    fun readFilePersistent(path: String): ByteArray? = runJni { nativeReadFilePersistent(path) }
 
-    /** 把 [srcPath] 流式写入 [dstPath]（root 权限，子进程执行）；成功返回 true。 */
-    external fun writeBlock(
+    @JvmName("writeBlockApi")
+    fun writeBlock(
         srcPath: String,
         dstPath: String,
-    ): Boolean
+    ): Boolean = runJni { nativeWriteBlock(srcPath, dstPath) }
 
-    external fun isGki(): Boolean
+    @JvmName("isGkiApi")
+    fun isGki(): Boolean = runJni { nativeIsGki() }
 
-    external fun kernelVersion(): String?
+    @JvmName("kernelVersionApi")
+    fun kernelVersion(): String? = runJni { nativeKernelVersion() }
 
-    /** uname() 的原始 release 字符串，如 `5.15.194-android13-8-...`；失败返回 null。 */
-    external fun kernelRelease(): String?
+    @JvmName("kernelReleaseApi")
+    fun kernelRelease(): String? = runJni { nativeKernelRelease() }
 
-    /** 运行中内核模块（nksu.ko）的构建版本，用于和 APK 版本比对。 */
-    external fun moduleVersion(): String?
+    @JvmName("moduleVersionApi")
+    fun moduleVersion(): String? = runJni { nativeModuleVersion() }
 
-    /** 内核 feature 列表，每行 `<id> <name> <value>`；失败返回 null。 */
-    external fun featureList(): String?
+    @JvmName("featureListApi")
+    fun featureList(): String? = runJni { nativeFeatureList() }
 
-    /** 查询单个 feature 的值；失败返回 -1。 */
-    external fun featureGet(id: Int): Long
+    @JvmName("featureGetApi")
+    fun featureGet(id: Int): Long = runJni { nativeFeatureGet(id) }
 
-    /** 开关 feature（value 非 0 开启）；成功返回 0。 */
-    external fun featureSet(
+    @JvmName("featureSetApi")
+    fun featureSet(
         id: Int,
         value: Long,
-    ): Int
+    ): Int = runJni { nativeFeatureSet(id, value) }
 
-    external fun getSlotSuffix(): String?
+    @JvmName("getSlotSuffixApi")
+    fun getSlotSuffix(): String? = runJni { nativeGetSlotSuffix() }
 
-    /** 查找 vendor_boot 分区路径（root 子进程）；找不到返回 null。 */
-    external fun findVendorBoot(
+    @JvmName("findVendorBootApi")
+    fun findVendorBoot(
         slotSuffix: String,
         allowSlotless: Boolean,
-    ): String?
+    ): String? = runJni { nativeFindVendorBoot(slotSuffix, allowSlotless) }
 
-    /** 查找 boot 分区路径（root 子进程）；找不到返回 null。 */
-    external fun findBoot(
+    @JvmName("findBootApi")
+    fun findBoot(
         slotSuffix: String,
         allowSlotless: Boolean,
-    ): String?
+    ): String? = runJni { nativeFindBoot(slotSuffix, allowSlotless) }
+
+    object Suspend {
+        suspend fun helloLog() = runJniAsync { nativeHelloLog() }
+
+        suspend fun ctl(value: Int): Int = runJniAsync { nativeCtl(value) }
+
+        suspend fun adduid(value: Int): Int = runJniAsync { nativeAdduid(value) }
+
+        suspend fun deluid(value: Int): Int = runJniAsync { nativeDeluid(value) }
+
+        suspend fun hasuid(value: Int): Int = runJniAsync { nativeHasuid(value) }
+
+        suspend fun kernelVersion(): String? = runJniAsync { nativeKernelVersion() }
+
+        suspend fun readFile(path: String): ByteArray? = runJniAsync { nativeReadFile(path) }
+    }
 }
