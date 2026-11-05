@@ -496,10 +496,15 @@ struct nksu_app_scan {
 	char path[NKSU_APP_PATH_MAX];
 	char found[NKSU_APP_PATH_MAX];
 };
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 static bool nksu_dir_list_actor(struct dir_context *ctx, const char *name, int namelen, loff_t pos,
 				u64 ino, unsigned int d_type)
 {
+#else
+static int nksu_dir_list_actor(struct dir_context *ctx, const char *name, int namelen, loff_t pos,
+			       u64 ino, unsigned int d_type)
+{
+#endif
 	struct nksu_dir_list *list = container_of(ctx, struct nksu_dir_list, ctx);
 
 	(void)pos;
