@@ -966,7 +966,7 @@ static int nksu_umount_feature_get(u64 *value)
 	return 0;
 }
 
-static int nksu_umount_apply(u64 value, bool persist)
+static int nksu_umount_apply(u64 value)
 {
 	int ret = 0;
 
@@ -983,15 +983,12 @@ static int nksu_umount_apply(u64 value, bool persist)
 	}
 	mutex_unlock(&nksu_umount_state_lock);
 
-	if (!ret && persist && nksu_feature_persist_set(NKSU_UMOUNT_DISABLED_NAME, !value))
-		pr_warn("cannot persist feature state\n");
-
 	return ret;
 }
 
 static int nksu_umount_feature_set(u64 value)
 {
-	return nksu_umount_apply(value, true);
+	return nksu_umount_apply(value);
 }
 
 static const struct nksu_feature nksu_umount_feature = {
@@ -1011,27 +1008,7 @@ int nksu_umount_init(void)
 		return ret;
 	}
 
-	mutex_lock(&nksu_umount_state_lock);
-	ret = nksu_umount_start();
-	if (!ret)
-		nksu_umount_running = true;
-	mutex_unlock(&nksu_umount_state_lock);
-
 	return ret;
-}
-
-/*
- * Runs in the feature group, after /data and the SELinux domain are available.
- * The feature itself must already be running (it has to cover ncore's mount
- * scripts), so this only applies a persisted "disabled" marker.
- */
-int nksu_umount_feature_init(void)
-{
-	if (!nksu_feature_persist_has(NKSU_UMOUNT_DISABLED_NAME))
-		return 0;
-
-	pr_info("disabled by persisted feature state\n");
-	return nksu_umount_apply(0, false);
 }
 
 void nksu_umount_exit(void)
