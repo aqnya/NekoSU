@@ -115,9 +115,6 @@ pub fn on_post_fs_data() -> Result<()> {
 
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
-    if let Err(e) = store::load() {
-        warn!("load store failed: {e}");
-    }
     Ok(())
 }
 
@@ -171,6 +168,9 @@ pub fn on_boot_completed() {
     crate::preinit::on_boot_completed();
 
     run_stage("boot-completed", ScriptWait::NoWait);
+    if let Err(e) = store::load() {
+        warn!("load store failed: {e}");
+    }
     kzcall::report_boot_complete();
 }
 
