@@ -256,7 +256,9 @@ extern typeof(wait_for_initramfs) *nksu_wait_for_initramfs;
 
 /* fsnotify: the package observer that watches packages.xml (manager.c). */
 extern typeof(fsnotify_alloc_group) *nksu_fsnotify_alloc_group;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 extern typeof(fsnotify_init_mark) *nksu_fsnotify_init_mark;
+#endif
 extern typeof(fsnotify_put_mark) *nksu_fsnotify_put_mark;
 extern typeof(fsnotify_put_group) *nksu_fsnotify_put_group;
 extern typeof(fsnotify_destroy_mark) *nksu_fsnotify_destroy_mark;
@@ -454,6 +456,10 @@ NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group,
 NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group, (const struct fsnotify_ops *ops),
 	       (ops))
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+NKSU_SYMBOL_VOID_FN(fsnotify_init_mark, (struct fsnotify_mark * mark, struct fsnotify_group *group),
+		    (mark, group))
+#endif
 #endif
 
 /*
@@ -529,7 +535,9 @@ NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group, (const struct fsno
 #define wait_for_initramfs nksu_wait_for_initramfs
 #endif
 #define fsnotify_alloc_group nksu_fsnotify_alloc_group_fn
-#define fsnotify_init_mark nksu_fsnotify_init_mark
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+#define fsnotify_init_mark nksu_fsnotify_init_mark_fn
+#endif
 #define fsnotify_put_mark nksu_fsnotify_put_mark
 #define fsnotify_put_group nksu_fsnotify_put_group
 #define fsnotify_destroy_mark nksu_fsnotify_destroy_mark

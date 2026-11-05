@@ -89,7 +89,9 @@ typeof(wait_for_initramfs) *nksu_wait_for_initramfs;
 #endif
 
 typeof(fsnotify_alloc_group) *nksu_fsnotify_alloc_group;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 typeof(fsnotify_init_mark) *nksu_fsnotify_init_mark;
+#endif
 typeof(fsnotify_put_mark) *nksu_fsnotify_put_mark;
 typeof(fsnotify_put_group) *nksu_fsnotify_put_group;
 typeof(fsnotify_destroy_mark) *nksu_fsnotify_destroy_mark;
@@ -208,7 +210,9 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_wait_for_initramfs, "wait_for_initramfs");
 #endif
 	NKSU_RESOLVE(nksu_fsnotify_alloc_group, "fsnotify_alloc_group");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	NKSU_RESOLVE(nksu_fsnotify_init_mark, "fsnotify_init_mark");
+#endif
 	NKSU_RESOLVE(nksu_fsnotify_put_mark, "fsnotify_put_mark");
 	NKSU_RESOLVE(nksu_fsnotify_put_group, "fsnotify_put_group");
 	NKSU_RESOLVE(nksu_fsnotify_destroy_mark, "fsnotify_destroy_mark");
@@ -322,7 +326,9 @@ void nksu_symbol_compat_exit(void)
 	nksu_wait_for_initramfs = NULL;
 #endif
 	nksu_fsnotify_alloc_group = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	nksu_fsnotify_init_mark = NULL;
+#endif
 	nksu_fsnotify_put_mark = NULL;
 	nksu_fsnotify_put_group = NULL;
 	nksu_fsnotify_destroy_mark = NULL;
