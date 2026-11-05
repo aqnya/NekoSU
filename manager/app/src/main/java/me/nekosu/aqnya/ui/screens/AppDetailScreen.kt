@@ -51,22 +51,6 @@ import me.nekosu.aqnya.ui.component.ExpressiveTextField
 import me.nekosu.aqnya.ui.component.ModeLabel
 import me.nekosu.aqnya.ui.component.currentListItemShapes
 
-/** Build an [AppConfig] from the screen's draft values (used for live saving). */
-private fun buildConfig(
-    allowed: Boolean,
-    rootUid: String,
-    caps: Set<LinuxCap>,
-    domain: String,
-    ns: NksuNamespace,
-): AppConfig =
-    AppConfig(
-        allowed = allowed,
-        rootUid = rootUid.toIntOrNull() ?: 0,
-        caps = caps,
-        selinuxDomain = domain,
-        namespace = ns,
-    )
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CapsSheet(
@@ -473,10 +457,10 @@ private fun NamespaceDialog(
 fun AppDetailScreen(
     app: AppInfo,
     config: AppConfig?,
-    onSave: (AppConfig) -> Unit,
+    onSave: (AppConfig?) -> Unit,
     onBack: () -> Unit,
 ) {
-    var allowed by rememberSaveable { mutableStateOf(config?.allowed ?: false) }
+    var allowed by rememberSaveable { mutableStateOf(config != null) }
 
     val capsSaver =
         remember {
@@ -520,7 +504,18 @@ fun AppDetailScreen(
         capsValue: Set<LinuxCap> = caps,
         domainValue: String = domain,
         nsValue: NksuNamespace = ns,
-    ) = onSave(buildConfig(allowedValue, rootUidValue, capsValue, domainValue, nsValue))
+    ) = onSave(
+        if (allowedValue) {
+            AppConfig(
+                rootUid = rootUidValue.toIntOrNull() ?: 0,
+                caps = capsValue,
+                selinuxDomain = domainValue,
+                namespace = nsValue,
+            )
+        } else {
+            null
+        },
+    )
 
     if (showCapsSheet) {
         CapsSheet(
@@ -881,7 +876,7 @@ private fun AppDetailScreenPreview() {
                     isSystem = false,
                     isLaunchable = true,
                 ),
-            config = AppConfig(allowed = true),
+            config = AppConfig(),
             onSave = {},
             onBack = {},
         )

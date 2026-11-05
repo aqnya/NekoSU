@@ -5,7 +5,6 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
-import me.nekosu.aqnya.proto.profileEntry
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
@@ -208,23 +207,6 @@ object Ncore {
 
     @JvmName("setProfileProtoApi")
     fun setProfileProto(data: ByteArray): Int = runJni { nativeSetProfileProto(data) }
-
-    fun setProfile(
-        uid: Int,
-        rootUid: Int,
-        caps: Long,
-        domain: String,
-        namespace: Int,
-    ): Int =
-        setProfileProto(
-            profileEntry {
-                this.uid = uid
-                this.rootUid = rootUid
-                this.caps = caps
-                this.domain = domain
-                this.ns = namespace
-            }.toByteArray(),
-        )
 
     @JvmName("listProfilesApi")
     fun listProfiles(): String? = runJni { nativeListProfiles() }

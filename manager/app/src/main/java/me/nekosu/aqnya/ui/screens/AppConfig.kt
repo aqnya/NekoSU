@@ -76,7 +76,6 @@ enum class NksuNamespace(
 
 @Immutable
 data class AppConfig(
-    val allowed: Boolean = false,
     val rootUid: Int = 0,
     val caps: Set<LinuxCap> = DEFAULT_CAPS,
     val selinuxDomain: String = "u:r:nksu:s0",

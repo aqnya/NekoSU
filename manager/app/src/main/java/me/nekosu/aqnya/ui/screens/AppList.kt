@@ -63,6 +63,7 @@ import kotlinx.serialization.protobuf.ProtoBuf
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.Ncore
 import me.nekosu.aqnya.core.navigation.AppRoute
+import me.nekosu.aqnya.proto.profileEntry
 import me.nekosu.aqnya.ui.component.AppCard
 import me.nekosu.aqnya.ui.component.SearchAppBar
 import me.nekosu.aqnya.ui.component.groupShape
@@ -314,10 +315,10 @@ class AppViewModel(
 
     fun setAppConfig(
         app: AppInfo,
-        config: AppConfig,
+        config: AppConfig?,
     ) {
         profilesByUid =
-            if (config.allowed) {
+            if (config != null) {
                 profilesByUid + (app.uid to config)
             } else {
                 profilesByUid - app.uid
@@ -327,9 +328,17 @@ class AppViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (config.allowed) {
+                if (config != null) {
                     val capsBits = config.caps.fold(0L) { acc, cap -> acc or (1L shl cap.value) }
-                    Ncore.setProfile(app.uid, config.rootUid, capsBits, config.selinuxDomain, config.namespace.value)
+                    Ncore.setProfileProto(
+                        profileEntry {
+                            uid = app.uid
+                            rootUid = config.rootUid
+                            caps = capsBits
+                            domain = config.selinuxDomain
+                            ns = config.namespace.value
+                        }.toByteArray(),
+                    )
                 } else {
                     Ncore.deluid(app.uid)
                 }
@@ -378,7 +387,6 @@ private fun parseAllowProfile(text: String): Map<Int, AppConfig> {
         val namespace = NksuNamespace.entries.find { it.value == nsValue } ?: NksuNamespace.INHERITED
         profiles[uid] =
             AppConfig(
-                allowed = true,
                 rootUid = rootUid,
                 caps = capSet,
                 selinuxDomain = domain,
@@ -565,7 +573,7 @@ fun AppListScreen(
                         ) { index, app ->
                             AppInfoItem(
                                 app = app,
-                                config = viewModel.appConfigs[app.packageName],
+                                allowed = viewModel.appConfigs.containsKey(app.packageName),
                                 onClick = { navController.navigate(AppRoute.appDetail(app.packageName)) },
                                 shape = groupShape(index, allItems.size),
                                 modifier =
@@ -625,12 +633,11 @@ fun EmptyState(
 @Composable
 fun AppInfoItem(
     app: AppInfo,
-    config: AppConfig?,
+    allowed: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: Shape = ContinuousCornerShape(20.dp),
 ) {
-    val isAllowed = config?.allowed == true
     val haptic = LocalHapticFeedback.current
 
     AppCard(
@@ -674,7 +681,7 @@ fun AppInfoItem(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isAllowed) AppTag(label = "allowed", color = MaterialTheme.colorScheme.primary)
+                if (allowed) AppTag(label = "allowed", color = MaterialTheme.colorScheme.primary)
                 if (app.isSystem) AppTag(label = "system", color = MaterialTheme.colorScheme.secondary)
             }
         }
