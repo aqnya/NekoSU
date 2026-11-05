@@ -474,6 +474,10 @@ NKSU_SYMBOL_FN(int, fsnotify_add_mark,
 		unsigned int obj_type, int add_flags, __kernel_fsid_t *fsid),
 	       (mark, conn, obj_type, add_flags, fsid))
 #endif
+NKSU_SYMBOL_FN(int, access_process_vm,
+	       (struct task_struct * tsk, unsigned long addr, void *buf,
+		size_t len, unsigned int gup_flags),
+	       (tsk, addr, buf, len, gup_flags))
 #endif
 
 /*
@@ -538,7 +542,7 @@ NKSU_SYMBOL_FN(int, fsnotify_add_mark,
 #define kernel_write nksu_kernel_write
 #define find_task_by_vpid nksu_find_task_by_vpid_fn
 #define free_uid nksu_free_uid_fn
-#define access_process_vm nksu_access_process_vm
+#define access_process_vm nksu_access_process_vm_fn
 #define tasklist_lock (*nksu_tasklist_lock)
 #define commit_creds nksu_commit_creds_fn
 #define abort_creds nksu_abort_creds_fn
