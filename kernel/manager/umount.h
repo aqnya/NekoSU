@@ -12,7 +12,6 @@
 #define NKSU_MNT_ID_MIN 2000000000U
 
 int nksu_umount_init(void);
-int nksu_umount_feature_init(void);
 void nksu_umount_exit(void);
 
 int nksu_umount_add(const char *path, int flags);

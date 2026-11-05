@@ -51,7 +51,6 @@ static const struct nksu_component nksu_components[] = {
 #endif
 	NKSU_FEATURE_COMPONENT("ncore bootstrap", ncore_boot_init, ncore_boot_exit),
 	NKSU_FEATURE_COMPONENT("SELinux hide", nksu_selinux_hide_init, nksu_selinux_hide_exit),
-	NKSU_FEATURE_COMPONENT("umount config", nksu_umount_feature_init, NULL),
 #ifdef CONFIG_NKSU_SYSCALL
 	NKSU_FEATURE_COMPONENT("syscall hook", init_syscall_hook, exit_syscall_hook),
 #endif
