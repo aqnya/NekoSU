@@ -475,8 +475,8 @@ NKSU_SYMBOL_FN(int, fsnotify_add_mark,
 	       (mark, conn, obj_type, add_flags, fsid))
 #endif
 NKSU_SYMBOL_FN(int, access_process_vm,
-	       (struct task_struct * tsk, unsigned long addr, void *buf,
-		size_t len, unsigned int gup_flags),
+	       (struct task_struct * tsk, unsigned long addr, void *buf, size_t len,
+		unsigned int gup_flags),
 	       (tsk, addr, buf, len, gup_flags))
 #endif
 

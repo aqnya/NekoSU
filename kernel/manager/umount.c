@@ -1007,6 +1007,10 @@ int nksu_umount_init(void)
 		pr_err("feature register failed: %d\n", ret);
 		return ret;
 	}
+	ret = nksu_umount_start();
+	if (ret) {
+		pr_warn("failed to start umount");
+	}
 
 	return ret;
 }
