@@ -742,6 +742,8 @@ static int ncore_bootstrap(void)
 	if (kfile_exists(NKSU_DAEMON_BOOT_PATH)) {
 		pr_info("ncore exists, skip!");
 		WRITE_ONCE(daemon_ready, true);
+		WRITE_ONCE(pkgwatch_shutdown, true);
+		pkgwatch_observer_exit();
 		goto out;
 	}
 
