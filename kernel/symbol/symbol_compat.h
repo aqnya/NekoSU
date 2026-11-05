@@ -470,7 +470,7 @@ NKSU_SYMBOL_FN(int, fsnotify_add_mark,
 	       (mark, obj, obj_type, add_flags))
 #else
 NKSU_SYMBOL_FN(int, fsnotify_add_mark,
-	       (struct fsnotify_mark * mark, struct fsnotify_mark_connector *conn,
+	       (struct fsnotify_mark * mark, struct fsnotify_mark_connector **conn,
 		unsigned int obj_type, int add_flags, __kernel_fsid_t *fsid),
 	       (mark, conn, obj_type, add_flags, fsid))
 #endif
