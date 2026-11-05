@@ -447,6 +447,13 @@ NKSU_SYMBOL_FN(int, __vfs_setxattr_noperm,
 NKSU_SYMBOL_VOID_FN(seccomp_filter_release, (struct task_struct * tsk), (tsk))
 NKSU_SYMBOL_FN(struct crypto_akcipher *, crypto_alloc_akcipher,
 	       (const char *alg_name, u32 type, u32 mask), (alg_name, type, mask))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group,
+	       (const struct fsnotify_ops *ops, int flags), (ops, flags))
+#else
+NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group, (const struct fsnotify_ops *ops),
+	       (ops))
+#endif
 #endif
 
 /*
@@ -521,7 +528,7 @@ NKSU_SYMBOL_FN(struct crypto_akcipher *, crypto_alloc_akcipher,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
 #define wait_for_initramfs nksu_wait_for_initramfs
 #endif
-#define fsnotify_alloc_group nksu_fsnotify_alloc_group
+#define fsnotify_alloc_group nksu_fsnotify_alloc_group_fn
 #define fsnotify_init_mark nksu_fsnotify_init_mark
 #define fsnotify_put_mark nksu_fsnotify_put_mark
 #define fsnotify_put_group nksu_fsnotify_put_group
