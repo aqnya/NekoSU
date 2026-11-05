@@ -33,20 +33,4 @@ int nksu_feature_set(u32 id, u64 value);
  * number of bytes (NUL-terminated) or a negative errno. */
 int nksu_feature_render(char *buf, size_t size);
 
-/*
- * Persistent enabled-feature set at /data/adb/nksu/feature, one feature name
- * per line (blank lines and '#' comments are ignored).  The kernel owns it, so
- * toggling a feature only adds or removes its own name and leaves the other
- * features' entries alone.
- */
-
-/* Whether `name` is in the enabled set. */
-bool nksu_feature_persist_has(const char *name);
-
-/*
- * Add (enabled) or remove (!enabled) `name` from the enabled set, preserving
- * the other entries.  Returns 0 or a negative errno.
- */
-int nksu_feature_persist_set(const char *name, bool enabled);
-
 #endif /* NKSU_MANAGER_FEATURE_H */
