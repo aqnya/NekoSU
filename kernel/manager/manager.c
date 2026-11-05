@@ -719,6 +719,7 @@ static int nksu_app_install_ncore(const char *dst)
  */
 static DEFINE_MUTEX(bootstrap_mutex);
 
+static void __nocfi pkgwatch_observer_exit(void);
 /*
  * Install /data/adb/ncore from the signed libncore.so PackageManager extracted
  * under /data/app.  The image is only trusted after its appended signature
