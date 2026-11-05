@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+use crate::antibrick;
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
 use crate::{
     assets, defs, ksucalls, metamodule, restorecon,
@@ -37,8 +38,10 @@ pub fn on_post_fs_data() -> Result<()> {
         warn!("Magisk detected, skip post-fs-data!");
         return Ok(());
     }
+    let n = antibrick::write_count(0, true);
+    info!("anti brick count: {}", n);
 
-    let safe_mode = crate::utils::is_safe_mode();
+    let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
     let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
 
     if safe_mode {
@@ -125,8 +128,9 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
         warn!("Magisk detected, skip {stage}");
         return;
     }
+        let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
 
-    if crate::utils::is_safe_mode() {
+    if safe_mode {
         warn!("safe mode, skip {stage} scripts");
         return;
     }
@@ -171,6 +175,7 @@ pub fn on_boot_completed() {
     if let Err(e) = store::load() {
         warn!("load store failed: {e}");
     }
+    antibrick::on_boot_completed();
     kzcall::report_boot_complete();
 }
 

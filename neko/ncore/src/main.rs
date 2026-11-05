@@ -12,6 +12,7 @@
     clippy::redundant_field_names
 )]
 
+mod antibrick;
 mod assets;
 #[cfg(target_os = "android")]
 mod btf;
@@ -24,6 +25,9 @@ mod defs;
 mod hot_install;
 #[cfg(target_os = "android")]
 mod init_event;
+#[cfg(target_os = "android")]
+#[allow(nonstandard_style, unsafe_op_in_unsafe_fn)]
+mod ksu_uapi;
 #[cfg(target_os = "android")]
 mod ksucalls;
 mod manager;
@@ -45,10 +49,6 @@ mod sepolicy;
 mod su;
 #[cfg(target_os = "android")]
 mod utils;
-
-#[cfg(target_os = "android")]
-#[allow(nonstandard_style, unsafe_op_in_unsafe_fn)]
-mod ksu_uapi;
 
 fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]

@@ -81,3 +81,5 @@ pub const MANAGER_CERT_HASH: &str = env!("NKSU_MANAGER_CERTHASH");
 
 #[cfg(target_os = "android")]
 pub use android::*;
+
+pub const ANTIBRICK_PATH: &str = "/data/adb/nksu/antibrick";
