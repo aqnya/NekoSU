@@ -32,6 +32,8 @@ mod proto {
 
     impl_codec!(ProfileEntry,);
     impl_codec!(ProfileStore,);
+    impl_codec!(FeatureEntry,);
+    impl_codec!(FeatureStore,);
 }
 
 pub use proto::*;

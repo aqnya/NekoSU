@@ -2,6 +2,7 @@
 package me.nekosu.aqnya.data.kernel
 
 import me.nekosu.aqnya.core.Ncore
+import me.nekosu.aqnya.proto.FeatureEntry
 
 object KernelFeature {
     const val SELINUX_HIDE = 1
@@ -36,7 +37,15 @@ object KernelFeature {
         id: Int,
         enabled: Boolean,
     ): Boolean {
-        val ret = runCatching { Ncore.featureSet(id, if (enabled) 1L else 0L) }.getOrNull() ?: return false
+        val ret =
+            runCatching {
+                Ncore.featureSet(
+                    FeatureEntry {
+                        id = id
+                        value = if (enabled) 1L else 0L
+                    }.toByteArray(),
+                )
+            }.getOrNull() ?: return false
         return ret == 0
     }
 }

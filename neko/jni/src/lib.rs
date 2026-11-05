@@ -14,8 +14,9 @@ use jni::objects::JByteArray;
 use jni::objects::{JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, JNI_VERSION_1_6, jboolean, jbyteArray, jint, jlong, jstring};
 use kzcall::*;
-use profile::*;
+use proto::FeatureEntry;
 use proto::ProfileEntry;
+use store;
 
 const READER_MAX_PATH: usize = 4096;
 const READER_CHUNK: usize = 64 * 1024;
@@ -95,7 +96,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_setProfileProto(
         if let Err(e) = set_profile(&profile) {
             log::error!("set_profile failed: {e:#}");
         }
-        match save(&profile) {
+        match store::profile::save(&profile) {
             Ok(()) => Ok(0),
             Err(e) => {
                 log::error!("save_profile failed: {e:#}");
@@ -135,7 +136,7 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_deluid(
         log::error!("del_uid failed: {e:#}");
         return -1;
     }
-    match del(uid as u32) {
+    match store::profile::del(uid as u32) {
         Ok(()) => 0,
         Err(e) => {
             log::error!("del_uid failed: {e:#}");
@@ -293,18 +294,34 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureGet(
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
-    _env: EnvUnowned,
+    mut env: EnvUnowned,
     _this: JObject,
-    id: jint,
-    value: jlong,
+    data: JByteArray,
 ) -> jint {
-    match feature_set(id, value as u64) {
-        Ok(()) => 0,
-        Err(e) => {
-            log::error!("feature_set failed: {e:#}");
-            -1
+    env.with_env(|env| -> jni::errors::Result<jint> {
+        let bytes = env.convert_byte_array(&data)?;
+
+        let feat = match FeatureEntry::from_bytes(&bytes) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("decode FeatureEntry failed: {e}");
+                return Ok(-1);
+            }
+        };
+
+        if let Err(e) = feature_set(&feat) {
+            log::error!("set_feature failed: {e:#}");
+            return Ok(-1);
         }
-    }
+        match store::feature::save_feature(&feat) {
+            Ok(()) => Ok(0),
+            Err(e) => {
+                log::error!("set_feature failed: {e:#}");
+                Ok(-1)
+            }
+        }
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 fn write_all(fd: RawFd, mut buf: &[u8]) -> bool {

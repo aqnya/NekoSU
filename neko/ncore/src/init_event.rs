@@ -6,8 +6,8 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{error, info, warn};
-use profile::*;
 use std::{path::Path, time::Instant};
+use store;
 
 pub fn on_post_fs_data() -> Result<()> {
     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
@@ -115,8 +115,8 @@ pub fn on_post_fs_data() -> Result<()> {
 
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
-    if let Err(e) = load() {
-        warn!("load profile failed: {e}");
+    if let Err(e) = store::load() {
+        warn!("load store failed: {e}");
     }
     Ok(())
 }

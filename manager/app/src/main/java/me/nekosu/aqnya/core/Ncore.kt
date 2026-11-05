@@ -139,10 +139,7 @@ object Ncore {
     private external fun nativeFeatureGet(id: Int): Long
 
     @JvmName("featureSet")
-    private external fun nativeFeatureSet(
-        id: Int,
-        value: Long,
-    ): Int
+    private external fun nativeFeatureSet(data: ByteArray): Int
 
     @JvmName("getSlotSuffix")
     private external fun nativeGetSlotSuffix(): String?
@@ -242,10 +239,7 @@ object Ncore {
     fun featureGet(id: Int): Long = runJni { nativeFeatureGet(id) }
 
     @JvmName("featureSetApi")
-    fun featureSet(
-        id: Int,
-        value: Long,
-    ): Int = runJni { nativeFeatureSet(id, value) }
+    fun featureSet(data: ByteArray): Int = runJni { nativeFeatureSet(data) }
 
     @JvmName("getSlotSuffixApi")
     fun getSlotSuffix(): String? = runJni { nativeGetSlotSuffix() }

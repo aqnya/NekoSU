@@ -8,7 +8,7 @@ members = [
     "third_party/ksu_props/crates/prop-rs-android",
     "kzcall",
     "proto",
-    "profile",
+    "store",
 ]
 default-members = [
     "ncore",

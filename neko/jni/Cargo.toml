@@ -16,4 +16,4 @@ log.workspace = true
 android_logger = "0.15"
 kzcall = {path = "../kzcall"}
 proto = {path = "../proto"}
-profile = { path = "../profile" }
+store = { path = "../store" }

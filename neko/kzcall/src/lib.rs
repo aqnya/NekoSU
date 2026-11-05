@@ -111,13 +111,6 @@ pub fn add_selinux_rule(
     Ok(())
 }
 
-pub fn feature_get(id: i32) -> Option<u64> {
-    let mut data = [0u8; FMAC_DATA_FEATURE as usize];
-    put_u32(&mut data, 0, id as u32);
-    ioctl::call(fmac_flag_IOC_FEATURE_GET, &mut data).ok()?;
-    Some(get_u64(&data, FMAC_OFF_FEATURE_VALUE as usize))
-}
-
 pub fn add_uid(uid: i32) -> Result<()> {
     if uid < 0 {
         anyhow::bail!("uid should not be negative: {uid}");
@@ -194,10 +187,19 @@ pub fn feature_list() -> Option<String> {
     Some(cstr_lossy(&data))
 }
 
-pub fn feature_set(id: i32, value: u64) -> Result<()> {
+use proto::FeatureEntry;
+
+pub fn feature_set(entry: &FeatureEntry) -> Result<()> {
     let mut data = [0u8; FMAC_DATA_FEATURE as usize];
-    put_u32(&mut data, 0, id as u32);
-    put_u64(&mut data, FMAC_OFF_FEATURE_VALUE as usize, value);
+    put_u32(&mut data, 0, entry.id as u32);
+    put_u64(&mut data, FMAC_OFF_FEATURE_VALUE as usize, entry.value);
     ioctl::call(fmac_flag_IOC_FEATURE_SET, &mut data)?;
     Ok(())
+}
+
+pub fn feature_get(id: i32) -> Option<u64> {
+    let mut data = [0u8; FMAC_DATA_FEATURE as usize];
+    put_u32(&mut data, 0, id as u32);
+    ioctl::call(fmac_flag_IOC_FEATURE_GET, &mut data).ok()?;
+    Some(get_u64(&data, FMAC_OFF_FEATURE_VALUE as usize))
 }

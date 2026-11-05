@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package me.nekosu.aqnya.proto;
+option java_package = "me.nekosu.aqnya.proto";
+option java_multiple_files = true;
+
+message FeatureEntry {
+    int32  id    = 1;
+    uint64 value = 2;
+}
+
+message FeatureStore {
+    repeated FeatureEntry entries = 1;
+    uint32 total = 2;
+}

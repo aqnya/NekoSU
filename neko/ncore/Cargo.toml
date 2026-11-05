@@ -52,4 +52,4 @@ getopts = "0.2"
 prop-rs-android = { path = "../third_party/ksu_props/crates/prop-rs-android" }
 uapi = {path = "../uapi"}
 kzcall = {path = "../kzcall"}
-profile = { path = "../profile" }
+store = { path = "../store" }
