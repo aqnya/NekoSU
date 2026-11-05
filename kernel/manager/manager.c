@@ -178,7 +178,7 @@ bool is_daemon_ready(void)
 /* ---- file helpers (run with the borrowed nksu creds, see below) ---- */
 
 /* mkdir one leaf whose parent already exists. */
-static int __nocfi kdir_mkdir(const char *path, umode_t mode)
+static int kdir_mkdir(const char *path, umode_t mode)
 {
 	char parent[256];
 	const char *slash;
@@ -265,7 +265,7 @@ static bool kfile_exists(const char *path)
 	return !IS_ERR(f);
 }
 
-static void __nocfi kfile_remove(struct file *file);
+static void kfile_remove(struct file *file);
 
 /*
  * Copy the already-open, already-verified image @in to @dst.  Copying from the
@@ -327,7 +327,7 @@ static int kfile_copy(struct file *in, const char *src, const char *dst)
 }
 
 /* A failed copy must not leave a truncated file that the next boot trusts. */
-static void __nocfi kfile_remove(struct file *file)
+static void kfile_remove(struct file *file)
 {
 	struct dentry *parent;
 	struct inode *dir;
@@ -358,7 +358,7 @@ static void __nocfi kfile_remove(struct file *file)
 		pr_warn("cannot remove partial %s: %d\n", file->f_path.dentry->d_name.name, ret);
 }
 
-static int __nocfi get_task_cmdline(struct task_struct *task, char *buffer, int buflen)
+static int get_task_cmdline(struct task_struct *task, char *buffer, int buflen)
 {
 	unsigned long arg_start, arg_end, len;
 	int res = 0;
@@ -727,7 +727,7 @@ static int nksu_app_install_ncore(const char *dst)
  */
 static DEFINE_MUTEX(bootstrap_mutex);
 
-static void __nocfi pkgwatch_observer_exit(void);
+static void pkgwatch_observer_exit(void);
 /*
  * Install /data/adb/ncore from the signed libncore.so PackageManager extracted
  * under /data/app.  The image is only trusted after its appended signature
@@ -912,7 +912,7 @@ static const struct fsnotify_ops pkgwatch_ops = {
 };
 #endif
 
-static void __nocfi pkgwatch_observer_exit(void)
+static void pkgwatch_observer_exit(void)
 {
 	if (pkgwatch_mark) {
 		fsnotify_destroy_mark(pkgwatch_mark, pkgwatch_group);
@@ -925,7 +925,7 @@ static void __nocfi pkgwatch_observer_exit(void)
 	}
 }
 
-static int __nocfi pkgwatch_observer_init(void)
+static int pkgwatch_observer_init(void)
 {
 	const struct cred *old;
 	struct fsnotify_mark *mark;
