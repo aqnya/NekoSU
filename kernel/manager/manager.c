@@ -909,7 +909,6 @@ static int pkgwatch_handle_event(struct fsnotify_group *group, struct inode *ino
 
 static const struct fsnotify_ops pkgwatch_ops = {
 	.handle_event = pkgwatch_handle_event,
-	.free_mark = pkgwatch_free_mark,
 };
 #endif
 
