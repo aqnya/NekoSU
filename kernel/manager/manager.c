@@ -855,6 +855,11 @@ static void pkgwatch_defer_bootstrap(void)
 	}
 }
 
+static void pkgwatch_free_mark(struct fsnotify_mark *mark)
+{
+	kfree(mark);
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 static int pkgwatch_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode,
 				       struct inode *dir, const struct qstr *file_name, u32 cookie)
@@ -876,14 +881,9 @@ static int pkgwatch_handle_inode_event(struct fsnotify_mark *mark, u32 mask, str
 
 static const struct fsnotify_ops pkgwatch_ops = {
 	.handle_inode_event = pkgwatch_handle_inode_event,
+	.free_mark = pkgwatch_free_mark,
 };
 #else
-/* 4.9 has the old group-wide handle_event callback and group-owned marks. */
-static void pkgwatch_free_mark(struct fsnotify_mark *mark)
-{
-	kfree(mark);
-}
-
 static int pkgwatch_handle_event(struct fsnotify_group *group, struct inode *inode,
 				 struct fsnotify_mark *inode_mark,
 				 struct fsnotify_mark *vfsmount_mark, u32 mask, void *data,
@@ -909,6 +909,7 @@ static int pkgwatch_handle_event(struct fsnotify_group *group, struct inode *ino
 
 static const struct fsnotify_ops pkgwatch_ops = {
 	.handle_event = pkgwatch_handle_event,
+	.free_mark = pkgwatch_free_mark,
 };
 #endif
 
