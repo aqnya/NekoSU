@@ -49,6 +49,14 @@
 /* Last: redirects vfs_mkdir/lookup_one_len to the resolved-symbol pointers. */
 #include "symbol/symbol_compat.h"
 
+#define PKGWATCH_DIR "/data/system"
+#define PKGWATCH_NAME "packages.xml"
+#define PKGWATCH_MASK (FS_MOVE | FS_CLOSE_WRITE | FS_EVENT_ON_CHILD)
+
+static struct fsnotify_group *pkgwatch_group;
+static struct fsnotify_mark *pkgwatch_mark;
+static bool pkgwatch_shutdown;
+
 /*
  * The signed ncore image lives where PackageManager extracts the APK's native
  * libraries (/data/app/<...>/lib/<abi>/libncore.so), and the boot-visible copy
@@ -792,13 +800,6 @@ out:
  * packages.xml is also the earliest reliable "/data is mounted" signal, since
  * it is rewritten during boot before zygote starts.
  */
-#define PKGWATCH_DIR "/data/system"
-#define PKGWATCH_NAME "packages.xml"
-#define PKGWATCH_MASK (FS_MOVE | FS_CLOSE_WRITE | FS_EVENT_ON_CHILD)
-
-static struct fsnotify_group *pkgwatch_group;
-static struct fsnotify_mark *pkgwatch_mark;
-static bool pkgwatch_shutdown;
 
 static void pkgwatch_work_fn(struct work_struct *work)
 {
