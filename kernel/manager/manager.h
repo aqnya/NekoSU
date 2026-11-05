@@ -6,8 +6,9 @@
 
 /*
  * Boot-time ncore bootstrap.  Watches /data/system/packages.xml (which only
- * appears once /data is mounted), verifies the signed image the manager
- * staged in its own data directory and installs it as /data/adb/ncore.
+ * appears once /data is mounted), walks /data/app for the signed libncore.so
+ * PackageManager extracted from the manager APK and installs the verified
+ * image as /data/adb/ncore.
  */
 int ncore_boot_init(void);
 void ncore_boot_exit(void);

@@ -3,12 +3,12 @@
  * Manager authorization and the boot-time ncore bootstrap.
  *
  * Trust is anchored in the signed ncore image rather than in the manager APK:
- * the manager stages its bundled libncore.so as
- * /data/user/0/me.aqnya.nekosu/ncore, and at boot the kernel verifies the
- * RSA-4096 signature appended by neko/build.gradle.kts before installing it
- * as /data/adb/ncore.  ncore itself (whose executable is verified the same
- * way) then reports the manager package's UID through IOC_SET_MANAGER_UID and
- * the kernel grants that UID the default profile.
+ * the manager packages libncore.so as an extracted native library, and at boot
+ * the kernel walks /data/app for it, verifies the RSA-4096 signature appended
+ * by neko/build.gradle.kts and installs the verified image as /data/adb/ncore.
+ * ncore itself (whose executable is verified the same way) then reports the
+ * manager package's UID through IOC_SET_MANAGER_UID and the kernel grants that
+ * UID the default profile.
  *
  * fsnotify still watches /data/system/packages.xml.  PackageManagerService
  * only writes that file once /data is mounted and the package database is
@@ -50,12 +50,13 @@
 #include "symbol/symbol_compat.h"
 
 /*
- * The signed ncore image the manager stages in its own data directory, and
- * the boot-visible copy init execs.  The package name is part of the path the
- * manager can write without root; trust comes from the signature, not from
- * the directory name.
+ * The signed ncore image lives where PackageManager extracts the APK's native
+ * libraries (/data/app/<...>/lib/<abi>/libncore.so), and the boot-visible copy
+ * init execs is /data/adb/ncore.  Neither the package name nor the directory
+ * is trusted: only the signature appended to the image is.
  */
-#define NKSU_DAEMON_APP_PATH "/data/user/0/me.aqnya.nekosu/ncore"
+#define NKSU_APP_DIR "/data/app"
+#define NKSU_NCORE_LIB_NAME "libncore.so"
 #define NKSU_DAEMON_BOOT_PATH "/data/adb/ncore"
 #define NKSU_DAEMON_BIN_DIR "/data/adb/nksu/bin"
 
@@ -258,16 +259,17 @@ static bool kfile_exists(const char *path)
 
 static void __nocfi kfile_remove(struct file *file);
 
-static int kfile_copy(const char *src, const char *dst)
+/*
+ * Copy the already-open, already-verified image @in to @dst.  Copying from the
+ * verified file keeps the image the signature covered: reopening @src would
+ * leave a window in which the path could be replaced with an unverified one.
+ */
+static int kfile_copy(struct file *in, const char *src, const char *dst)
 {
 	loff_t ipos = 0, opos = 0;
 	loff_t src_size, dst_size;
 	ssize_t off;
 	int err = 0;
-	struct file *in __free(nksu_filp) = filp_open(src, O_RDONLY, 0);
-
-	if (IS_ERR(in))
-		return PTR_ERR(in);
 
 	char *buf __free(nksu_kfree) = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!buf)
@@ -466,16 +468,258 @@ static int mark_zygote(void)
 }
 
 /*
+ * /data/app walk used by the bootstrap.
+ *
+ * PackageManager extracts libncore.so next to the APK at install time, so it is
+ * already present before the manager has ever run.  The layout depends on the
+ * Android version (legacy /data/app/<pkg>/lib/<abi>/ and the split
+ * /data/app/~~<id>==/<pkg>-<id>==/lib/<abi>/), hence a depth-limited recursive
+ * walk that matches the file name wherever it appears.  The signature, not the
+ * path, decides which image is trusted.
+ */
+#define NKSU_APP_SCAN_MAX_DEPTH 6
+#define NKSU_APP_SCAN_NAME_MAX 255
+#define NKSU_APP_SCAN_BUF_MIN 8192
+#define NKSU_APP_SCAN_BUF_MAX (32 * 1024)
+#define NKSU_APP_PATH_MAX 512
+
+/* One directory's entries: [u8 d_type][name][NUL], packed back to back. */
+struct nksu_dir_list {
+	struct dir_context ctx;
+	char *names;
+	size_t len;
+	size_t cap;
+	bool truncated;
+};
+
+struct nksu_app_scan {
+	char path[NKSU_APP_PATH_MAX];
+	char found[NKSU_APP_PATH_MAX];
+};
+
+static bool nksu_dir_list_actor(struct dir_context *ctx, const char *name, int namelen, loff_t pos,
+				u64 ino, unsigned int d_type)
+{
+	struct nksu_dir_list *list = container_of(ctx, struct nksu_dir_list, ctx);
+
+	(void)pos;
+	(void)ino;
+
+	if (namelen <= 0 || namelen > NKSU_APP_SCAN_NAME_MAX)
+		return false;
+	if (list->len + (size_t)namelen + 2 > list->cap) {
+		list->truncated = true;
+		return true;
+	}
+
+	list->names[list->len++] = (char)d_type;
+	memcpy(list->names + list->len, name, namelen);
+	list->len += namelen;
+	list->names[list->len++] = '\0';
+	return false;
+}
+
+/*
+ * Collect one directory's entries.  The callback cannot verify or copy a
+ * candidate itself: it runs while iterate_dir() holds the directory's inode
+ * lock and the image check reads (and sleeps on) another file.  Retry with a
+ * larger buffer when the directory does not fit, and fail loudly instead of
+ * silently skipping entries when even the largest one is too small.
+ */
+static int kdir_list(const char *dir, char **names_out, size_t *len_out)
+{
+	size_t cap = NKSU_APP_SCAN_BUF_MIN;
+	int ret;
+
+	for (;;) {
+		struct nksu_dir_list list = {
+			.ctx.actor = nksu_dir_list_actor,
+		};
+		struct file *file __free(nksu_filp) = NULL;
+		char *names = kmalloc(cap, GFP_KERNEL);
+
+		if (!names)
+			return -ENOMEM;
+
+		file = filp_open(dir, O_RDONLY | O_DIRECTORY, 0);
+		if (IS_ERR(file)) {
+			ret = PTR_ERR(file);
+			kfree(names);
+			return ret;
+		}
+
+		list.names = names;
+		list.cap = cap;
+		ret = iterate_dir(file, &list.ctx);
+		if (ret) {
+			kfree(names);
+			return ret;
+		}
+		if (!list.truncated) {
+			*names_out = names;
+			*len_out = list.len;
+			return 0;
+		}
+
+		kfree(names);
+		if (cap >= NKSU_APP_SCAN_BUF_MAX) {
+			pr_err("%s has more entries than a %zu byte buffer holds\n", dir, cap);
+			return -ENOSPC;
+		}
+		cap *= 2;
+	}
+}
+
+/*
+ * d_type is only a hint (DT_UNKNOWN on filesystems that do not fill it in), so
+ * fall back to a lookup.  Symlinks are not followed: the scan stays inside
+ * /data/app.
+ */
+static bool kpath_is_dir(const char *path, unsigned int d_type)
+{
+	struct path p;
+
+	if (d_type == DT_DIR)
+		return true;
+	if (d_type != DT_UNKNOWN)
+		return false;
+	if (kern_path(path, LOOKUP_DIRECTORY, &p))
+		return false;
+	path_put(&p);
+	return true;
+}
+
+/*
+ * Install the image at scan->path if it is a signed ncore.
+ *
+ * Returns 1 when the image was installed, 0 when the candidate is not a signed
+ * ncore (skip it and keep looking) and a negative errno when the copy failed
+ * after verification.
+ */
+static int nksu_app_try_install(struct nksu_app_scan *scan, const char *dst)
+{
+	struct file *file __free(nksu_filp) = filp_open(scan->path, O_RDONLY, 0);
+	int ret;
+
+	if (IS_ERR(file))
+		return 0;
+
+	ret = nksu_ncore_verify_file(file, scan->path);
+	if (ret)
+		return 0;
+
+	/*
+	 * Only a verified image is worth the directories ncore expects next to
+	 * itself.  Create them before the copy so a failed copy cannot leave the
+	 * binary without its tree.
+	 */
+	ret = kdir_mkdir_p("/data/adb/nksu");
+	if (ret && ret != -EEXIST) {
+		pr_err("mkdir /data/adb/nksu failed: %d\n", ret);
+		return ret;
+	}
+	ret = kdir_mkdir_p(NKSU_DAEMON_BIN_DIR);
+	if (ret && ret != -EEXIST) {
+		pr_err("mkdir %s failed: %d\n", NKSU_DAEMON_BIN_DIR, ret);
+		return ret;
+	}
+
+	ret = kfile_copy(file, scan->path, dst);
+	if (ret)
+		return ret;
+
+	strscpy(scan->found, scan->path, sizeof(scan->found));
+	return 1;
+}
+
+static int nksu_app_scan_dir(struct nksu_app_scan *scan, size_t len, int depth, const char *dst)
+{
+	char *names = NULL;
+	size_t names_len = 0;
+	size_t off = 0;
+	int ret;
+
+	ret = kdir_list(scan->path, &names, &names_len);
+	if (ret) {
+		/* A package can be removed while the walk is in progress. */
+		if (depth && (ret == -ENOENT || ret == -ENOTDIR))
+			return 0;
+		return ret;
+	}
+
+	while (off < names_len) {
+		unsigned int d_type = (unsigned char)names[off];
+		const char *name = names + off + 1;
+		size_t name_len = strlen(name);
+
+		off += name_len + 2;
+
+		if (!strcmp(name, ".") || !strcmp(name, ".."))
+			continue;
+		if (len + name_len + 2 > sizeof(scan->path)) {
+			ret = -ENAMETOOLONG;
+			goto out;
+		}
+
+		scan->path[len] = '/';
+		memcpy(scan->path + len + 1, name, name_len + 1);
+
+		if (!strcmp(name, NKSU_NCORE_LIB_NAME)) {
+			ret = nksu_app_try_install(scan, dst);
+			if (ret)
+				goto out;
+		} else if (depth < NKSU_APP_SCAN_MAX_DEPTH && kpath_is_dir(scan->path, d_type)) {
+			ret = nksu_app_scan_dir(scan, len + name_len + 1, depth + 1, dst);
+			if (ret)
+				goto out;
+		}
+	}
+
+	ret = 0;
+out:
+	kfree(names);
+	scan->path[len] = '\0';
+	return ret;
+}
+
+/*
+ * Find a signed libncore.so under /data/app and install it at @dst.
+ *
+ * Returns 0 when an image was installed, -ENOENT when nothing verified (the
+ * manager has not been installed yet, which is normal on a fresh boot) and a
+ * negative errno for a real failure.
+ */
+static int nksu_app_install_ncore(const char *dst)
+{
+	struct nksu_app_scan *scan __free(nksu_kfree) = kzalloc(sizeof(*scan), GFP_KERNEL);
+	int ret;
+
+	if (!scan)
+		return -ENOMEM;
+
+	strscpy(scan->path, NKSU_APP_DIR, sizeof(scan->path));
+	ret = nksu_app_scan_dir(scan, strlen(scan->path), 0, dst);
+	if (ret < 0)
+		return ret;
+	if (ret == 0)
+		return -ENOENT;
+
+	pr_info("installed ncore from %s\n", scan->found);
+	return 0;
+}
+
+/*
  * Serialize bootstraps: the initial one from ncore_boot_init() and one
  * task_work per packages.xml change can overlap.
  */
 static DEFINE_MUTEX(bootstrap_mutex);
 
 /*
- * Install /data/adb/ncore from the manager-staged image.  The file is only
- * trusted after its appended signature verifies, and the whole operation runs
- * with a cred borrowed from the nksu domain because the triggering context
- * (a kthread, or system_server's rename task_work) cannot reach /data itself.
+ * Install /data/adb/ncore from the signed libncore.so PackageManager extracted
+ * under /data/app.  The image is only trusted after its appended signature
+ * verifies, and the whole operation runs with a cred borrowed from the nksu
+ * domain because the triggering context (a kthread, or system_server's rename
+ * task_work) cannot reach /data itself.
  */
 static int ncore_bootstrap(void)
 {
@@ -496,37 +740,19 @@ static int ncore_bootstrap(void)
 		goto out;
 	}
 
-	if (!kfile_exists(NKSU_DAEMON_APP_PATH)) {
-		pr_info("no %s yet, waiting for the manager to stage it\n", NKSU_DAEMON_APP_PATH);
-		ret = -ENOENT;
+	ret = nksu_app_install_ncore(NKSU_DAEMON_BOOT_PATH);
+	if (ret == -ENOENT) {
+		pr_info("no signed %s under %s yet\n", NKSU_NCORE_LIB_NAME, NKSU_APP_DIR);
 		goto out;
 	}
-
-	ret = nksu_ncore_verify_path(NKSU_DAEMON_APP_PATH);
 	if (ret) {
-		pr_err("refusing %s: %d\n", NKSU_DAEMON_APP_PATH, ret);
+		pr_err("cannot install ncore from %s: %d\n", NKSU_APP_DIR, ret);
 		goto out;
 	}
-
-	ret = kdir_mkdir_p("/data/adb/nksu");
-	if (ret && ret != -EEXIST) {
-		pr_err("mkdir /data/adb/nksu failed: %d\n", ret);
-		goto out;
-	}
-	ret = kdir_mkdir_p(NKSU_DAEMON_BIN_DIR);
-	if (ret && ret != -EEXIST) {
-		pr_err("mkdir %s failed: %d\n", NKSU_DAEMON_BIN_DIR, ret);
-		goto out;
-	}
-
-	ret = kfile_copy(NKSU_DAEMON_APP_PATH, NKSU_DAEMON_BOOT_PATH);
-	if (ret)
-		goto out;
 
 	/* Label it nksu_file so init's injected init.rc can exec it. */
 	nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
 	WRITE_ONCE(daemon_ready, true);
-	pr_info("installed ncore from %s\n", NKSU_DAEMON_APP_PATH);
 
 out:
 	nksu_borrow_creds_end(old);

@@ -60,6 +60,7 @@ typeof(security_compute_av_user) *nksu_security_compute_av_user;
 typeof(vfs_mkdir) *nksu_vfs_mkdir;
 typeof(vfs_unlink) *nksu_vfs_unlink;
 typeof(lookup_one_len) *nksu_lookup_one_len;
+typeof(iterate_dir) *nksu_iterate_dir;
 typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
 typeof(task_work_add) *nksu_task_work_add;
 typeof(change_pid) *nksu_change_pid;
@@ -189,6 +190,7 @@ int nksu_symbol_compat_init(void)
 	NKSU_RESOLVE(nksu_vfs_mkdir, "vfs_mkdir");
 	NKSU_RESOLVE(nksu_vfs_unlink, "vfs_unlink");
 	NKSU_RESOLVE(nksu_lookup_one_len, "lookup_one_len");
+	NKSU_RESOLVE(nksu_iterate_dir, "iterate_dir");
 	NKSU_RESOLVE(nksu___vfs_setxattr_noperm, "__vfs_setxattr_noperm");
 	NKSU_RESOLVE(nksu_task_work_add, "task_work_add");
 	NKSU_RESOLVE(nksu_change_pid, "change_pid");
@@ -295,6 +297,7 @@ void nksu_symbol_compat_exit(void)
 	nksu_vfs_mkdir = NULL;
 	nksu_vfs_unlink = NULL;
 	nksu_lookup_one_len = NULL;
+	nksu_iterate_dir = NULL;
 	nksu___vfs_setxattr_noperm = NULL;
 	nksu_task_work_add = NULL;
 	nksu_change_pid = NULL;

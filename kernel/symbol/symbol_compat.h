@@ -152,6 +152,8 @@ extern typeof(security_compute_av_user) *nksu_security_compute_av_user;
 extern typeof(vfs_mkdir) *nksu_vfs_mkdir;
 extern typeof(vfs_unlink) *nksu_vfs_unlink;
 extern typeof(lookup_one_len) *nksu_lookup_one_len;
+/* Directory iteration for the /data/app ncore scan (manager/manager.c). */
+extern typeof(iterate_dir) *nksu_iterate_dir;
 /* Persist the nksu_file label on the bootstrapped daemon (see selinux.c). */
 extern typeof(__vfs_setxattr_noperm) *nksu___vfs_setxattr_noperm;
 
@@ -320,6 +322,7 @@ NKSU_SYMBOL_FN(int, set_cred_ucounts, (struct cred * new), (new))
 NKSU_SYMBOL_VOID_FN(switch_task_namespaces, (struct task_struct * p, struct nsproxy *new), (p, new))
 NKSU_SYMBOL_FN(struct file *, filp_open, (const char *filename, int flags, umode_t mode),
 	       (filename, flags, mode))
+NKSU_SYMBOL_FN(int, iterate_dir, (struct file * file, struct dir_context *ctx), (file, ctx))
 NKSU_SYMBOL_FN(struct task_struct *, find_task_by_vpid, (pid_t nr), (nr))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 NKSU_SYMBOL_FN(int, task_work_add,
@@ -494,6 +497,7 @@ NKSU_SYMBOL_FN(struct crypto_akcipher *, crypto_alloc_akcipher,
 #define vfs_mkdir nksu_vfs_mkdir
 #define vfs_unlink nksu_vfs_unlink
 #define lookup_one_len nksu_lookup_one_len
+#define iterate_dir nksu_iterate_dir_fn
 #define __vfs_setxattr_noperm nksu___vfs_setxattr_noperm_fn
 #define task_work_add nksu_task_work_add_fn
 #define change_pid nksu_change_pid_fn
