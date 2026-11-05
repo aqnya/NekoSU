@@ -817,11 +817,7 @@ static int nksu_hide_feature_get(u64 *value)
 	return 0;
 }
 
-/*
- * Switch the feature.  `persist` is false for the boot-time enable: the
- * feature set already lists it, so rewriting it there would be pointless.
- */
-static int nksu_hide_apply(u64 value, bool persist)
+static int nksu_hide_apply(u64 value)
 {
 	int ret = 0;
 
@@ -845,19 +841,12 @@ static int nksu_hide_apply(u64 value, bool persist)
 out:
 	mutex_unlock(&nksu_hide_mutex);
 
-	if (!ret && persist) {
-		int persist_ret = nksu_feature_persist_set(NKSU_HIDE_FEATURE_NAME, value != 0);
-
-		if (persist_ret)
-			pr_err("cannot persist feature state: %d\n", persist_ret);
-	}
-
 	return ret;
 }
 
 static int nksu_hide_feature_set(u64 value)
 {
-	return nksu_hide_apply(value, true);
+	return nksu_hide_apply(value);
 }
 
 static const struct nksu_feature nksu_hide_feature = {
@@ -874,15 +863,6 @@ int nksu_selinux_hide_init(void)
 	ret = nksu_feature_register(&nksu_hide_feature);
 	if (ret)
 		pr_warn("feature register failed: %d\n", ret);
-
-	if (!nksu_feature_persist_has(NKSU_HIDE_FEATURE_NAME)) {
-		pr_info("not in the enabled feature set, off\n");
-		return 0;
-	}
-
-	ret = nksu_hide_apply(1, false);
-	if (ret)
-		pr_warn("enable from the feature set failed: %d\n", ret);
 
 	return 0;
 }
