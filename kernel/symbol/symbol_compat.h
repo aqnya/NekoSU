@@ -460,6 +460,20 @@ NKSU_SYMBOL_FN(struct fsnotify_group *, fsnotify_alloc_group, (const struct fsno
 NKSU_SYMBOL_VOID_FN(fsnotify_init_mark, (struct fsnotify_mark * mark, struct fsnotify_group *group),
 		    (mark, group))
 #endif
+NKSU_SYMBOL_VOID_FN(fsnotify_put_mark, (struct fsnotify_mark * mark), (mark))
+NKSU_SYMBOL_VOID_FN(fsnotify_put_group, (struct fsnotify_group * group), (group))
+NKSU_SYMBOL_VOID_FN(fsnotify_destroy_mark,
+		    (struct fsnotify_mark * mark, struct fsnotify_group *group), (mark, group))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
+NKSU_SYMBOL_FN(int, fsnotify_add_mark,
+	       (struct fsnotify_mark * mark, void *obj, unsigned int obj_type, int add_flags),
+	       (mark, obj, obj_type, add_flags))
+#else
+NKSU_SYMBOL_FN(int, fsnotify_add_mark,
+	       (struct fsnotify_mark * mark, struct fsnotify_mark_connector *conn,
+		unsigned int obj_type, int add_flags, __kernel_fsid_t *fsid),
+	       (mark, conn, obj_type, add_flags, fsid))
+#endif
 #endif
 
 /*
@@ -538,9 +552,10 @@ NKSU_SYMBOL_VOID_FN(fsnotify_init_mark, (struct fsnotify_mark * mark, struct fsn
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 #define fsnotify_init_mark nksu_fsnotify_init_mark_fn
 #endif
-#define fsnotify_put_mark nksu_fsnotify_put_mark
-#define fsnotify_put_group nksu_fsnotify_put_group
-#define fsnotify_destroy_mark nksu_fsnotify_destroy_mark
+#define fsnotify_put_mark nksu_fsnotify_put_mark_fn
+#define fsnotify_put_group nksu_fsnotify_put_group_fn
+#define fsnotify_destroy_mark nksu_fsnotify_destroy_mark_fn
+#define fsnotify_add_mark nksu_fsnotify_add_mark_fn
 #define kernel_thread nksu_kernel_thread
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define kernel_execve nksu_kernel_execve
