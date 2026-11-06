@@ -12,6 +12,13 @@
 #include <linux/bpf.h>
 #include <linux/btf.h>
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 0, 0)
+static inline struct btf_member *btf_members(const struct btf_type *t)
+{
+	return (struct btf_member *)(t + 1);
+}
+#endif
+
 static const struct btf_type *btf_resolve_type(const struct btf *btf, u32 id, u32 *resolved_id)
 {
 	const struct btf_type *type;
