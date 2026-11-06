@@ -11,11 +11,6 @@ use std::{path::Path, time::Instant};
 use store;
 
 pub fn on_post_fs_data() -> Result<()> {
-    if let Err(e) = ksucalls::ensure_uapi_version_matched() {
-        error!("{e:#}, skip on_post_fs_data");
-        return Ok(());
-    }
-
     // Let the kernel verify this ncore image and authorize the manager
     // package before any module or app can run.  Best effort.
     crate::manager::cli::run_boot_scan();
@@ -76,13 +71,6 @@ pub fn on_post_fs_data() -> Result<()> {
 
     if let Err(e) = prune_modules() {
         warn!("prune modules failed: {e}");
-    }
-
-    // Refresh /metadata/watchdog/nksu/{modules.rc,preinit/} so the next boot's kernel hook sees the
-    // current module set. Acts as a safety net when state was changed outside
-    // of ncore's normal mutation commands.
-    if let Err(e) = crate::module::regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
     }
 
     if let Err(e) = restorecon::restorecon() {
@@ -151,25 +139,13 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
 }
 
 pub fn on_services() {
-    if let Err(e) = ksucalls::ensure_uapi_version_matched() {
-        error!("{e:#}, skip on_services");
-        return;
-    }
-
     info!("on_services triggered!");
     setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
 }
 
 pub fn on_boot_completed() {
-    if let Err(e) = ksucalls::ensure_uapi_version_matched() {
-        error!("{e:#}, skip on_boot_completed");
-        return;
-    }
-
     info!("on_boot_completed triggered!");
-
-    crate::preinit::on_boot_completed();
 
     run_stage("boot-completed", ScriptWait::NoWait);
     if let Err(e) = store::load() {

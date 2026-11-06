@@ -15,9 +15,9 @@ use anyhow::{Ok, Result};
 use clap::Parser;
 
 use android_logger::Config;
-use log::{LevelFilter, info};
+use log::LevelFilter;
 
-use crate::{defs, init_event, ksucalls, manager, module, resetprop, su, utils};
+use crate::{defs, init_event, manager, module, resetprop, su, utils};
 
 #[derive(Parser, Debug)]
 #[command(author, version = defs::FULL_VERSION, about, long_about = None)]
@@ -144,10 +144,6 @@ pub fn run() -> Result<()> {
     let result = match cli.command {
         Commands::PostFsData => init_event::on_post_fs_data(),
         Commands::Services => {
-            if ksucalls::get_version() <= 0 {
-                info!("NekoSU kernel driver not available, exiting services");
-                std::process::exit(0);
-            }
             init_event::on_services();
             Ok(())
         }

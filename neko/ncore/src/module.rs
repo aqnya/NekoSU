@@ -66,7 +66,7 @@ pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, Str
     let mut envs = vec![
         ("ASH_STANDALONE", "1".to_string()),
         ("KSU", "true".to_string()),
-        ("KSU_KERNEL_VER_CODE", ksucalls::get_version().to_string()),
+        ("KSU_KERNEL_VER_CODE", "30000".to_string()),
         ("KSU_VER_CODE", defs::VERSION_CODE.to_string()),
         ("KSU_VER", defs::VERSION_NAME.to_string()),
         ("KSU_UAPI_VER", ksu_uapi::KERNEL_SU_UAPI_VERSION.to_string()),
@@ -88,11 +88,6 @@ pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, Str
             error!("Invalid module_id provided: {id}");
         }
     }
-
-    if ksucalls::is_late_load() {
-        envs.push(("KSU_LATE_LOAD", "1".to_string()));
-    }
-
     envs
 }
 
@@ -480,176 +475,6 @@ pub fn prune_modules() -> Result<()> {
     Ok(())
 }
 
-// Kernels before this UAPI only look for modules.rc under /metadata/watchdog and /metadata.
-const PREINIT_VOLD_UAPI_VERSION: u32 = 6;
-
-// Prefer /metadata/vold/ when the kernel reads it, else /metadata/watchdog/, else /metadata.
-pub fn preinit_ksu_dir() -> &'static str {
-    if ksucalls::get_info().uapi_version >= PREINIT_VOLD_UAPI_VERSION
-        && Path::new("/metadata/vold").is_dir()
-    {
-        defs::PREINIT_DIR_VOLD
-    } else if Path::new("/metadata/watchdog").is_dir() {
-        defs::PREINIT_DIR_WATCHDOG
-    } else {
-        defs::PREINIT_DIR_DEFAULT
-    }
-}
-
-/// SELinux context to label the preinit files with, matching the host dir so
-/// init's restorecon does not fight us.
-pub fn preinit_con(dir: &str) -> &'static str {
-    if dir == defs::PREINIT_DIR_VOLD {
-        defs::VOLD_METADATA_FILE_CON
-    } else {
-        defs::METADATA_FILE_CON
-    }
-}
-
-fn collect_rc_files<P: AsRef<Path>>(
-    dir: P,
-    mod_id: Option<&str>,
-    out: &mut dyn Write,
-) -> Result<()> {
-    let dir = dir.as_ref();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Ok(());
-    };
-    let mut entries: Vec<_> = entries.flatten().collect();
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    for entry in entries {
-        let path = entry.path();
-        let Ok(meta) = entry.metadata() else { continue };
-        if meta.is_file() && path.extension().and_then(|s| s.to_str()) == Some("rc") {
-            if let Some(mod_id) = mod_id {
-                writeln!(out, "# === from {mod_id}:{} ===", path.display())?;
-            } else {
-                // Although the rc file itself is not executable, we still use its executable bit as a switch.
-                if !is_executable(&path) {
-                    continue;
-                }
-                writeln!(out, "# === from {} ===", path.display())?;
-            }
-            let content = std::fs::read(&path)
-                .with_context(|| format!("Failed to read rc {}", path.display()))?;
-            out.write_all(&content)?;
-            writeln!(out)?;
-        }
-    }
-    Ok(())
-}
-
-/// Enabled modules for the next boot, by id. modules_update/ wins over modules/, and a disabled or
-/// removed module is skipped even if the other dir has an enabled copy.
-fn next_boot_modules() -> BTreeMap<String, PathBuf> {
-    let mut modules: BTreeMap<String, Option<PathBuf>> = BTreeMap::new();
-    for src_dir in [defs::MODULE_UPDATE_DIR, defs::MODULE_DIR] {
-        let Ok(entries) = std::fs::read_dir(src_dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let module_path = entry.path();
-            if !module_path.is_dir() {
-                continue;
-            }
-            let Some(id) = module_path.file_name().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            let id = id.to_string();
-            if module_path.join(defs::DISABLE_FILE_NAME).exists()
-                || module_path.join(defs::REMOVE_FILE_NAME).exists()
-            {
-                modules.insert(id, None);
-                continue;
-            }
-            modules.entry(id).or_insert(Some(module_path));
-        }
-    }
-    modules
-        .into_iter()
-        .filter_map(|(id, path)| path.map(|path| (id, path)))
-        .collect()
-}
-
-/// Rebuild PREINITDIR/modules.rc by concatenating *.rc from every enabled
-/// module. The kernel-side read hook splices this file into init.rc on the
-/// next boot.
-fn regenerate_preinit_rc(
-    preinit_str: &str,
-    modules: &BTreeMap<String, PathBuf>,
-    con: &str,
-) -> Result<()> {
-    let preinit_dir = Path::new(preinit_str);
-    std::fs::create_dir_all(preinit_dir)
-        .with_context(|| format!("Failed to create {}", preinit_dir.display()))?;
-
-    let tmp_path_buf = preinit_dir.join(defs::MODULES_RC_TMP_FILE);
-    let out_path_buf = preinit_dir.join(defs::MODULES_RC_FILE);
-    let tmp_path = tmp_path_buf.as_path();
-    let out_path = out_path_buf.as_path();
-
-    {
-        let mut tmp = File::create(tmp_path)
-            .with_context(|| format!("Failed to create {}", tmp_path.display()))?;
-
-        // collect common initrc first
-        collect_rc_files(Path::new(defs::ADB_DIR).join("initrc.d"), None, &mut tmp)?;
-        // then modules in alphabetical order, with their effective module path in the next boot
-        for (id, path) in modules {
-            collect_rc_files(path.join(defs::MODULE_INIT_RC_DIR), Some(id), &mut tmp)?;
-        }
-        tmp.sync_all()?;
-    }
-
-    std::fs::rename(tmp_path, out_path).with_context(|| {
-        format!(
-            "Failed to rename {} -> {}",
-            tmp_path.display(),
-            out_path.display()
-        )
-    })?;
-
-    // SELinux label so the kernel's filp_open in init context can read it.
-    if let Err(e) = crate::restorecon::lsetfilecon(out_path, con) {
-        debug!("set context on {} failed: {e}", out_path.display());
-    }
-
-    Ok(())
-}
-
-/// Rebuild what the kernel picks up from the preinit partition on the next boot: modules.rc and
-/// the modules' preinit dirs.
-pub fn regenerate_preinit() -> Result<()> {
-    let preinit_str = preinit_ksu_dir();
-    let con = preinit_con(preinit_str);
-    // The candidates we are not using this boot; clean any leftover from them.
-    let stale_strs: Vec<&str> = [
-        defs::PREINIT_DIR_VOLD,
-        defs::PREINIT_DIR_WATCHDOG,
-        defs::PREINIT_DIR_DEFAULT,
-    ]
-    .into_iter()
-    .filter(|d| *d != preinit_str)
-    .collect();
-    let modules = next_boot_modules();
-
-    let rc = regenerate_preinit_rc(preinit_str, &modules, con);
-    // Clear stale modules.rc at the other candidate paths.
-    for stale in &stale_strs {
-        std::fs::remove_file(Path::new(stale).join(defs::MODULES_RC_FILE)).ok();
-    }
-
-    let stale_dirs: Vec<&Path> = stale_strs.iter().map(Path::new).collect();
-    let preinit = crate::preinit::sync(
-        Path::new(preinit_str),
-        &stale_dirs,
-        &modules,
-        con,
-        crate::ksucalls::is_preinit_supported(),
-    );
-    rc.and(preinit)
-}
-
 pub fn handle_updated_modules() -> Result<()> {
     let modules_root = Path::new(MODULE_DIR);
     foreach_module(ModuleType::Updated, |updated_module| {
@@ -843,17 +668,7 @@ fn install_module_to_system(zip: &str) -> Result<String> {
 }
 
 pub fn install_module(zip: &str) -> Result<()> {
-    ksucalls::ensure_uapi_version_matched()?;
-
-    let module_id = install_module_to_system(zip).inspect_err(|e| println!("- Error: {e}"))?;
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-    if let Some((state, message)) = crate::preinit::status_of(&module_id)
-        && state != "ok"
-    {
-        println!("! preinit will not take effect: {state} {message}");
-    }
+    install_module_to_system(zip).inspect_err(|e| println!("- Error: {e}"))?;
     Ok(())
 }
 
@@ -871,10 +686,6 @@ pub fn undo_uninstall_module(id: &str) -> Result<()> {
         info!("Removed the remove mark for module {id}");
     }
 
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-
     Ok(())
 }
 
@@ -890,16 +701,11 @@ pub fn uninstall_module(id: &str) -> Result<()> {
 
     info!("Module {id} marked for removal");
 
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-
     Ok(())
 }
 
 pub fn run_action(id: &str) -> Result<()> {
     validate_module_id(id)?;
-    ksucalls::ensure_uapi_version_matched()?;
 
     let action_script_path = format!("/data/adb/modules/{id}/action.sh");
     exec_script(&action_script_path, ScriptWait::Forever)
@@ -919,10 +725,6 @@ pub fn enable_module(id: &str) -> Result<()> {
         info!("Module {id} enabled");
     }
 
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
-
     Ok(())
 }
 
@@ -934,10 +736,6 @@ pub fn disable_module(id: &str) -> Result<()> {
     ensure_file_exists(disable_path)?;
 
     info!("Module {id} disabled");
-
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
 
     Ok(())
 }
@@ -956,9 +754,6 @@ fn mark_all_modules(flag_file: &str) -> Result<()> {
 
 pub fn disable_all_modules() -> Result<()> {
     mark_all_modules(defs::DISABLE_FILE_NAME)?;
-    if let Err(e) = regenerate_preinit() {
-        warn!("regenerate preinit failed: {e:#}");
-    }
     Ok(())
 }
 
@@ -1042,8 +837,6 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
         }
     };
 
-    let preinit_states = crate::preinit::module_states();
-
     // first check enabled modules
     let dir = std::fs::read_dir(path);
     let Ok(dir) = dir else {
@@ -1103,12 +896,6 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
         module_prop_map.insert("hasSystem".to_owned(), has_system.to_string());
         module_prop_map.insert("skipMount".to_owned(), skip_mount.to_string());
         module_prop_map.insert("metamodule".to_owned(), metamodule.to_string());
-        if let Some(state) = module_prop_map
-            .get("id")
-            .and_then(|id| preinit_states.get(id.as_str()))
-        {
-            module_prop_map.insert("preinit".to_owned(), state.clone());
-        }
 
         resolve_module_icon_path(&mut module_prop_map, "actionIcon", &path);
         resolve_module_icon_path(&mut module_prop_map, "webuiIcon", &path);

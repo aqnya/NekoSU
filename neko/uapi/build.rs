@@ -4,6 +4,7 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=../../uapi/ioctl.h");
     println!("cargo:rerun-if-changed=../../uapi/selinux.h");
+    println!("cargo:rerun-if-changed=../../uapi/version.h");
     println!("cargo:rerun-if-changed=build.rs");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -17,6 +18,7 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("../../uapi/ioctl.h")
         .header("../../uapi/selinux.h")
+        .header("../../uapi/version.h")
         .clang_arg("-I../../uapi")
         .allowlist_type("fmac_.*")
         .allowlist_type("nksu_.*")
