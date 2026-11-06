@@ -41,13 +41,13 @@ static int btf_get_type_size(const struct btf *btf, u32 type_id, u32 *size)
 
 	switch (BTF_INFO_KIND(type->info)) {
 	case BTF_KIND_INT:
-#ifdef BTF_KIND_FLOAT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
 	case BTF_KIND_FLOAT:
 #endif
-	case BTF_KIND_ENUM:
-#ifdef BTF_KIND_ENUM64
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
 	case BTF_KIND_ENUM64:
 #endif
+	case BTF_KIND_ENUM:
 	case BTF_KIND_STRUCT:
 	case BTF_KIND_UNION:
 	case BTF_KIND_DATASEC:
