@@ -5,6 +5,7 @@
  * itself; the main syscall hook is not involved.
  */
 #include <linux/cred.h>
+#include <linux/btf.h>
 #include <linux/atomic.h>
 #include <linux/dcache.h>
 #include <linux/err.h>
@@ -32,6 +33,7 @@
 #include <linux/uaccess.h>
 #include <asm/ptrace.h>
 
+#include "btf_parser.h"
 #include "hook/tools.h"
 #include "klog.h"
 #include "manager/feature.h"
@@ -377,8 +379,8 @@ void nksu_umount_schedule(void)
  * itself.  The low id sequence an app observes therefore stays contiguous even
  * after the per-app umount removed module mounts from its namespace.
  *
- * The struct mount field offsets are supplied by ncore, which reads them from
- * the kernel's BTF.  Hard-coding offsets across GKI versions is not an option.
+ * The struct mount field offsets are resolved locally from the running
+ * kernel's BTF.  Hard-coding offsets across GKI versions is not an option.
  */
 #if IS_ENABLED(CONFIG_KPROBES)
 
@@ -391,7 +393,7 @@ static u32 nksu_mnt_id_off;
 static u32 nksu_mnt_off;
 
 static bool nksu_mount_layout_ready;
-static bool nksu_mount_layout_seen;
+static bool nksu_mount_layout_resolved;
 static bool nksu_ida_probe_ready;
 static bool nksu_mount_probes_ready;
 static bool nksu_clone_probe_ready;
@@ -399,6 +401,57 @@ static bool nksu_copy_ns_probe_ready;
 static bool nksu_install_ns_probe_ready;
 static bool nksu_show_probe_ready[3];
 static DEFINE_MUTEX(nksu_mount_layout_lock);
+
+/* Resolve struct mount offsets from the running kernel's BTF. */
+static int nksu_mount_layout_resolve(void)
+{
+	struct btf *btf;
+	struct btf_field field;
+	struct btf **btf_vmlinux;
+	unsigned long sym;
+	int ret;
+
+	if (READ_ONCE(nksu_mount_layout_resolved))
+		return 0;
+
+	/* kallsyms returns the address of the pointer-valued global. */
+	sym = NKSU_KSYM_LOOKUP("btf_vmlinux");
+	if (!sym) {
+		pr_err("btf_vmlinux symbol is unresolved\n");
+		return -ENOENT;
+	}
+	btf_vmlinux = (struct btf **)sym;
+	btf = READ_ONCE(*btf_vmlinux);
+	if (!btf) {
+		pr_err("kernel BTF is unavailable\n");
+		return -ENOENT;
+	}
+
+	ret = btf_get_field(btf, "mount", "mnt_id", BTF_KIND_INT, sizeof(int),
+			    BTF_FIELD_F_CHECK_SIZE, &field);
+	if (ret) {
+		pr_err("cannot resolve struct mount.mnt_id: %d\n", ret);
+		return ret;
+	}
+	if (field.bitfield_size || field.bit_offset)
+		return -EINVAL;
+	nksu_mnt_id_off = field.offset;
+
+	ret = btf_get_field(btf, "mount", "mnt", BTF_KIND_STRUCT, sizeof(struct vfsmount),
+			    BTF_FIELD_F_CHECK_SIZE, &field);
+	if (ret) {
+		pr_err("cannot resolve struct mount.mnt: %d\n", ret);
+		return ret;
+	}
+	if (field.bitfield_size || field.bit_offset)
+		return -EINVAL;
+	nksu_mnt_off = field.offset;
+
+	WRITE_ONCE(nksu_mount_layout_resolved, true);
+	pr_info("resolved mount layout from BTF (mnt_id@%u, mnt@%u)\n", nksu_mnt_id_off,
+		nksu_mnt_off);
+	return 0;
+}
 
 #if defined(__aarch64__)
 static unsigned long nksu_arg0(const struct pt_regs *regs)
@@ -623,6 +676,10 @@ static int nksu_mount_probes_register_locked(void)
 	if (nksu_mount_probes_ready)
 		return 0;
 
+	ret = nksu_mount_layout_resolve();
+	if (ret)
+		return ret;
+
 	ret = nksu_resolve_probe_symbols();
 	if (ret)
 		return ret;
@@ -675,37 +732,6 @@ static int nksu_mount_probes_register_locked(void)
 	return 0;
 }
 
-int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
-{
-	int ret;
-
-	if (mnt_id_off > 4096 - sizeof(int) || mnt_off > 4096 || (mnt_id_off & (sizeof(int) - 1)))
-		return -EINVAL;
-
-	mutex_lock(&nksu_mount_layout_lock);
-
-	WRITE_ONCE(nksu_mnt_id_off, mnt_id_off);
-	WRITE_ONCE(nksu_mnt_off, mnt_off);
-	nksu_mount_layout_seen = true;
-
-	/* The feature may be disabled from the manager; keep only the layout. */
-	if (!READ_ONCE(nksu_umount_running)) {
-		mutex_unlock(&nksu_mount_layout_lock);
-		return 0;
-	}
-
-	ret = nksu_mount_probes_register_locked();
-	if (ret) {
-		mutex_unlock(&nksu_mount_layout_lock);
-		return ret;
-	}
-
-	WRITE_ONCE(nksu_mount_layout_ready, true);
-	mutex_unlock(&nksu_mount_layout_lock);
-	pr_info("active (mnt_id@%u, mnt@%u)\n", mnt_id_off, mnt_off);
-	return 0;
-}
-
 static void __nocfi nksu_mount_probes_exit(void)
 {
 	int i;
@@ -744,16 +770,8 @@ static void __nocfi nksu_mount_probes_exit(void)
 
 #else /* !CONFIG_KPROBES */
 
-/* Keep the layout bookkeeping (used by the umount start path) compiled in. */
 static bool nksu_mount_layout_ready;
-static bool nksu_mount_layout_seen;
 static DEFINE_MUTEX(nksu_mount_layout_lock);
-
-int nksu_mount_id_set_layout(u32 mnt_id_off, u32 mnt_off)
-{
-	pr_err("CONFIG_KPROBES is disabled\n");
-	return -EOPNOTSUPP;
-}
 
 static int nksu_mount_probes_register_locked(void)
 {
@@ -926,21 +944,14 @@ static int nksu_umount_start(void)
 	nksu_umount_hooked = true;
 	mutex_unlock(&nksu_umount_init_lock);
 
-	/*
-	 * Mount-id probes are registered when the BTF layout arrives, i.e.
-	 * immediately before ncore's first mount, or here if the feature is
-	 * re-enabled after a boot-time disable.  Keeping them out of the
-	 * pre-layout window avoids a kprobe on every ida_alloc_range() call.
-	 */
-	if (nksu_mount_layout_seen) {
-		mutex_lock(&nksu_mount_layout_lock);
-		ret = nksu_mount_probes_register_locked();
-		if (!ret)
-			WRITE_ONCE(nksu_mount_layout_ready, true);
-		mutex_unlock(&nksu_mount_layout_lock);
-		if (ret)
-			pr_warn("probes not ready: %d\n", ret);
-	}
+	/* Resolve the layout from kernel BTF; no userspace offset handoff. */
+	mutex_lock(&nksu_mount_layout_lock);
+	ret = nksu_mount_probes_register_locked();
+	if (!ret)
+		WRITE_ONCE(nksu_mount_layout_ready, true);
+	mutex_unlock(&nksu_mount_layout_lock);
+	if (ret)
+		pr_warn("mount-id probes not ready: %d\n", ret);
 
 	pr_info("sys_enter probe active\n");
 	return 0;

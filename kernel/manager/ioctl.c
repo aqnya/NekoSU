@@ -361,26 +361,6 @@ static void nksu_mark_current_ncore(void)
 	nksu_path_install_task(current);
 }
 
-static long ioc_set_mnt_layout(const void __user *data, unsigned int size)
-{
-	struct nksu_mnt_layout layout;
-
-	if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
-		return -EPERM;
-	if (!data || size != sizeof(layout))
-		return -EINVAL;
-	if (copy_from_user(&layout, data, sizeof(layout)))
-		return -EFAULT;
-
-	nksu_mark_current_ncore();
-
-	/* Mark-only request: ncore could not read BTF, but mounting still works. */
-	if (layout.mnt_id_off == 0 && layout.mnt_off == 0)
-		return 0;
-
-	return nksu_mount_id_set_layout(layout.mnt_id_off, layout.mnt_off);
-}
-
 static long ioc_disarm_safemode(void)
 {
 	nksu_safe_mode_disable();
@@ -448,7 +428,7 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		nksu_umount_wipe();
 		return 0;
 	case IOC_SET_MNT_LAYOUT:
-		return ioc_set_mnt_layout(data, ioc.size);
+		return 0;
 	case IOC_SET_MANAGER_UID:
 		return ioc_set_manager_uid(data, ioc.size);
 	default:
