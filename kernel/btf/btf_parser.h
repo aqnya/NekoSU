@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef INFRA_BTF_PARSER_H
 #define INFRA_BTF_PARSER_H
