@@ -336,11 +336,6 @@ static long ioc_add_try_umount(const void __user *data, unsigned int size)
 	return nksu_umount_add(path, MNT_DETACH);
 }
 
-struct nksu_mnt_layout {
-	u32 mnt_id_off;
-	u32 mnt_off;
-};
-
 static void nksu_mark_current_ncore(void)
 {
 	struct task_struct *t;
@@ -426,8 +421,6 @@ static long fmac_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return ioc_add_try_umount(data, ioc.size);
 	case IOC_WIPE_UMOUNT:
 		nksu_umount_wipe();
-		return 0;
-	case IOC_SET_MNT_LAYOUT:
 		return 0;
 	case IOC_SET_MANAGER_UID:
 		return ioc_set_manager_uid(data, ioc.size);

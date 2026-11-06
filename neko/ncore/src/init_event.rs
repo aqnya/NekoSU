@@ -17,10 +17,6 @@ pub fn on_post_fs_data() -> Result<()> {
 
     utils::umask(0);
 
-    // Must run before any script can mount: the kernel needs the struct mount
-    // offsets to give ncore-created mounts a high, non-contiguous id.
-    setup_mount_layout();
-
     // Clear all temporary module configs early
     if let Err(e) = crate::module_config::clear_all_temp_configs() {
         warn!("clear temp configs failed: {e}");
@@ -140,7 +136,6 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
 
 pub fn on_services() {
     info!("on_services triggered!");
-    setup_mount_layout();
     run_stage("service", ScriptWait::NoWait);
 }
 
@@ -190,22 +185,4 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn setup_mount_layout() {
-    match crate::btf::read_mount_layout() {
-        Ok(layout) => match kzcall::set_mount_layout(layout.mnt_id_off, layout.mnt_off) {
-            Ok(()) => info!(
-                "mount layout: mnt_id@{}, mnt@{}",
-                layout.mnt_id_off, layout.mnt_off
-            ),
-            Err(e) => warn!("install mount layout failed: {e:#}"),
-        },
-        Err(e) => {
-            warn!("cannot read mount layout: {e:#}");
-            if let Err(e) = kzcall::set_mount_layout(0, 0) {
-                warn!("mark ncore for mount handling failed: {e:#}");
-            }
-        }
-    }
 }

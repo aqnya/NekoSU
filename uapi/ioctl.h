@@ -80,12 +80,6 @@ enum fmac_flag {
 	IOC_ADD_TRY_UMOUNT = 21, /* data = 挂载点路径（含 NUL），flags 固定 MNT_DETACH */
 	IOC_WIPE_UMOUNT = 22, /* data 为空，清空 umount 列表 */
 	/*
-     * data[8] = uint32_t mnt_id_off | uint32_t mnt_off.  ncore reads the
-     * offsets from /sys/kernel/btf/vmlinux and installs them before running
-     * the first module mount script.
-     */
-	IOC_SET_MNT_LAYOUT = 23,
-	/*
 	 * data[4] = uint32_t manager uid.  The kernel verifies the caller's
 	 * executable against the pinned ncore signing key before granting this
 	 * UID the default profile; only a signed ncore can set it.

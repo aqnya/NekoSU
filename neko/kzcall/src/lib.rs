@@ -32,14 +32,6 @@ pub fn report_boot_complete() {
     let _ = ioctl::call(fmac_flag_IOC_DISARM_SAFEMODE, &mut []);
 }
 
-pub fn set_mount_layout(mnt_id_off: u32, mnt_off: u32) -> Result<()> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&mnt_id_off.to_ne_bytes());
-    data.extend_from_slice(&mnt_off.to_ne_bytes());
-    ioctl::call(fmac_flag_IOC_SET_MNT_LAYOUT, &mut data)?;
-    Ok(())
-}
-
 pub fn set_init_pgrp() -> Result<()> {
     let mut data = [];
     ioctl::call(fmac_flag_IOC_SET_INIT_PGRP, &mut data)?;

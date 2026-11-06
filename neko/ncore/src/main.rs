@@ -12,10 +12,10 @@
     clippy::redundant_field_names
 )]
 
-mod antibrick;
-mod assets;
 #[cfg(target_os = "android")]
-mod btf;
+mod antibrick;
+#[cfg(target_os = "android")]
+mod assets;
 #[cfg(target_os = "android")]
 mod cli;
 #[cfg(not(target_os = "android"))]
@@ -30,6 +30,7 @@ mod init_event;
 mod ksu_uapi;
 #[cfg(target_os = "android")]
 mod ksucalls;
+#[cfg(target_os = "android")]
 mod manager;
 #[cfg(target_os = "android")]
 mod metamodule;
