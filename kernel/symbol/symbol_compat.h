@@ -50,6 +50,7 @@
 #include <asm/fixmap.h>
 #include <linux/seccomp.h>
 #include <crypto/akcipher.h>
+#include <linux/btf.h>
 
 #include "kernel_compat.h"
 
