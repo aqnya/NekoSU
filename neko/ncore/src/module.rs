@@ -14,6 +14,7 @@ use java_properties::PropertiesIter;
 use log::{debug, error, info, warn};
 use regex_lite::Regex;
 
+use std::fs::{copy, rename};
 use std::{
     collections::HashMap,
     env::var as env_var,
@@ -24,7 +25,6 @@ use std::{
     str::FromStr,
     time::Instant,
 };
-use std::fs::{copy, rename};
 use zip_extensions::inflate::zip_extract::zip_extract_file_to_memory;
 
 use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};

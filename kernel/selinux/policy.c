@@ -589,9 +589,9 @@ int load_policy(void)
 		}
 	}
 
-	/* allow all */
+#ifdef CONFIG_NKSU_DEBUG
 	apply(DOMAIN, ALL, ALL, ALL);
-
+#endif
 	/* allow any ioctl */
 	if (xperm_supported()) {
 		sepolicy_add_xperm(DOMAIN, ALL, "blk_file", ALL, AVTAB_XPERMS_ALLOWED, false);
