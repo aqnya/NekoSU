@@ -310,6 +310,11 @@ extern typeof(copy_to_kernel_nofault) *nksu_copy_to_kernel_nofault;
 extern typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #define copy_to_kernel_nofault(dst, src, size) nksu_probe_kernel_write((dst), (src), (size))
 #endif
+/* BTF helpers used by the module's own BTF parsing/hiding logic. */
+extern typeof(btf_name_by_offset) *nksu_btf_name_by_offset;
+extern typeof(btf_find_by_name_kind) *nksu_btf_find_by_name_kind;
+extern typeof(btf_type_by_id) *nksu_btf_type_by_id;
+extern typeof(btf_type_skip_modifiers) *nksu_btf_type_skip_modifiers;
 /*
  * __nocfi wrappers for the function symbols that used to force a file-wide
  * CFI opt-out at their call sites.  The wrappers are only needed by the
@@ -478,6 +483,13 @@ NKSU_SYMBOL_FN(int, access_process_vm,
 	       (struct task_struct * tsk, unsigned long addr, void *buf, size_t len,
 		unsigned int gup_flags),
 	       (tsk, addr, buf, len, gup_flags))
+NKSU_SYMBOL_FN(const char *, btf_name_by_offset, (const struct btf *btf, u32 offset), (btf, offset))
+NKSU_SYMBOL_FN(s32, btf_find_by_name_kind, (const struct btf *btf, const char *name, u8 kind),
+	       (btf, name, kind))
+NKSU_SYMBOL_FN(const struct btf_type *, btf_type_by_id, (const struct btf *btf, u32 type_id),
+	       (btf, type_id))
+NKSU_SYMBOL_FN(const struct btf_type *, btf_type_skip_modifiers,
+	       (const struct btf *btf, u32 id, u32 *res_id), (btf, id, res_id))
 #endif
 
 /*
@@ -577,6 +589,10 @@ NKSU_SYMBOL_FN(int, access_process_vm,
 #endif
 #define seccomp_filter_release nksu_seccomp_filter_release_fn
 #define crypto_alloc_akcipher nksu_crypto_alloc_akcipher_fn
+#define btf_name_by_offset nksu_btf_name_by_offset_fn
+#define btf_find_by_name_kind nksu_btf_find_by_name_kind_fn
+#define btf_type_by_id nksu_btf_type_by_id_fn
+#define btf_type_skip_modifiers nksu_btf_type_skip_modifiers_fn
 #endif /* NKSU_SYMBOL_COMPAT_NO_MACROS */
 
 /* Resolve all symbols into the pointers; returns negative errno if any fail. */

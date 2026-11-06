@@ -11,6 +11,7 @@
 #include <linux/string.h>
 #include <linux/bpf.h>
 #include <linux/btf.h>
+#include "symbol/symbol_compat.h"
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 0, 0)
 static inline struct btf_member *btf_members(const struct btf_type *t)

@@ -121,6 +121,10 @@ typeof(probe_kernel_write) *nksu_probe_kernel_write;
 #endif
 typeof(seccomp_filter_release) *nksu_seccomp_filter_release;
 typeof(crypto_alloc_akcipher) *nksu_crypto_alloc_akcipher;
+typeof(btf_name_by_offset) *nksu_btf_name_by_offset;
+typeof(btf_find_by_name_kind) *nksu_btf_find_by_name_kind;
+typeof(btf_type_by_id) *nksu_btf_type_by_id;
+typeof(btf_type_skip_modifiers) *nksu_btf_type_skip_modifiers;
 
 #define NKSU_RESOLVE(ptr, sym)                              \
 	do {                                                \
@@ -270,6 +274,10 @@ int nksu_symbol_compat_init(void)
 #endif
 	NKSU_RESOLVE(nksu_seccomp_filter_release, "seccomp_filter_release");
 	NKSU_RESOLVE(nksu_crypto_alloc_akcipher, "crypto_alloc_akcipher");
+	NKSU_RESOLVE(nksu_btf_name_by_offset, "btf_name_by_offset");
+	NKSU_RESOLVE(nksu_btf_find_by_name_kind, "btf_find_by_name_kind");
+	NKSU_RESOLVE(nksu_btf_type_by_id, "btf_type_by_id");
+	NKSU_RESOLVE(nksu_btf_type_skip_modifiers, "btf_type_skip_modifiers");
 
 	if (missing) {
 		pr_err("%d unexported symbol(s) unresolved, cache=%lu\n", missing,
@@ -383,4 +391,8 @@ void nksu_symbol_compat_exit(void)
 	nksu_flush_signal_handlers = NULL;
 	nksu_seccomp_filter_release = NULL;
 	nksu_crypto_alloc_akcipher = NULL;
+	nksu_btf_name_by_offset = NULL;
+	nksu_btf_find_by_name_kind = NULL;
+	nksu_btf_type_by_id = NULL;
+	nksu_btf_type_skip_modifiers = NULL;
 }
