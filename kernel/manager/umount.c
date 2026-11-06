@@ -406,47 +406,20 @@ static DEFINE_MUTEX(nksu_mount_layout_lock);
 /* Resolve struct mount offsets from the running kernel's BTF. */
 static int nksu_mount_layout_resolve(void)
 {
-	struct btf *btf;
-	struct nksu_btf_field field;
-	struct btf **btf_vmlinux;
-	unsigned long sym;
-	int ret;
+	u32 off;
 
 	if (READ_ONCE(nksu_mount_layout_resolved))
 		return 0;
 
-	/* kallsyms returns the address of the pointer-valued global. */
-	sym = NKSU_KSYM_LOOKUP("btf_vmlinux");
-	if (!sym) {
-		pr_err("btf_vmlinux symbol is unresolved\n");
+	off = nksu_btf_resolve_field_off("mount", "mnt_id", BTF_KIND_INT, sizeof(int));
+	if (off == (u32)-1)
 		return -ENOENT;
-	}
-	btf_vmlinux = (struct btf **)sym;
-	btf = READ_ONCE(*btf_vmlinux);
-	if (!btf) {
-		pr_err("kernel BTF is unavailable\n");
+	nksu_mnt_id_off = off;
+
+	off = nksu_btf_resolve_field_off("mount", "mnt", BTF_KIND_STRUCT, sizeof(struct vfsmount));
+	if (off == (u32)-1)
 		return -ENOENT;
-	}
-
-	ret = btf_get_field(btf, "mount", "mnt_id", BTF_KIND_INT, sizeof(int),
-			    BTF_FIELD_F_CHECK_SIZE, &field);
-	if (ret) {
-		pr_err("cannot resolve struct mount.mnt_id: %d\n", ret);
-		return ret;
-	}
-	if (field.bitfield_size || field.bit_offset)
-		return -EINVAL;
-	nksu_mnt_id_off = field.offset;
-
-	ret = btf_get_field(btf, "mount", "mnt", BTF_KIND_STRUCT, sizeof(struct vfsmount),
-			    BTF_FIELD_F_CHECK_SIZE, &field);
-	if (ret) {
-		pr_err("cannot resolve struct mount.mnt: %d\n", ret);
-		return ret;
-	}
-	if (field.bitfield_size || field.bit_offset)
-		return -EINVAL;
-	nksu_mnt_off = field.offset;
+	nksu_mnt_off = off;
 
 	WRITE_ONCE(nksu_mount_layout_resolved, true);
 	pr_info("resolved mount layout from BTF (mnt_id@%u, mnt@%u)\n", nksu_mnt_id_off,

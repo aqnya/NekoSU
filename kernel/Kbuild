@@ -10,7 +10,7 @@ nksu-y += spawn/spawn.o
 nksu-y += symbol/symbol.o symbol/symbol_compat.o
 nksu-y += fd/anonfd.o fd/eventfd.o fd/shm_hash.o
 nksu-y += selinux/rule.o selinux/rule_file.o selinux/selinux.o selinux/policy.o selinux/hide.o selinux/engine.o
-nksu-y += btf/btf_parser.o
+nksu-y += btf/btf_parser.o btf/layout_resolve.o
 
 ifeq ($(CONFIG_NKSU_SYSCALL),y)
 	ccflags-y += -DCONFIG_NKSU_SYSCALL=1

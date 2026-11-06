@@ -36,4 +36,6 @@ enum btf_field_flags {
 int btf_get_field(const struct btf *btf, const char *struct_name, const char *member_name,
 		  u32 expected_kind, u32 expected_size, u32 flags, struct nksu_btf_field *field);
 
+u32 nksu_btf_resolve_field_off(const char *type_name, const char *field_name, u32 kind,
+			       u32 expect_size);
 #endif
