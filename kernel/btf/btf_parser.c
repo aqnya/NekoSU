@@ -2,9 +2,12 @@
 
 #include "btf_parser.h"
 
-#include <linux/btf.h>
+#include <linux/types.h>
 #include <linux/errno.h>
-#include <linux/string.h>
+#include <linux/err.h>
+#include <linux/limits.h>
+#include <linux/kernel.h>
+#include <linux/btf.h>
 
 static const struct btf_type *btf_resolve_type(const struct btf *btf, u32 id, u32 *resolved_id)
 {
@@ -38,9 +41,13 @@ static int btf_get_type_size(const struct btf *btf, u32 type_id, u32 *size)
 
 	switch (BTF_INFO_KIND(type->info)) {
 	case BTF_KIND_INT:
+#ifdef BTF_KIND_FLOAT
 	case BTF_KIND_FLOAT:
+#endif
 	case BTF_KIND_ENUM:
+#ifdef BTF_KIND_ENUM64
 	case BTF_KIND_ENUM64:
+#endif
 	case BTF_KIND_STRUCT:
 	case BTF_KIND_UNION:
 	case BTF_KIND_DATASEC:
