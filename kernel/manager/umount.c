@@ -5,6 +5,7 @@
  * itself; the main syscall hook is not involved.
  */
 #include <linux/cred.h>
+#include <linux/bpf.h>
 #include <linux/btf.h>
 #include <linux/atomic.h>
 #include <linux/dcache.h>
