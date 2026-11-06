@@ -407,7 +407,7 @@ static DEFINE_MUTEX(nksu_mount_layout_lock);
 static int nksu_mount_layout_resolve(void)
 {
 	struct btf *btf;
-	struct btf_field field;
+	struct nksu_btf_field field;
 	struct btf **btf_vmlinux;
 	unsigned long sym;
 	int ret;

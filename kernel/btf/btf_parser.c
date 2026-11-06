@@ -118,7 +118,7 @@ static int btf_validate_member(const struct btf *btf, u32 type_id, u32 expected_
 }
 
 int btf_get_field(const struct btf *btf, const char *struct_name, const char *member_name,
-		  u32 expected_kind, u32 expected_size, u32 flags, struct btf_field *field)
+		  u32 expected_kind, u32 expected_size, u32 flags, struct nksu_btf_field *field)
 {
 	const struct btf_type *type;
 	const struct btf_member *members;

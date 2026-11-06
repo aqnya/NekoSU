@@ -7,7 +7,7 @@
 
 struct btf;
 
-struct btf_field {
+struct nksu_btf_field {
 	u32 offset; /* Byte offset */
 	u32 size; /* Member size in bytes */
 	u32 type_id; /* Original BTF type ID */
@@ -34,6 +34,6 @@ enum btf_field_flags {
  * Returns 0 on success, negative errno otherwise.
  */
 int btf_get_field(const struct btf *btf, const char *struct_name, const char *member_name,
-		  u32 expected_kind, u32 expected_size, u32 flags, struct btf_field *field);
+		  u32 expected_kind, u32 expected_size, u32 flags, struct nksu_btf_field *field);
 
 #endif
