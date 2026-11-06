@@ -29,7 +29,8 @@ object NcoreLoader {
 object Ncore {
     private const val JNI_THREAD_NAME = "ncore-jni"
 
-    private val onJniThread = ThreadLocal.withInitial { false }
+    private val onJniThread: ThreadLocal<Boolean> =
+        ThreadLocal.withInitial<Boolean> { false }
 
     private val jniExecutor =
         Executors.newSingleThreadExecutor { r ->
