@@ -15,6 +15,5 @@
 
 pub const KERNEL_SU_UAPI_VERSION: u32 = 5;
 
-pub const KSU_GET_INFO_FLAG_LKM: u32 = 1 << 0;
 pub const KSU_GET_INFO_FLAG_LATE_LOAD: u32 = 1 << 1;
 pub const KSU_GET_INFO_FLAG_PREINIT: u32 = 1 << 4;

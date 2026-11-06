@@ -9,6 +9,7 @@
  * keeps working.
  */
 use crate::ksu_uapi;
+use crate::utils;
 use anyhow::bail;
 
 pub fn get_info() -> kzcall::defs::ksu_get_info_cmd {
@@ -23,21 +24,15 @@ pub fn is_late_load() -> bool {
     get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_LATE_LOAD != 0
 }
 
-pub fn is_lkm() -> bool {
-    get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_LKM != 0
-}
-
 pub fn is_preinit_supported() -> bool {
     get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_PREINIT != 0
 }
 
 pub fn runtime_mode() -> &'static str {
-    if is_late_load() {
-        "late-load"
-    } else if is_lkm() {
-        "lkm"
-    } else {
-        "built-in"
+    match utils::find_module("nksu") {
+        Ok(Some(_)) => "lkm",
+        Ok(None) => "built-in",
+        Err(_) => "unknown",
     }
 }
 

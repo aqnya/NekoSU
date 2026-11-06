@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+use crate::defs::KSU_TEMP_BACKUP_DIR_NAME;
+use crate::{assets, defs, restorecon};
 use anyhow::{Context, Error, Ok, Result, bail};
 use rustix::process::setpgid;
+use rustix::{
+    process,
+    thread::{LinkNameSpaceType, move_into_link_name_space},
+};
+#[allow(unused_imports)]
+use std::fs::{Permissions, set_permissions};
+use std::os::unix::prelude::PermissionsExt;
+use std::path::PathBuf;
 use std::{
     ffi::{CString, c_char},
     fs::{File, OpenOptions, create_dir_all, remove_file, write},
     io::{
+        BufRead, BufReader,
         ErrorKind::{AlreadyExists, NotFound},
         Write,
     },
     path::Path,
-};
-
-use crate::defs::KSU_TEMP_BACKUP_DIR_NAME;
-use crate::{assets, defs, restorecon};
-#[allow(unused_imports)]
-use std::fs::{Permissions, set_permissions};
-use std::os::unix::prelude::PermissionsExt;
-
-use std::path::PathBuf;
-
-use rustix::{
-    process,
-    thread::{LinkNameSpaceType, move_into_link_name_space},
 };
 
 unsafe extern "C" {
@@ -256,4 +254,64 @@ pub fn detach_process_group(use_init_pgrp: bool) {
     if let Err(e2) = setpgid(None, None) {
         log::error!("failed to set process group: {e2:?}");
     }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct ModuleInfo {
+    pub name: String,
+    pub size: u64,
+    pub refcount: u32,
+    pub dependencies: Vec<String>,
+    pub state: String,
+    pub address: String,
+}
+
+impl ModuleInfo {
+    fn parse(line: &str) -> Option<Self> {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 6 {
+            return None;
+        }
+
+        let name = fields[0].to_string();
+        let size = fields[1].parse::<u64>().unwrap_or(0);
+        let refcount = fields[2].parse::<u32>().unwrap_or(0);
+
+        let dependencies = if fields[3] == "-" {
+            Vec::new()
+        } else {
+            fields[3].split(',').map(String::from).collect()
+        };
+
+        let state = fields[4].to_string();
+        let address = fields[5].to_string();
+
+        Some(ModuleInfo {
+            name,
+            size,
+            refcount,
+            dependencies,
+            state,
+            address,
+        })
+    }
+}
+
+pub fn find_module(target: &str) -> anyhow::Result<Option<ModuleInfo>> {
+    let file = File::open("/proc/modules")?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(info) = ModuleInfo::parse(&line) {
+            if info.name == target {
+                return Ok(Some(info));
+            }
+        }
+    }
+    Ok(None)
 }

@@ -128,7 +128,7 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
         warn!("Magisk detected, skip {stage}");
         return;
     }
-        let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
+    let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
 
     if safe_mode {
         warn!("safe mode, skip {stage} scripts");
