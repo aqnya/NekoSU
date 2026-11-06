@@ -33,7 +33,7 @@
 #include <linux/uaccess.h>
 #include <asm/ptrace.h>
 
-#include "btf_parser.h"
+#include "btf/btf_parser.h"
 #include "hook/tools.h"
 #include "klog.h"
 #include "manager/feature.h"
