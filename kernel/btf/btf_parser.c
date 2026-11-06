@@ -7,6 +7,9 @@
 #include <linux/err.h>
 #include <linux/limits.h>
 #include <linux/kernel.h>
+#include <linux/version.h>
+#include <linux/string.h>
+#include <linux/bpf.h>
 #include <linux/btf.h>
 
 static const struct btf_type *btf_resolve_type(const struct btf *btf, u32 id, u32 *resolved_id)
