@@ -2,11 +2,11 @@
 use crate::antibrick;
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
 use crate::{
-    assets, defs, ksucalls, metamodule, restorecon,
+    assets, defs, metamodule, restorecon,
     utils::{self},
 };
 use anyhow::{Context, Result};
-use log::{error, info, warn};
+use log::{info, warn};
 use std::{path::Path, time::Instant};
 use store;
 

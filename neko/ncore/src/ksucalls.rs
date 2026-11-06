@@ -8,9 +8,7 @@
  * have no NekoSU equivalent degrade to successful no-ops so the module runtime
  * keeps working.
  */
-use crate::ksu_uapi;
 use crate::utils;
-use anyhow::bail;
 
 pub fn runtime_mode() -> &'static str {
     match utils::find_module("nksu") {

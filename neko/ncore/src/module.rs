@@ -15,7 +15,7 @@ use log::{debug, error, info, warn};
 use regex_lite::Regex;
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     env::var as env_var,
     fs::{File, Permissions, canonicalize, remove_dir_all, set_permissions},
     io::Cursor,
@@ -24,10 +24,7 @@ use std::{
     str::FromStr,
     time::Instant,
 };
-use std::{
-    fs::{copy, rename},
-    io::Write,
-};
+use std::fs::{copy, rename};
 use zip_extensions::inflate::zip_extract::zip_extract_file_to_memory;
 
 use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
