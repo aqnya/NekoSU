@@ -133,9 +133,8 @@ int btf_get_field(const struct btf *btf, const char *struct_name, const char *me
 	if (!btf || !struct_name || !member_name || !field)
 		return -EINVAL;
 
-	if (flags & ~BTF_FIELD_F_ALLOW_BITFIELD)
-		if (flags & ~(BTF_FIELD_F_ALLOW_BITFIELD | BTF_FIELD_F_CHECK_SIZE))
-			return -EINVAL;
+	if (flags & ~(BTF_FIELD_F_ALLOW_BITFIELD | BTF_FIELD_F_CHECK_SIZE))
+		return -EINVAL;
 
 	type = btf_find_composite(btf, struct_name);
 	if (IS_ERR(type))
