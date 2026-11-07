@@ -326,7 +326,11 @@ static bool (*nksu_current_is_single_threaded_fn)(void);
 
 static u32 nksu_cred_sid(const struct cred *cred)
 {
-	return nksu_cred_security(cred)->sid;
+	struct task_security_struct *tsec = nksu_cred_security(cred);
+	if (IS_ERR(tsec))
+		return SECSID_NULL;
+
+	return tsec->sid;
 }
 
 static u32 nksu_task_sid_obj(const struct task_struct *task)
@@ -402,6 +406,8 @@ static int __nocfi nksu_setprocattr(NKSU_SETPROC_PARAMS)
      * context is known; see selinux_bprm_creds_for_exec and may_create.
      */
 	tsec = nksu_cred_security(new);
+	if (IS_ERR(tsec))
+		return SECSID_NULL;
 	error = -EINVAL;
 	if (sid == 0)
 		goto abort_change;

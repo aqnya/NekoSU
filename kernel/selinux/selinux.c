@@ -9,6 +9,8 @@
 
 #include "klog.h"
 #include "guards.h"
+#include "btf/btf_parser.h"
+
 #include "security.h"
 #include "ss/symtab.h"
 #include "ss/policydb.h"
@@ -58,21 +60,56 @@ bool getenforce(void)
  * SELinux stores its structs at an LSM offset inside cred->security /
  * inode->i_security, not at the start.  The kernel's selinux_cred() /
  * selinux_inode() accessors add selinux_blob_sizes.lbs_*, but using them
- * would create a relocation against the unexported selinux_blob_sizes and
- * the module would fail to load.  Resolve the symbol through the compat
- * layer and add the offsets ourselves.
+ * directly would create a relocation against the unexported
+ * selinux_blob_sizes and the module would fail to load.
+ *
+ * Prefer resolving the lsm_blob_sizes field offsets from BTF, which yields
+ * plain integers and no relocation.  If BTF is unavailable, fall back to the
+ * compat layer's resolved selinux_blob_sizes symbol and add the offsets
+ * ourselves.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+static bool nksu_blob_sizes_resolved;
+static u32 nksu_lbs_cred_off;
+static u32 nksu_lbs_inode_off;
+
+static int nksu_blob_sizes_resolve(void)
+{
+	u32 off;
+
+	if (READ_ONCE(nksu_blob_sizes_resolved))
+		return 0;
+
+	off = nksu_btf_resolve_field_off("lsm_blob_sizes", "lbs_cred", BTF_KIND_INT, sizeof(int));
+	if (off == (u32)-1)
+		return -ENOENT;
+	nksu_lbs_cred_off = off;
+
+	off = nksu_btf_resolve_field_off("lsm_blob_sizes", "lbs_inode", BTF_KIND_INT, sizeof(int));
+	if (off == (u32)-1)
+		return -ENOENT;
+	nksu_lbs_inode_off = off;
+
+	WRITE_ONCE(nksu_blob_sizes_resolved, true);
+	pr_info("resolved lsm_blob_sizes layout from BTF (lbs_cred@%u, lbs_inode@%u)\n",
+		nksu_lbs_cred_off, nksu_lbs_inode_off);
+	return 0;
+}
+
 struct task_security_struct *nksu_cred_security(const struct cred *cred)
 {
-	return (struct task_security_struct *)((char *)cred->security +
-					       selinux_blob_sizes.lbs_cred);
+	if (unlikely(!nksu_blob_sizes_resolved))
+		return ERR_PTR(-EAGAIN);
+
+	return (struct task_security_struct *)((char *)cred->security + nksu_lbs_cred_off);
 }
 
 static struct inode_security_struct *nksu_inode_security(const struct inode *inode)
 {
-	return (struct inode_security_struct *)((char *)inode->i_security +
-						selinux_blob_sizes.lbs_inode);
+	if (unlikely(!nksu_blob_sizes_resolved))
+		return ERR_PTR(-EAGAIN);
+
+	return (struct inode_security_struct *)((char *)inode->i_security + nksu_lbs_inode_off);
 }
 #else
 struct task_security_struct *nksu_cred_security(const struct cred *cred)
@@ -91,10 +128,14 @@ static struct inode_security_struct *nksu_inode_security(const struct inode *ino
  * selinux_cred(), so its expansion references selinux_blob_sizes.  A file that
  * uses it before symbol_compat.h is in scope gets a relocation against that
  * unexported data symbol and the module fails to load, so hide.c asks here.
- */
+*/
 u32 nksu_current_sid(void)
 {
-	return nksu_cred_security(current_cred())->sid;
+	struct task_security_struct *tsec = nksu_cred_security(current_cred());
+	if (IS_ERR(tsec))
+		return SECSID_NULL;
+
+	return tsec->sid;
 }
 
 /*
@@ -198,6 +239,11 @@ int set_domain(const char *domain, struct cred *new_cred)
 
 	if (new_cred->security) {
 		struct task_security_struct *tsec = nksu_cred_security(new_cred);
+
+		if (IS_ERR(tsec)) {
+			pr_err("failed to get cred security structure: %ld\n", PTR_ERR(tsec));
+			return PTR_ERR(tsec);
+		}
 
 		tsec->osid = tsec->sid;
 		tsec->sid = newsid;
@@ -342,7 +388,7 @@ void nksu_relabel_path(const char *path)
 	inode = file_inode(file);
 	if (inode->i_security) {
 		sec = nksu_inode_security(inode);
-		if (sec)
+		if (!IS_ERR_OR_NULL(sec))
 			sec->sid = nksu_file_sid;
 	}
 
@@ -503,6 +549,13 @@ static int nksu_selinux_init_thread(void *data)
 
 int init_selinux_hook(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+	int ret = nksu_blob_sizes_resolve();
+	if (ret) {
+		pr_info("failed to resolve blob offset");
+		return ret;
+	}
+#endif
 	if (!policy_ready()) {
 		nksu_init_thread = kthread_run(nksu_selinux_init_thread, NULL, "nksu-selinux-init");
 		if (IS_ERR(nksu_init_thread)) {
