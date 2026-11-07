@@ -224,15 +224,6 @@ private fun AboutHero(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )
-
-        Spacer(Modifier.height(4.dp))
-
-        Text(
-            text = stringResource(R.string.about_tagline),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
