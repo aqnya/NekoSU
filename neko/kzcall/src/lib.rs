@@ -1,17 +1,14 @@
 #![allow(dead_code)]
 
 pub mod defs;
-mod fd;
 pub mod ioctl;
+mod fd;
 mod utils;
-use crate::defs::*;
 use anyhow::Result;
+use proto::FeatureEntry;
 use proto::ProfileEntry;
-use std::sync::OnceLock;
 use uapi::*;
 use utils::*;
-
-static INFO_CACHE: OnceLock<ksu_get_info_cmd> = OnceLock::new();
 
 pub fn set_manager_uid(uid: u32) -> Result<()> {
     let mut buf = uid.to_ne_bytes();
@@ -41,23 +38,6 @@ pub fn set_init_pgrp() -> Result<()> {
 pub fn check_kernel_safemode() -> bool {
     let mut data = [];
     matches!(ioctl::call(fmac_flag_IOC_GET_SAFEMODE, &mut data), Ok(1))
-}
-
-pub fn get_info() -> ksu_get_info_cmd {
-    *INFO_CACHE.get_or_init(|| {
-        let mut info = ksu_get_info_cmd {
-            version: 30000,
-            flags: KSU_GET_INFO_FLAG_LKM,
-            features: 0,
-            uapi_version: KERNEL_SU_UAPI_VERSION,
-        };
-
-        let mut version = [0u8; 64];
-        if ioctl::call(fmac_flag_IOC_GET_VERSION, &mut version).is_err() {
-            info.flags = 0;
-        }
-        info
-    })
 }
 
 pub fn set_profile(profile: &ProfileEntry) -> Result<()> {
@@ -178,8 +158,6 @@ pub fn feature_list() -> Option<String> {
     ioctl::call(fmac_flag_IOC_FEATURE_LIST, &mut data).ok()?;
     Some(cstr_lossy(&data))
 }
-
-use proto::FeatureEntry;
 
 pub fn feature_set(entry: &FeatureEntry) -> Result<()> {
     let mut data = [0u8; FMAC_DATA_FEATURE as usize];
