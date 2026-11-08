@@ -11,7 +11,10 @@ pub fn get_u64(buf: &[u8], off: usize) -> u64 {
 }
 
 pub fn put_cstr(field: &mut [u8], value: &str) {
-    let len = value.len().min(field.len() - 1);
+    let Some(max) = field.len().checked_sub(1) else {
+        return;
+    };
+    let len = value.len().min(max);
     field[..len].copy_from_slice(&value.as_bytes()[..len]);
     field[len] = 0;
 }

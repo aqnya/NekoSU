@@ -6,7 +6,7 @@ use rust_embed::RustEmbed;
 mod android {
     use crate::assets::Asset;
     use crate::defs::BINARY_DIR;
-    use crate::utils::ensure_binary;
+    use crate::system::utils::ensure_binary;
     use const_format::concatcp;
 
     pub const RESETPROP_PATH: &str = concatcp!(BINARY_DIR, "resetprop");

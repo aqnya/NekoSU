@@ -13,35 +13,21 @@
 )]
 
 #[cfg(target_os = "android")]
-mod antibrick;
-#[cfg(target_os = "android")]
 mod assets;
+#[cfg(target_os = "android")]
+mod boot;
 #[cfg(target_os = "android")]
 mod cli;
 #[cfg(target_os = "android")]
 mod defs;
 #[cfg(target_os = "android")]
-mod hot_install;
-#[cfg(target_os = "android")]
-mod init_event;
-#[cfg(target_os = "android")]
 mod manager;
-#[cfg(target_os = "android")]
-mod metamodule;
 #[cfg(target_os = "android")]
 mod module;
 #[cfg(target_os = "android")]
-mod module_config;
+mod selinux;
 #[cfg(target_os = "android")]
-mod resetprop;
-#[cfg(target_os = "android")]
-mod restorecon;
-#[cfg(target_os = "android")]
-mod sepolicy;
-#[cfg(target_os = "android")]
-mod su;
-#[cfg(target_os = "android")]
-mod utils;
+mod system;
 
 fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]

@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//! Module management: install/uninstall, scripts, configs and metamodules.
+
+pub mod config;
+pub mod hot_install;
+pub mod metamodule;
+
 #[allow(clippy::wildcard_imports)]
-use crate::utils::*;
+use crate::system::utils::*;
 use crate::{
-    assets, defs, hot_install, metamodule,
-    restorecon::{restore_syscon, setsyscon},
-    sepolicy, utils,
+    assets, defs,
+    selinux::{
+        restorecon::{restore_syscon, setsyscon},
+        sepolicy,
+    },
+    system::utils,
 };
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -31,7 +40,7 @@ use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
 use crate::module::ModuleType::{Active, All};
 use std::os::unix::{prelude::PermissionsExt, process::CommandExt};
 
-const INSTALLER_CONTENT: &str = include_str!("../assets/installer.sh");
+const INSTALLER_CONTENT: &str = include_str!("../../assets/installer.sh");
 const INSTALL_MODULE_SCRIPT: &str = concatcp!(
     INSTALLER_CONTENT,
     "\n",
@@ -405,7 +414,7 @@ pub fn load_system_prop() -> Result<()> {
         }
         info!("load {} system.prop", module.display());
 
-        crate::resetprop::load_system_prop_file(&system_prop)?;
+        crate::system::resetprop::load_system_prop_file(&system_prop)?;
 
         Ok(())
     })?;
@@ -446,7 +455,7 @@ pub fn prune_modules() -> Result<()> {
         }
 
         // Clear module configs before removing module directory
-        if let Err(e) = crate::module_config::clear_module_configs(module_id) {
+        if let Err(e) = crate::module::config::clear_module_configs(module_id) {
             warn!("Failed to clear configs for {module_id}: {e}");
         }
 
@@ -510,7 +519,7 @@ fn install_module_to_system(zip: &str) -> Result<String> {
     ensure_boot_completed()?;
 
     // print banner
-    println!(include_str!("../assets/banner"));
+    println!(include_str!("../../assets/banner"));
 
     assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
 
@@ -825,7 +834,7 @@ fn resolve_module_icon_path(
 
 fn list_module(path: &str) -> Vec<HashMap<String, String>> {
     // Load all module configs once to minimize I/O overhead
-    let all_configs = match crate::module_config::get_all_module_configs() {
+    let all_configs = match crate::module::config::get_all_module_configs() {
         Ok(configs) => configs,
         Err(e) => {
             warn!("Failed to load module configs: {e}");
@@ -876,7 +885,7 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
         let action = path.join(defs::MODULE_ACTION_SH).exists();
         let need_mount = path.join("system").exists() && !path.join("skip_mount").exists();
 
-        let metamodule = crate::metamodule::is_metamodule(&module_prop_map);
+        let metamodule = crate::module::metamodule::is_metamodule(&module_prop_map);
         let skip_mount = path.join("skip_mount").exists();
         let has_system = path.join("system").is_dir();
 
@@ -909,7 +918,7 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
             let managed_features: Vec<String> = config
                 .iter()
                 .filter_map(|(k, v)| {
-                    if k.starts_with("manage.") && crate::module_config::parse_bool_config(v) {
+                    if k.starts_with("manage.") && crate::module::config::parse_bool_config(v) {
                         k.strip_prefix("manage.")
                             .map(std::string::ToString::to_string)
                     } else {

@@ -3,7 +3,14 @@
 NekoSU's userspace runtime.
 
 - `ncore/` — ported from [KernelSU](https://github.com/tiann/KernelSU) (GPL-3.0-or-later).
-  The KernelSU kernel interface is replaced by a NekoSU adapter in `ncore/src/ksucalls.rs`.
+  The KernelSU kernel interface is replaced by the NekoSU adapter in `kzcall/`.
+  Its source is grouped by responsibility:
+  - `boot/` — anti-brick bookkeeping and `post-fs-data` / `service` / boot-complete events
+  - `manager/` — manager package discovery and ABX/packages.xml scanning
+  - `module/` — module lifecycle, scripts, configs, hot install and metamodules
+  - `selinux/` — sepolicy parsing/patching and file-context restoration
+  - `system/` — `su`, `resetprop` and filesystem/process/property helpers
+  - `assets.rs`, `cli.rs`, `defs.rs` — embedded runtime assets, CLI dispatch and constants
 - `jni/` — the JNI bridge the Compose manager loads as `libjni.so`. It also
   contains the v3/v4 `vendor_boot` patcher (`jni/src/patch/`), which installs
   the LKM in `lib/modules/nksu.ko`, updates `modules.load` / `modules.dep` and

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-use crate::antibrick;
-use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
+use crate::boot::antibrick;
+use crate::module::{ScriptWait, handle_updated_modules, metamodule, prune_modules};
 use crate::{
-    assets, defs, metamodule, restorecon,
-    utils::{self},
+    assets, defs,
+    selinux::restorecon,
+    system::utils,
 };
 use anyhow::{Context, Result};
 use log::{info, warn};
@@ -18,7 +19,7 @@ pub fn on_post_fs_data() -> Result<()> {
     utils::umask(0);
 
     // Clear all temporary module configs early
-    if let Err(e) = crate::module_config::clear_all_temp_configs() {
+    if let Err(e) = crate::module::config::clear_all_temp_configs() {
         warn!("clear temp configs failed: {e}");
     }
 
@@ -32,7 +33,7 @@ pub fn on_post_fs_data() -> Result<()> {
     let n = antibrick::write_count(0, true);
     info!("anti brick count: {}", n);
 
-    let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
+    let safe_mode = antibrick::check_count(3) || crate::system::utils::is_safe_mode();
     let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
 
     if safe_mode {
@@ -50,7 +51,7 @@ pub fn on_post_fs_data() -> Result<()> {
 
     assets::ensure_binaries(true).with_context(|| "Failed to extract bin assets")?;
 
-    crate::hot_install::clean_trash();
+    crate::module::hot_install::clean_trash();
 
     // if we are in safe mode, we should disable all modules
     if safe_mode {
@@ -112,7 +113,7 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
         warn!("Magisk detected, skip {stage}");
         return;
     }
-    let safe_mode = antibrick::check_count(3) || crate::utils::is_safe_mode();
+    let safe_mode = antibrick::check_count(3) || crate::system::utils::is_safe_mode();
 
     if safe_mode {
         warn!("safe mode, skip {stage} scripts");
@@ -147,7 +148,9 @@ pub fn on_boot_completed() {
         warn!("load store failed: {e}");
     }
     antibrick::on_boot_completed();
-    kzcall::report_boot_complete();
+    if let Err(e) = kzcall::report_boot_complete() {
+        warn!("report boot complete failed: {e}");
+    }
 }
 
 fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {

@@ -10,8 +10,8 @@
 use crate::{
     assets, defs,
     module::{ScriptWait, exec_script_with},
-    sepolicy,
-    utils::{ensure_dir_exists, is_safe_mode, switch_mnt_ns},
+    selinux::sepolicy,
+    system::utils::{ensure_dir_exists, is_safe_mode, switch_mnt_ns},
 };
 
 use anyhow::{Context, Result, bail};

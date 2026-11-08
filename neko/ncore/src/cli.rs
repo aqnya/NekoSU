@@ -18,7 +18,11 @@ use clap::Parser;
 use android_logger::Config;
 use log::LevelFilter;
 
-use crate::{defs, init_event, manager, module, resetprop, su, utils};
+use crate::{
+    boot::init_event,
+    defs, manager, module,
+    system::{resetprop, su, utils},
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version = defs::FULL_VERSION, about, long_about = None)]
@@ -166,9 +170,9 @@ pub fn run() -> Result<()> {
             resetprop::resetprop_main(&full_args)
         }
         Commands::Sepolicy { command } => match command {
-            Sepolicy::Patch { sepolicy } => crate::sepolicy::live_patch(&sepolicy),
-            Sepolicy::Apply { file } => crate::sepolicy::apply_file(file),
-            Sepolicy::Check { sepolicy } => crate::sepolicy::check_rule(&sepolicy),
+            Sepolicy::Patch { sepolicy } => crate::selinux::sepolicy::live_patch(&sepolicy),
+            Sepolicy::Apply { file } => crate::selinux::sepolicy::apply_file(file),
+            Sepolicy::Check { sepolicy } => crate::selinux::sepolicy::check_rule(&sepolicy),
         },
         Commands::Module { command } => {
             utils::switch_mnt_ns(1)?;

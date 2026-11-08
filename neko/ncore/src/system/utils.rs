@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use crate::defs::KSU_TEMP_BACKUP_DIR_NAME;
-use crate::{assets, defs, restorecon};
+use crate::{assets, defs, selinux::restorecon};
 use anyhow::{Context, Error, Ok, Result, bail};
 use rustix::process::setpgid;
 use rustix::{
@@ -125,9 +125,16 @@ pub fn is_safe_mode() -> bool {
     if safemode {
         return true;
     }
-    let safemode = kzcall::check_kernel_safemode();
-    log::info!("kernel_safemode: {safemode}");
-    safemode
+    match kzcall::check_kernel_safemode() {
+        Ok(safemode) => {
+            log::info!("kernel_safemode: {safemode}");
+            safemode
+        }
+        Err(e) => {
+            log::warn!("kernel safemode query failed: {e}");
+            false
+        }
+    }
 }
 
 pub fn get_zip_uncompressed_size(zip_path: &str) -> Result<u64> {

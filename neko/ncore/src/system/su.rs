@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use crate::{
     defs,
-    utils::{self, umask},
+    system::utils::{self, umask},
 };
 use anyhow::{Context, Ok, Result, anyhow};
 use getopts::Options;
