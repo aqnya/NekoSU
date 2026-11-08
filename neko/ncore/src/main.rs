@@ -25,9 +25,6 @@ mod hot_install;
 #[cfg(target_os = "android")]
 mod init_event;
 #[cfg(target_os = "android")]
-#[allow(nonstandard_style, unsafe_op_in_unsafe_fn)]
-mod ksu_uapi;
-#[cfg(target_os = "android")]
 mod ksucalls;
 #[cfg(target_os = "android")]
 mod manager;

@@ -58,7 +58,7 @@ pub const VERSION_NAME: &str = env!("VERSION_NAME");
 #[cfg(target_os = "android")]
 pub const FULL_VERSION: &str = const_format::formatcp!(
     "{VERSION_NAME} (uapi: {})",
-    crate::ksu_uapi::KERNEL_SU_UAPI_VERSION
+    KERNEL_SU_UAPI_VERSION
 );
 
 pub const MANAGER_CERT_HASH: &str = env!("NKSU_MANAGER_CERTHASH");
@@ -67,3 +67,5 @@ pub const MANAGER_CERT_HASH: &str = env!("NKSU_MANAGER_CERTHASH");
 pub use android::*;
 
 pub const ANTIBRICK_PATH: &str = "/data/adb/nksu/antibrick";
+
+pub const KERNEL_SU_UAPI_VERSION: u32 = 5;
