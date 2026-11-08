@@ -298,7 +298,7 @@ impl ModuleInfo {
     }
 }
 
-pub fn find_module(target: &str) -> anyhow::Result<Option<ModuleInfo>> {
+fn find_module(target: &str) -> anyhow::Result<Option<ModuleInfo>> {
     let file = File::open("/proc/modules")?;
     let reader = BufReader::new(file);
 
@@ -314,4 +314,12 @@ pub fn find_module(target: &str) -> anyhow::Result<Option<ModuleInfo>> {
         }
     }
     Ok(None)
+}
+
+pub fn runtime_mode() -> &'static str {
+    match find_module("nksu") {
+        std::result::Result::Ok(Some(_)) => "lkm",
+        std::result::Result::Ok(None) => "built-in",
+        std::result::Result::Err(_) => "unknown",
+    }
 }

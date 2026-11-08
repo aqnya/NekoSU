@@ -2,9 +2,9 @@
 #[allow(clippy::wildcard_imports)]
 use crate::utils::*;
 use crate::{
-    assets, defs, hot_install, ksucalls, metamodule,
+    assets, defs, hot_install, metamodule,
     restorecon::{restore_syscon, setsyscon},
-    sepolicy,
+    sepolicy, utils,
 };
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -66,7 +66,7 @@ pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, Str
         ("KSU_VER_CODE", defs::VERSION_CODE.to_string()),
         ("KSU_VER", defs::VERSION_NAME.to_string()),
         ("KSU_UAPI_VER", defs::KERNEL_SU_UAPI_VERSION.to_string()),
-        ("KSU_RUNTIME_MODE", ksucalls::runtime_mode().to_string()),
+        ("KSU_RUNTIME_MODE", utils::runtime_mode().to_string()),
         (
             "PATH",
             format!(

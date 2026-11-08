@@ -56,10 +56,8 @@ pub const VERSION_CODE: &str = env!("VERSION_CODE");
 #[cfg(target_os = "android")]
 pub const VERSION_NAME: &str = env!("VERSION_NAME");
 #[cfg(target_os = "android")]
-pub const FULL_VERSION: &str = const_format::formatcp!(
-    "{VERSION_NAME} (uapi: {})",
-    KERNEL_SU_UAPI_VERSION
-);
+pub const FULL_VERSION: &str =
+    const_format::formatcp!("{VERSION_NAME} (uapi: {})", KERNEL_SU_UAPI_VERSION);
 
 pub const MANAGER_CERT_HASH: &str = env!("NKSU_MANAGER_CERTHASH");
 
