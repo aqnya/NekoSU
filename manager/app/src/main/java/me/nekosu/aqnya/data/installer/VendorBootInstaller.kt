@@ -12,7 +12,6 @@ import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.Ncore
 import me.nekosu.aqnya.data.shell.RootShell
 import java.io.File
-import java.io.IOException
 import kotlin.random.Random
 
 object VendorBootInstaller {
@@ -20,7 +19,6 @@ object VendorBootInstaller {
     private const val KO_ASSET_DIR = "ko"
 
     private const val NCORE_LIB_NAME = "libncore.so"
-    private const val BOOTPATCHER_LIB_NAME = "libbootpatcher.so"
 
     /** 本地 LKM 在安装目录中暂存的文件名。 */
     private const val LOCAL_KO_NAME = "local_nksu.ko"
@@ -41,9 +39,6 @@ object VendorBootInstaller {
 
     /** ncore, the module runtime / su daemon bundled by the manager. */
     fun ncorePath(context: Context): File = File(context.applicationInfo.nativeLibraryDir, NCORE_LIB_NAME)
-
-    /** bootpatcher, the vendor_boot patcher. */
-    fun bootpatcherPath(context: Context): File = File(context.applicationInfo.nativeLibraryDir, BOOTPATCHER_LIB_NAME)
 
     /**
      * 把内核模块放到安装目录并返回其文件：
@@ -137,12 +132,6 @@ object VendorBootInstaller {
     ): Int =
         withContext(Dispatchers.IO) {
             val dir = installDir(context)
-            val bootpatcher = bootpatcherPath(context)
-            if (!bootpatcher.exists() || !bootpatcher.canExecute()) {
-                throw IllegalStateException(
-                    context.getString(R.string.install_err_ncore, bootpatcher.absolutePath),
-                )
-            }
             if (verifySymbols && (bootImage == null || !bootImage.isFile)) {
                 throw IllegalStateException(context.getString(R.string.install_err_boot_missing))
             }
@@ -153,7 +142,7 @@ object VendorBootInstaller {
 
             try {
                 onOutput(context.getString(R.string.install_log_patching))
-                val patched = patchImage(bootpatcher, vendorBoot, bootImage, koFile, verifySymbols, onOutput)
+                val patched = patchImage(vendorBoot, bootImage, koFile, verifySymbols, onOutput)
                 if (patched == null) {
                     onOutput(context.getString(R.string.install_log_err_patch))
                     return@withContext -1
@@ -182,16 +171,15 @@ object VendorBootInstaller {
         }
 
     /**
-     * 用 bootpatcher 直接把 [koFile] 打进 [sourceImage]（v3/v4 vendor_boot）：
+     * 在 libjni 内直接把 [koFile] 打进 [sourceImage]（v3/v4 vendor_boot）：
      * 解包、把模块安装到 `lib/modules/nksu.ko`、登记 `modules.load` /
      * `modules.dep`，保持各 ramdisk 的压缩与 v4 ramdisk 表，最后写出
      * `<image>.new`。启用 [verifySymbols] 时还会用 [bootImage] 校验模块所需的
      * 内核符号。成功返回该文件，失败返回 null。
      *
-     * 只操作本地文件，以当前进程身份运行 bootpatcher，无需 root。
+     * 补丁在 manager 进程内完成，只操作本地文件，无需 root 或外部可执行文件。
      */
     private fun patchImage(
-        bootpatcher: File,
         sourceImage: File,
         bootImage: File?,
         koFile: File,
@@ -201,44 +189,31 @@ object VendorBootInstaller {
         val dir = sourceImage.parentFile ?: return null
         val output = File(dir, "${sourceImage.name}.new")
         output.delete()
-        val args =
-            buildList {
-                add("-p")
-                add(sourceImage.absolutePath)
-                add(koFile.absolutePath)
-                if (verifySymbols) {
-                    add("-b")
-                    add(requireNotNull(bootImage).absolutePath)
-                } else {
-                    add("--no-symbol-check")
-                }
+
+        val error =
+            runCatching {
+                Ncore.patchVendorBoot(
+                    imagePath = sourceImage.absolutePath,
+                    modulePath = koFile.absolutePath,
+                    bootPath = bootImage?.takeIf { verifySymbols }?.absolutePath,
+                    verifySymbols = verifySymbols,
+                    outputPath = output.absolutePath,
+                )
+            }.getOrElse {
+                onOutput(it.message.orEmpty())
+                output.delete()
+                return null
             }
-        if (!runTool(bootpatcher, args, dir, onOutput) || !output.isFile) {
+        if (error != null) {
+            onOutput(error)
             output.delete()
+            return null
+        }
+        if (!output.isFile) {
             return null
         }
         return output
     }
-
-    /** 运行外部工具并把输出逐行回调；退出码为 0 返回 true。 */
-    private fun runTool(
-        tool: File,
-        args: List<String>,
-        workDir: File,
-        onOutput: (String) -> Unit,
-    ): Boolean =
-        try {
-            val process =
-                ProcessBuilder(listOf(tool.absolutePath) + args)
-                    .directory(workDir)
-                    .redirectErrorStream(true)
-                    .start()
-            process.inputStream.bufferedReader().useLines { lines -> lines.forEach(onOutput) }
-            process.waitFor() == 0
-        } catch (e: IOException) {
-            onOutput(e.message.orEmpty())
-            false
-        }
 
     fun detectVendorBootPartition(): String? = findVendorBoot(currentSlotSuffix(), allowSlotless = true)
 
@@ -320,8 +295,8 @@ object VendorBootInstaller {
      * 直接安装：以 root 读取指定 vendor_boot 分区，打入 nksu.ko 后写回。
      *
      * 流程：dump 原镜像（开启符号校验时再 dump 同 slot 的 boot 分区） ->
-     * `bootpatcher -p <镜像> <ko> -b <boot>` 打补丁 -> 写回分区；写入失败时把原镜像
-     * 写回回滚。KernelSU 的「直接安装 / 刷入非活动分区」都走这里，区别只是
+     * 在 libjni 内打补丁 -> 写回分区；写入失败时把原镜像写回回滚。
+     * KernelSU 的「直接安装 / 刷入非活动分区」都走这里，区别只是
      * @partition 指向当前或非活动 slot。
      *
      * patch 全程只操作本地临时文件，不需要 root；只有 dump / 写回分区用到 root，
@@ -342,12 +317,7 @@ object VendorBootInstaller {
     ): Int =
         withContext(Dispatchers.IO) {
             val dir = installDir(context)
-            val bootpatcher = bootpatcherPath(context)
 
-            if (!bootpatcher.exists() || !bootpatcher.canExecute()) {
-                onOutput(context.getString(R.string.install_log_err_ncore, bootpatcher.absolutePath))
-                return@withContext -1
-            }
             val koFile = resolveKo(context, koName, koUri)
             if (koFile == null || !koFile.exists()) {
                 onOutput(context.getString(R.string.install_log_err_ko, koName ?: koUri?.toString().orEmpty()))
@@ -381,7 +351,7 @@ object VendorBootInstaller {
                 return@withContext -1
             }
 
-            // 符号检查需要同一 slot 的内核，dump boot 分区供 bootpatcher 解析 kallsyms。
+            // 符号检查需要同一 slot 的内核，dump boot 分区供 libjni 解析 kallsyms。
             val bootSource = File(dir, BOOT_SOURCE_IMAGE_NAME)
             if (verifySymbols) {
                 bootSource.delete()
@@ -395,11 +365,10 @@ object VendorBootInstaller {
                 }
             }
 
-            // 2) 交给 bootpatcher 直接把模块打进镜像（无需 root），得到补丁镜像。
+            // 2) 在 libjni 内直接把模块打进镜像（无需 root），得到补丁镜像。
             onOutput(context.getString(R.string.install_log_patching))
             val patched =
                 patchImage(
-                    bootpatcher,
                     source,
                     bootSource.takeIf { verifySymbols },
                     koFile,

@@ -10,7 +10,7 @@ Kernel-level root for Android.
 kernel/     Kernel module (nksu)
 uapi/       Kernel/userspace shared UAPI headers
 manager/    Gradle root: the Jetpack Compose manager and its build
-neko/       Rust tool: ncore, bootpatcher and the JNI bridge
+neko/       Rust tool: ncore and the JNI bridge
 signing/    Signing material (release.keystore is gitignored)
 ```
 

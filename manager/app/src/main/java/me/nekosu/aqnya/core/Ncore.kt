@@ -121,6 +121,15 @@ object Ncore {
         dstPath: String,
     ): Boolean
 
+    @JvmName("patchVendorBoot")
+    private external fun nativePatchVendorBoot(
+        imagePath: String,
+        modulePath: String,
+        bootPath: String?,
+        verifySymbols: Boolean,
+        outputPath: String,
+    ): String?
+
     @JvmName("isGki")
     private external fun nativeIsGki(): Boolean
 
@@ -220,6 +229,19 @@ object Ncore {
         srcPath: String,
         dstPath: String,
     ): Boolean = runJni { nativeWriteBlock(srcPath, dstPath) }
+
+    /** Patch [imagePath] in-process and write the result to [outputPath]. null means success. */
+    @JvmName("patchVendorBootApi")
+    fun patchVendorBoot(
+        imagePath: String,
+        modulePath: String,
+        bootPath: String?,
+        verifySymbols: Boolean,
+        outputPath: String,
+    ): String? =
+        runJni {
+            nativePatchVendorBoot(imagePath, modulePath, bootPath, verifySymbols, outputPath)
+        }
 
     @JvmName("isGkiApi")
     fun isGki(): Boolean = runJni { nativeIsGki() }

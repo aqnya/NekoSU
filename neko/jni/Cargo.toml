@@ -10,6 +10,8 @@ name = "jni"
 crate-type = ["cdylib"]
 
 [dependencies]
+anyhow.workspace = true
+bootparse = { git = "https://github.com/nksu-crew/bootparse.git" }
 jni = "0.22"
 libc = "0.2"
 log.workspace = true

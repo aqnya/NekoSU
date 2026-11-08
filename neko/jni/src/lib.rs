@@ -3,6 +3,8 @@
 //! Rust replacement for the manager's former C++ JNI layer.
 #![allow(dead_code)]
 
+mod patch;
+
 use std::ffi::{CStr, CString};
 use std::os::fd::RawFd;
 use std::ptr;
@@ -322,6 +324,41 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_featureSet(
         }
     })
     .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_patchVendorBoot(
+    mut env: EnvUnowned,
+    _this: JObject,
+    image: JString,
+    module: JString,
+    boot: JString,
+    verify_symbols: jboolean,
+    output: JString,
+) -> jstring {
+    let (Some(image), Some(module), Some(output)) = (
+        get_utf(&mut env, &image),
+        get_utf(&mut env, &module),
+        get_utf(&mut env, &output),
+    ) else {
+        return put_string(&mut env, "patchVendorBoot: invalid path argument");
+    };
+    let boot = get_utf(&mut env, &boot);
+
+    match patch::patch(
+        &image,
+        &module,
+        boot.as_deref(),
+        jboolean_is_true(verify_symbols),
+        &output,
+    ) {
+        Ok(()) => ptr::null_mut(),
+        Err(e) => {
+            let message = format!("{e:#}");
+            log::error!("patchVendorBoot failed: {message}");
+            put_string(&mut env, &message)
+        }
+    }
 }
 
 fn write_all(fd: RawFd, mut buf: &[u8]) -> bool {

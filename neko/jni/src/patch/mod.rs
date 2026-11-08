@@ -1,29 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * bootpatcher -- patch an LKM into a v3/v4 vendor_boot image.
+ * Patch an LKM into a v3/v4 vendor_boot image.
  *
- * This replaces the boot-patching half of ncore.  The manager calls it as
- *
- *     bootpatcher -p <vendor_boot.img> <nksu.ko> -b <boot.img>
- *
- * and it writes the patched image to `<vendor_boot.img>.new`, keeping the
- * ramdisk's original compression and updating the v4 vendor ramdisk table.
- *
- * Before touching the vendor_boot image it reads the symbol table that nksu.ko
- * carries in .nksu_ksymtab and verifies that every required kallsyms-resolved
- * symbol exists in the kernel extracted from <boot.img>. A module that would
- * fail to load on the target kernel is therefore rejected before anything is
- * flashed; --no-symbol-check skips that step and is surfaced in the manager's
- * settings for recovery scenarios.
+ * This used to be a separate `bootpatcher` executable invoked by the manager.
+ * It now runs inside libjni, so the manager only needs a file path and gets the
+ * patched image back on disk. The patcher keeps the ramdisk's original
+ * compression, updates the v4 vendor ramdisk table and verifies the LKM's
+ * .nksu_ksymtab symbols against the target kernel before writing anything.
  */
 
-mod cli;
 mod kallsyms;
 mod symbols;
 
 use std::fs;
 use std::path::Path;
-use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 use bootparse::cpio::{Cpio, CpioEntry};
@@ -32,35 +22,26 @@ use bootparse::patcher::VendorBootPatcher;
 
 const MODULE_PATH: &str = "lib/modules/nksu.ko";
 
-fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("bootpatcher: {error:#}");
-            ExitCode::FAILURE
-        }
-    }
-}
+pub(crate) fn patch(
+    image_path: &str,
+    module_path: &str,
+    boot_path: Option<&str>,
+    verify_symbols: bool,
+    output_path: &str,
+) -> Result<()> {
+    log::info!("patch: reading module {module_path}");
+    let module_data = fs::read(module_path).with_context(|| format!("read {module_path}"))?;
 
-fn run() -> Result<()> {
-    let args = cli::parse_args()?;
-
-    eprintln!("bootpatcher: reading module {}", args.module);
-    let module_data = fs::read(&args.module).with_context(|| format!("read {}", args.module))?;
-
-    if args.verify_symbols {
-        verify_kernel_symbols(&module_data, args.boot.as_deref())?;
+    if verify_symbols {
+        verify_kernel_symbols(&module_data, boot_path)?;
     } else {
-        eprintln!("bootpatcher: symbol check disabled, skipping kernel verification");
+        log::info!("patch: symbol check disabled, skipping kernel verification");
     }
 
-    eprintln!("bootpatcher: reading image {}", args.image);
-    let image_data = fs::read(&args.image).with_context(|| format!("read {}", args.image))?;
-    eprintln!(
-        "bootpatcher: parsing boot image ({} bytes)",
-        image_data.len()
-    );
-    let image = BootImage::parse(&image_data).with_context(|| format!("parse {}", args.image))?;
+    log::info!("patch: reading image {image_path}");
+    let image_data = fs::read(image_path).with_context(|| format!("read {image_path}"))?;
+    log::info!("patch: parsing boot image ({} bytes)", image_data.len());
+    let image = BootImage::parse(&image_data).with_context(|| format!("parse {image_path}"))?;
 
     match image.vendor_boot_version() {
         Some(3 | 4) => {}
@@ -69,10 +50,10 @@ fn run() -> Result<()> {
 
     let ramdisks = image.ramdisks().context("vendor_boot has no ramdisk")?;
 
-    // v4 splits the vendor ramdisk into table entries; v3 has one blob.  Find
+    // v4 splits the vendor ramdisk into table entries; v3 has one blob. Find
     // the entry that already carries lib/modules, falling back to the first
     // entry that parses as a cpio archive.
-    eprintln!("bootpatcher: locating vendor ramdisk");
+    log::info!("patch: locating vendor ramdisk");
     let mut candidates: Vec<(usize, Cpio, bool)> = Vec::new();
     for entry in ramdisks {
         let Ok(raw) = entry.decompress() else {
@@ -94,12 +75,12 @@ fn run() -> Result<()> {
         .or_else(|| (!candidates.is_empty()).then_some(0))
         .context("no cpio vendor ramdisk found in the image")?;
     let (vendor_index, mut cpio, _) = candidates.swap_remove(chosen);
-    eprintln!(
-        "bootpatcher: selected ramdisk index={vendor_index}, compression={:?}",
+    log::info!(
+        "patch: selected ramdisk index={vendor_index}, compression={:?}",
         ramdisks[vendor_index].format()
     );
 
-    eprintln!("bootpatcher: injecting lib/modules/nksu.ko");
+    log::info!("patch: injecting {MODULE_PATH}");
     if !cpio.exists("lib/modules") {
         if !cpio.exists("lib") {
             cpio.add("lib", CpioEntry::dir(0o755))?;
@@ -120,18 +101,21 @@ fn run() -> Result<()> {
         "/lib/modules/nksu.ko:\n",
     )?;
 
-    eprintln!("bootpatcher: repacking ramdisk");
+    log::info!("patch: repacking ramdisk");
     let new_cpio = cpio.dump();
 
-    eprintln!("bootpatcher: repacking boot image");
+    log::info!("patch: repacking boot image");
     let mut patcher = VendorBootPatcher::new(&image)?;
     patcher.replace_vendor_ramdisk(vendor_index, new_cpio);
     let output = patcher.patch()?;
 
-    let output_path = format!("{}.new", Path::new(&args.image).display());
-    eprintln!("bootpatcher: writing {output_path}");
-    fs::write(&output_path, output).with_context(|| format!("write {output_path}"))?;
-    eprintln!("bootpatcher: done");
+    let output_path = Path::new(output_path);
+    if let Some(parent) = output_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    log::info!("patch: writing {}", output_path.display());
+    fs::write(output_path, output).with_context(|| format!("write {}", output_path.display()))?;
+    log::info!("patch: done");
     Ok(())
 }
 
@@ -145,16 +129,16 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
     }
 
     let boot_path = boot_path.context(
-        "missing -b <boot.img>: kernel symbol verification needs the target boot image \
-         (or pass --no-symbol-check)",
+        "missing boot image: kernel symbol verification needs the target boot image \
+         (or disable symbol verification)",
     )?;
 
-    eprintln!(
-        "bootpatcher: module needs {} required and {} optional kernel symbol(s)",
+    log::info!(
+        "patch: module needs {} required and {} optional kernel symbol(s)",
         exports.required.len(),
         exports.optional.len()
     );
-    eprintln!("bootpatcher: reading boot image {boot_path}");
+    log::info!("patch: reading boot image {boot_path}");
     let boot_data = fs::read(boot_path).with_context(|| format!("read {boot_path}"))?;
 
     let kernel_data = {
@@ -162,8 +146,8 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
         let kernel = boot
             .kernel()
             .with_context(|| format!("{boot_path} has no kernel"))?;
-        eprintln!(
-            "bootpatcher: extracting kernel (compression={:?})",
+        log::info!(
+            "patch: extracting kernel (compression={:?})",
             kernel.format()
         );
         kernel
@@ -172,12 +156,12 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
     };
     drop(boot_data);
 
-    eprintln!("bootpatcher: decoding kallsyms");
+    log::info!("patch: decoding kallsyms");
     let available =
         kallsyms::parse_names(&kernel_data).context("read kallsyms from the target kernel")?;
     drop(kernel_data);
-    eprintln!(
-        "bootpatcher: kernel provides {} kallsyms symbol(s)",
+    log::info!(
+        "patch: kernel provides {} kallsyms symbol(s)",
         available.len()
     );
 
@@ -195,12 +179,12 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
         .collect();
 
     for name in &missing_optional {
-        eprintln!("bootpatcher: warning: optional symbol '{name}' is not present");
+        log::warn!("patch: optional symbol '{name}' is not present");
     }
 
     if !missing_required.is_empty() {
         for name in &missing_required {
-            eprintln!("bootpatcher: missing required symbol: {name}");
+            log::error!("patch: missing required symbol: {name}");
         }
         bail!(
             "target kernel lacks {} required symbol(s); refusing to patch",
@@ -208,8 +192,8 @@ fn verify_kernel_symbols(module: &[u8], boot_path: Option<&str>) -> Result<()> {
         );
     }
 
-    eprintln!(
-        "bootpatcher: all {} required kernel symbol(s) present",
+    log::info!(
+        "patch: all {} required kernel symbol(s) present",
         exports.required.len()
     );
     Ok(())

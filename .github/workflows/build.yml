@@ -127,9 +127,9 @@ jobs:
         mv android-ndk-"$NDK_VERSION" "$ANDROID_NDK_HOME"
         rm -f ndk.zip
 
-    # ncore and bootpatcher live under neko/ and are compiled by Gradle through
+    # ncore and libjni live under neko/ and are compiled by Gradle through
     # cargo-ndk, so the APK always carries a userspace runtime built from the
-    # same checkout.  The manager reaches them through the libjni bridge.
+    # same checkout. The manager reaches the runtime through libjni.
     - name: Set up Rust
       run: |
         rustup toolchain install stable --profile minimal

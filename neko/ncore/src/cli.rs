@@ -3,9 +3,10 @@
  * NekoSU ncore command line.
  *
  * Upstream ksud carries boot patching, LKM late-loading, sulog, feature and
- * profile commands.  NekoSU does boot patching in bootpatcher, loads its LKM from
- * vendor_boot and drives profiles/features through the manager JNI, so only
- * the module runtime, su/resetprop entry points and daemon install remain.
+ * profile commands. NekoSU does boot patching in the manager's libjni, loads
+ * its LKM from vendor_boot and drives profiles/features through the manager
+ * JNI, so only the module runtime, su/resetprop entry points and daemon
+ * install remain.
  *
  * Manager recognition moved from the kernel module into `src/manager/` (a
  * user-space port of manager/abx.c + manager.c).  There is no fsnotify

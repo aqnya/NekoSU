@@ -30,8 +30,6 @@ tasks.register("formatRust") {
                 "--package",
                 "ncore",
                 "--package",
-                "bootpatcher",
-                "--package",
                 "jni",
             )
         }.result.get().assertNormalExitValue()

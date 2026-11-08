@@ -26,14 +26,14 @@
  * Record a symbol name in the module's .nksu_ksymtab section.
  *
  * Every symbol the module resolves through kallsyms at load time is listed in
- * that table. bootpatcher reads it from nksu.ko and verifies, against the
- * kernel in the target boot image, that every required entry exists before it
- * patches the ramdisk. A missing symbol would otherwise only surface as a
+ * that table. The userspace patcher reads it from nksu.ko and verifies, against
+ * the kernel in the target boot image, that every required entry exists before
+ * it patches the ramdisk. A missing symbol would otherwise only surface as a
  * failed insmod after a reboot, when recovery is much harder.
  *
  * Entries are (flags byte, NUL-terminated name). Bit 0 marks a symbol the
  * module cannot run without; entries without it are best-effort lookups whose
- * absence the code already tolerates, so bootpatcher only warns about them.
+ * absence the code already tolerates, so the patcher only warns about them.
  *
  * The macro emits the entry at the point of use, so NKSU_RESOLVE() and the
  * compile-time nksu_ksym_lookup("name") call sites record themselves without a
