@@ -1,13 +1,20 @@
 pub mod feature;
 pub mod profile;
 
+mod db;
 mod root;
-use std::sync::Mutex;
 
-static SAVE_LOCK: Mutex<()> = Mutex::new(());
+pub fn load() -> std::io::Result<()> {
+    let store = db::read()?;
+    let profile = profile::load_entries(&store.profiles);
+    let feature = feature::load_entries(&store.features);
 
-pub fn load() -> std::io::Result<i32> {
-    profile::load()?;
-    feature::load_feature()?;
-    Ok(0)
+    match (profile, feature) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(e), Ok(())) | (Ok(()), Err(e)) => Err(e),
+        (Err(profile), Err(feature)) => {
+            log::error!("feature load also failed: {feature}");
+            Err(profile)
+        }
+    }
 }
