@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 pub mod defs;
-pub mod ioctl;
 mod fd;
+pub mod ioctl;
 mod utils;
 use anyhow::Result;
 use proto::FeatureEntry;

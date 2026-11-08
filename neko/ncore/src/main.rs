@@ -18,8 +18,7 @@ mod antibrick;
 mod assets;
 #[cfg(target_os = "android")]
 mod cli;
-#[cfg(not(target_os = "android"))]
-mod cli_non_android;
+#[cfg(target_os = "android")]
 mod defs;
 #[cfg(target_os = "android")]
 mod hot_install;
@@ -56,6 +55,7 @@ fn main() -> anyhow::Result<()> {
     }
     #[cfg(not(target_os = "android"))]
     {
-        cli_non_android::run()
+        println!("ncore can only run on Android");
+        Ok(())
     }
 }
