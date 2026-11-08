@@ -82,37 +82,22 @@ pub fn del_feature(id: i32) -> io::Result<()> {
 }
 
 pub fn load_feature() -> io::Result<i32> {
-    let path = Path::new(FEATURE_PATH);
-    if !path.exists() {
+    let store = read_feature_store()?;
+    if store.entries.is_empty() {
         return Ok(0);
-    }
-
-    let bytes = fs::read(path)?;
-    let store = FeatureStore::from_bytes(&bytes)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-    if store.entries.len() != store.total as usize {
-        log::warn!(
-            "feature store count mismatch: entries={} total={}",
-            store.entries.len(),
-            store.total,
-        );
     }
 
     let total = store.entries.len();
     let mut failed = 0usize;
 
     for entry in &store.entries {
-        match feature_set(entry) {
-            Ok(()) => {}
-            Err(e) => {
-                failed += 1;
-                log::error!(
-                    "feature_set failed: id={} value={}: {e:#}",
-                    entry.id,
-                    entry.value,
-                );
-            }
+        if let Err(e) = feature_set(entry) {
+            failed += 1;
+            log::error!(
+                "feature_set failed: id={} value={}: {e:#}",
+                entry.id,
+                entry.value
+            );
         }
     }
 
@@ -122,7 +107,7 @@ pub fn load_feature() -> io::Result<i32> {
     } else {
         log::warn!(
             "feature load done: {}/{total} succeeded, {failed} failed",
-            total - failed,
+            total - failed
         );
         Ok(-1)
     }
