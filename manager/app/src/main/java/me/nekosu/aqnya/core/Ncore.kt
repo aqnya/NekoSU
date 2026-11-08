@@ -44,7 +44,7 @@ object Ncore {
 
     private fun <T> runJni(block: () -> T): T {
         NcoreLoader.init()
-        if (onJniThread.get()) return block()
+        if (onJniThread.get() == true) return block()
         return try {
             jniExecutor.submit(block).get()
         } catch (e: ExecutionException) {
