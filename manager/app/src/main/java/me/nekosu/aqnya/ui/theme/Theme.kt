@@ -106,7 +106,7 @@ private fun staticDark(v: Int) =
                 surfaceContainerHighest = Color(0xFF262B38),
             )
         }
-    }).withNeutrals(darkNeutrals(v))
+    }).withNeutrals(darkNeutrals(v)).withSelectedAccent()
 
 private fun staticLight(v: Int) =
     (when (v) {
@@ -184,7 +184,7 @@ private fun staticLight(v: Int) =
                 surfaceContainerHighest = Color(0xFFE4EAF4),
             )
         }
-    }).withNeutrals(lightNeutrals(v))
+    }).withNeutrals(lightNeutrals(v)).withSelectedAccent()
 
 private data class NeutralPalette(
     val surfaceBright: Color,
@@ -301,6 +301,18 @@ private fun ColorScheme.withNeutrals(palette: NeutralPalette) =
         inverseOnSurface = palette.inverseOnSurface,
         inversePrimary = palette.inversePrimary,
         surfaceTint = this.primary,
+    )
+
+private fun ColorScheme.withSelectedAccent() =
+    copy(
+        secondary = primary.blend(Color.White, 0.12f),
+        onSecondary = onPrimary,
+        secondaryContainer = primaryContainer.blend(Color.White, 0.12f),
+        onSecondaryContainer = onPrimaryContainer,
+        tertiary = primary.blend(Color.Black, 0.12f),
+        onTertiary = onPrimary,
+        tertiaryContainer = primaryContainer.blend(Color.Black, 0.12f),
+        onTertiaryContainer = onPrimaryContainer,
     )
 
 /**
