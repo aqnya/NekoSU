@@ -13,7 +13,6 @@
     <string name="can_launch_app">可用应用</string>
     <string name="system_app">系统应用</string>
     <string name="user_app">用户应用</string>
-    <string name="loading_app">加载应用列表</string>
 
     <string name="search">搜索</string>
     <string name="filter">过滤</string>

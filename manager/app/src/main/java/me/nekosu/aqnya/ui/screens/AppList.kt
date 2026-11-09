@@ -591,19 +591,10 @@ fun AppListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LoadingState() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        CircularProgressIndicator(strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
-        Text(
-            stringResource(R.string.loading_app),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-        )
-    }
+    LoadingIndicator(modifier = Modifier.size(36.dp))
 }
 
 @Composable

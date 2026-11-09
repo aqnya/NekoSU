@@ -13,7 +13,6 @@
     <string name="can_launch_app">Launchable Apps</string>
     <string name="system_app">System Apps</string>
     <string name="user_app">User Apps</string>
-    <string name="loading_app">Loading apps…</string>
 
     <string name="search">Search</string>
     <string name="filter">Filter</string>
