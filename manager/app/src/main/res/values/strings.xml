@@ -69,6 +69,8 @@
     <string name="settings_amoled_black_summary">Use pure black background in dark mode</string>
     <string name="settings_blur">Blur</string>
     <string name="settings_blur_summary">Blur the top app bar behind scrolling content</string>
+    <string name="settings_tapjacking_protection">Tapjacking protection</string>
+    <string name="settings_tapjacking_protection_summary">Hide untrusted overlays and block touches while another app is drawing over this window</string>
     <string name="settings_verify_kernel_symbols">Verify kernel symbols</string>
     <string name="settings_verify_kernel_symbols_summary">Check the symbols nksu.ko needs against the boot image before patching; disable only if the check cannot be satisfied</string>
     <string name="settings_nav_bar_style">Navigation bar style</string>

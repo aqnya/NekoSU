@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import me.nekosu.aqnya.ui.component.TapjackingProtectionEffect
 
 /**
  * Dialog animation configuration, matching the Flutter manager's dialogs.
@@ -48,7 +49,10 @@ fun AnimatedAlertDialog(
         AlertDialog(
             onDismissRequest = onDismiss,
             title = title,
-            text = text,
+            text = {
+                TapjackingProtectionEffect()
+                text()
+            },
             confirmButton = confirmButton,
             dismissButton = dismissButton?.let { btn -> { btn() } },
         )

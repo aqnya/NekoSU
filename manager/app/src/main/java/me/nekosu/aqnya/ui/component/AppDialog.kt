@@ -30,7 +30,10 @@ fun AppDialog(
                 fontWeight = FontWeight.Bold,
             )
         },
-        text = content,
+        text = {
+            TapjackingProtectionEffect()
+            content()
+        },
         confirmButton = {
             if (confirmText != null) {
                 TextButton(onClick = { onConfirm?.invoke() }) {
