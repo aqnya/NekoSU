@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import me.nekosu.aqnya.data.prefs.AppPreferences
@@ -31,20 +30,13 @@ private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_THEME_COLOR = "theme_color"
 private const val KEY_AMOLED = "amoled_mode"
 
-/** Exact primary family kept from the original Catppuccin palettes. */
-private data class AccentPalette(
-    val primary: Color,
-    val onPrimary: Color,
-    val primaryContainer: Color,
-    val onPrimaryContainer: Color,
-)
-
-/** Hue/saturation pair from which the neutral and tertiary tones are derived. */
+/**
+ * The only theme-specific input. Every accent, container, outline and surface
+ * tone is derived from this hue/saturation pair by [color] and [neutral].
+ */
 private data class ThemeSeed(
     val hue: Float,
     val saturation: Float,
-    val light: AccentPalette,
-    val dark: AccentPalette,
 ) {
     fun color(
         lightness: Float,
@@ -63,156 +55,101 @@ private data class ThemeSeed(
         Color.hsl(hue, 0.06f, lightness.coerceIn(0f, 1f))
 }
 
-private val BLUE_THEME =
-    ThemeSeed(
-        hue = 219.6f,
-        saturation = 0.46f,
-        light =
-            AccentPalette(
-                primary = Color(0xFF5B7EC2),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFD8E2FF),
-                onPrimaryContainer = Color(0xFF001A40),
-            ),
-        dark =
-            AccentPalette(
-                primary = Color(0xFF8AADF4),
-                onPrimary = Color(0xFF001A40),
-                primaryContainer = Color(0xFF2A4A7E),
-                onPrimaryContainer = Color(0xFFD8E2FF),
-            ),
-    )
-
-private val LAVENDER_THEME =
-    ThemeSeed(
-        hue = 270.5f,
-        saturation = 0.24f,
-        light =
-            AccentPalette(
-                primary = Color(0xFF8A6DA6),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFF1DBFF),
-                onPrimaryContainer = Color(0xFF2F174B),
-            ),
-        dark =
-            AccentPalette(
-                primary = Color(0xFFCEB5E4),
-                onPrimary = Color(0xFF341758),
-                primaryContainer = Color(0xFF5B4A73),
-                onPrimaryContainer = Color(0xFFF1DBFF),
-            ),
-    )
-
-private val GREEN_THEME =
-    ThemeSeed(
-        hue = 156.75f,
-        saturation = 0.39f,
-        light =
-            AccentPalette(
-                primary = Color(0xFF3E8E6F),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFC0FAD7),
-                onPrimaryContainer = Color(0xFF002115),
-            ),
-        dark =
-            AccentPalette(
-                primary = Color(0xFF8BD5B0),
-                onPrimary = Color(0xFF003825),
-                primaryContainer = Color(0xFF1E5E47),
-                onPrimaryContainer = Color(0xFFC0FAD7),
-            ),
-    )
-
 /** Values match [me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor]. */
 private fun seedFor(value: Int): ThemeSeed =
     when (value) {
-        2 -> LAVENDER_THEME
-        3 -> GREEN_THEME
-        else -> BLUE_THEME
+        2 -> ThemeSeed(270.5f, 0.24f)
+        3 -> ThemeSeed(156.75f, 0.39f)
+        else -> ThemeSeed(219.6f, 0.46f)
     }
 
-private fun ColorScheme.withAccents(
-    accent: AccentPalette,
-    tertiaryShift: Color,
-): ColorScheme {
-    val tertiary = lerp(accent.primary, tertiaryShift, 0.08f)
-    val tertiaryContainer = lerp(accent.primaryContainer, tertiaryShift, 0.08f)
-
-    return copy(
-        secondary = accent.primary,
-        onSecondary = accent.onPrimary,
-        secondaryContainer = accent.primaryContainer,
-        onSecondaryContainer = accent.onPrimaryContainer,
-        tertiary = tertiary,
-        onTertiary = accent.onPrimary,
-        tertiaryContainer = tertiaryContainer,
-        onTertiaryContainer = accent.onPrimaryContainer,
-        primaryFixed = accent.primaryContainer,
-        primaryFixedDim = accent.primaryContainer,
-        onPrimaryFixed = accent.onPrimaryContainer,
-        onPrimaryFixedVariant = accent.onPrimaryContainer,
-        secondaryFixed = accent.primaryContainer,
-        secondaryFixedDim = accent.primaryContainer,
-        onSecondaryFixed = accent.onPrimaryContainer,
-        onSecondaryFixedVariant = accent.onPrimaryContainer,
-        tertiaryFixed = tertiaryContainer,
-        tertiaryFixedDim = tertiaryContainer,
-        onTertiaryFixed = accent.onPrimaryContainer,
-        onTertiaryFixedVariant = accent.onPrimaryContainer,
+private fun ColorScheme.withFixedColors(seed: ThemeSeed): ColorScheme =
+    copy(
+        primaryFixed = seed.color(0.90f),
+        primaryFixedDim = seed.color(0.80f),
+        onPrimaryFixed = seed.color(0.10f),
+        onPrimaryFixedVariant = seed.color(0.30f),
+        secondaryFixed = seed.color(0.90f, 0.55f, 10f),
+        secondaryFixedDim = seed.color(0.80f, 0.55f, 10f),
+        onSecondaryFixed = seed.color(0.10f, 0.55f, 10f),
+        onSecondaryFixedVariant = seed.color(0.30f, 0.55f, 10f),
+        tertiaryFixed = seed.color(0.90f, 0.80f, -10f),
+        tertiaryFixedDim = seed.color(0.80f, 0.80f, -10f),
+        onTertiaryFixed = seed.color(0.10f, 0.80f, -10f),
+        onTertiaryFixedVariant = seed.color(0.30f, 0.80f, -10f),
     )
-}
 
 private fun lightScheme(seed: ThemeSeed): ColorScheme {
-    val accent = seed.light
+    val primary = seed.color(0.42f)
+    val primaryContainer = seed.color(0.90f)
+    val onPrimaryContainer = seed.color(0.15f)
     val surface = seed.neutral(0.98f)
     val onSurface = seed.neutral(0.10f)
 
     return lightColorScheme(
-        primary = accent.primary,
-        onPrimary = accent.onPrimary,
-        primaryContainer = accent.primaryContainer,
-        onPrimaryContainer = accent.onPrimaryContainer,
-        inversePrimary = seed.dark.primary,
+        primary = primary,
+        onPrimary = seed.color(1f),
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = onPrimaryContainer,
+        inversePrimary = seed.color(0.80f),
+        secondary = seed.color(0.42f, 0.55f, 10f),
+        onSecondary = seed.color(1f),
+        secondaryContainer = seed.color(0.90f, 0.55f, 10f),
+        onSecondaryContainer = onPrimaryContainer,
+        tertiary = seed.color(0.42f, 0.80f, -10f),
+        onTertiary = seed.color(1f),
+        tertiaryContainer = seed.color(0.88f, 0.80f, -10f),
+        onTertiaryContainer = onPrimaryContainer,
         background = surface,
         onBackground = onSurface,
         surface = surface,
         onSurface = onSurface,
         surfaceVariant = seed.neutral(0.92f),
         onSurfaceVariant = seed.neutral(0.30f),
-        surfaceTint = accent.primary,
+        surfaceTint = primary,
         inverseSurface = seed.neutral(0.20f),
         inverseOnSurface = seed.neutral(0.95f),
         outline = seed.neutral(0.50f),
         outlineVariant = seed.neutral(0.80f),
         scrim = Color.Black,
-        surfaceBright = seed.neutral(1.0f),
-        surfaceContainerLowest = seed.neutral(1.0f),
+        surfaceBright = seed.neutral(1f),
+        surfaceContainerLowest = seed.neutral(1f),
         surfaceContainerLow = seed.neutral(0.96f),
         surfaceContainer = seed.neutral(0.94f),
         surfaceContainerHigh = seed.neutral(0.90f),
         surfaceContainerHighest = seed.neutral(0.87f),
         surfaceDim = seed.neutral(0.88f),
-    ).withAccents(accent, Color.Black)
+    ).withFixedColors(seed)
 }
 
 private fun darkScheme(seed: ThemeSeed): ColorScheme {
-    val accent = seed.dark
+    val primary = seed.color(0.80f)
+    val primaryContainer = seed.color(0.30f)
+    val onPrimaryContainer = seed.color(0.90f)
     val surface = seed.neutral(0.07f)
     val onSurface = seed.neutral(0.92f)
 
     return darkColorScheme(
-        primary = accent.primary,
-        onPrimary = accent.onPrimary,
-        primaryContainer = accent.primaryContainer,
-        onPrimaryContainer = accent.onPrimaryContainer,
-        inversePrimary = seed.light.primary,
+        primary = primary,
+        onPrimary = seed.color(0.18f),
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = onPrimaryContainer,
+        inversePrimary = seed.color(0.40f),
+        secondary = seed.color(0.78f, 0.55f, 10f),
+        onSecondary = seed.color(0.18f),
+        secondaryContainer = seed.color(0.30f, 0.55f, 10f),
+        onSecondaryContainer = onPrimaryContainer,
+        tertiary = seed.color(0.82f, 0.80f, -10f),
+        onTertiary = seed.color(0.18f),
+        tertiaryContainer = seed.color(0.28f, 0.80f, -10f),
+        onTertiaryContainer = onPrimaryContainer,
         background = surface,
         onBackground = onSurface,
         surface = surface,
         onSurface = onSurface,
         surfaceVariant = seed.neutral(0.16f),
         onSurfaceVariant = seed.neutral(0.78f),
-        surfaceTint = accent.primary,
+        surfaceTint = primary,
         inverseSurface = seed.neutral(0.92f),
         inverseOnSurface = seed.neutral(0.10f),
         outline = seed.neutral(0.55f),
@@ -225,7 +162,7 @@ private fun darkScheme(seed: ThemeSeed): ColorScheme {
         surfaceContainerHigh = seed.neutral(0.16f),
         surfaceContainerHighest = seed.neutral(0.20f),
         surfaceDim = seed.neutral(0.03f),
-    ).withAccents(accent, Color.White)
+    ).withFixedColors(seed)
 }
 
 private fun schemeFor(value: Int, dark: Boolean): ColorScheme {
