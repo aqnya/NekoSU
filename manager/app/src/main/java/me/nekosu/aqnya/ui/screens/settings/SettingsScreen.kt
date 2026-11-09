@@ -147,8 +147,6 @@ fun SettingsScreen(navController: NavController) {
                 },
             )
 
-            SecuritySection()
-
             FeatureSection()
 
             ToolsSection(

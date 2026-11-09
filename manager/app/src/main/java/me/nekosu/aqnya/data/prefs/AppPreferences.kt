@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.callbackFlow
 
 object AppPreferences {
     const val PREF_NAME = "app_preferences"
-    const val KEY_TAPJACKING_PROTECTION = "tapjacking_protection"
 
     private fun getPrefs(context: Context): SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
@@ -24,13 +23,6 @@ object AppPreferences {
     fun isBlurEnabled(context: Context): Boolean = getPrefs(context).getBoolean("blur", false)
 
     fun blurFlow(context: Context): Flow<Boolean> = context.prefsFlow { getBoolean("blur", false) }
-
-    /** Hide overlays and reject obscured touches while enabled. */
-    fun isTapjackingProtectionEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_TAPJACKING_PROTECTION, true)
-
-    fun tapjackingProtectionFlow(context: Context): Flow<Boolean> =
-        context.prefsFlow { getBoolean(KEY_TAPJACKING_PROTECTION, true) }
 
     fun navBarStyle(context: Context): Int = getPrefs(context).getInt("nav_bar_style", 0)
 
@@ -74,13 +66,6 @@ object AppPreferences {
         value: Boolean,
     ) {
         getPrefs(context).edit().putBoolean("blur", value).apply()
-    }
-
-    fun setTapjackingProtection(
-        context: Context,
-        value: Boolean,
-    ) {
-        getPrefs(context).edit().putBoolean(KEY_TAPJACKING_PROTECTION, value).apply()
     }
 
     fun setNavBarStyle(
