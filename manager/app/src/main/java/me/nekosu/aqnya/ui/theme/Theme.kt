@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.theme
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -15,311 +16,224 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import me.nekosu.aqnya.data.prefs.AppPreferences
 
-// ============================================================
-// 三个独立配色方案 — 不再交换色值，各自硬编码
-// ============================================================
+private const val KEY_THEME_MODE = "theme_mode"
+private const val KEY_THEME_COLOR = "theme_color"
+private const val KEY_AMOLED = "amoled_mode"
 
-private fun staticDark(v: Int) =
-    (when (v) {
-        2 -> {
-            darkColorScheme( // 紫
-                primary = SecondaryDark,
-                onPrimary = OnSecondaryDark,
-                primaryContainer = SecondaryContainerDark,
-                onPrimaryContainer = OnSecondaryContainerDark,
-                secondary = PrimaryDark,
-                onSecondary = OnPrimaryDark,
-                secondaryContainer = PrimaryContainerDark,
-                onSecondaryContainer = OnPrimaryContainerDark,
-                tertiary = TertiaryDark,
-                onTertiary = OnTertiaryDark,
-                tertiaryContainer = TertiaryContainerDark,
-                onTertiaryContainer = OnTertiaryContainerDark,
-                background = Color(0xFF1C1A26),
-                surface = Color(0xFF1C1A26),
-                surfaceVariant = Color(0xFF2C2836),
-                surfaceContainerLowest = Color(0xFF1C1A26),
-                surfaceContainerLow = Color(0xFF1C1A26),
-                surfaceContainer = Color(0xFF2C2836),
-                surfaceContainerHigh = Color(0xFF2C2836),
-                surfaceContainerHighest = Color(0xFF2C2836),
-            )
-        }
-
-        3 -> {
-            darkColorScheme( // 绿
-                primary = TertiaryDark,
-                onPrimary = OnTertiaryDark,
-                primaryContainer = TertiaryContainerDark,
-                onPrimaryContainer = OnTertiaryContainerDark,
-                secondary = SecondaryDark,
-                onSecondary = OnSecondaryDark,
-                secondaryContainer = SecondaryContainerDark,
-                onSecondaryContainer = OnSecondaryContainerDark,
-                tertiary = PrimaryDark,
-                onTertiary = OnPrimaryDark,
-                tertiaryContainer = PrimaryContainerDark,
-                onTertiaryContainer = OnPrimaryContainerDark,
-                background = Color(0xFF18201E),
-                surface = Color(0xFF18201E),
-                surfaceVariant = Color(0xFF242E2A),
-                surfaceContainerLowest = Color(0xFF18201E),
-                surfaceContainerLow = Color(0xFF18201E),
-                surfaceContainer = Color(0xFF242E2A),
-                surfaceContainerHigh = Color(0xFF242E2A),
-                surfaceContainerHighest = Color(0xFF242E2A),
-            )
-        }
-
-        else -> {
-            darkColorScheme( // 蓝
-                primary = PrimaryDark,
-                onPrimary = OnPrimaryDark,
-                primaryContainer = PrimaryContainerDark,
-                onPrimaryContainer = OnPrimaryContainerDark,
-                secondary = SecondaryDark,
-                onSecondary = OnSecondaryDark,
-                secondaryContainer = SecondaryContainerDark,
-                onSecondaryContainer = OnSecondaryContainerDark,
-                tertiary = TertiaryDark,
-                onTertiary = OnTertiaryDark,
-                tertiaryContainer = TertiaryContainerDark,
-                onTertiaryContainer = OnTertiaryContainerDark,
-                background = Color(0xFF181B24),
-                surface = Color(0xFF181B24),
-                surfaceVariant = Color(0xFF262B38),
-                surfaceContainerLowest = Color(0xFF181B24),
-                surfaceContainerLow = Color(0xFF181B24),
-                surfaceContainer = Color(0xFF262B38),
-                surfaceContainerHigh = Color(0xFF262B38),
-                surfaceContainerHighest = Color(0xFF262B38),
-            )
-        }
-    }).withNeutrals(darkNeutrals(v)).withSelectedAccent()
-
-private fun staticLight(v: Int) =
-    (when (v) {
-        2 -> {
-            lightColorScheme( // 紫
-                primary = SecondaryLight,
-                onPrimary = OnSecondaryLight,
-                primaryContainer = SecondaryContainerLight,
-                onPrimaryContainer = OnSecondaryContainerLight,
-                secondary = PrimaryLight,
-                onSecondary = OnPrimaryLight,
-                secondaryContainer = PrimaryContainerLight,
-                onSecondaryContainer = OnPrimaryContainerLight,
-                tertiary = TertiaryLight,
-                onTertiary = OnTertiaryLight,
-                tertiaryContainer = TertiaryContainerLight,
-                onTertiaryContainer = OnTertiaryContainerLight,
-                background = Color(0xFFF8F6FC),
-                surface = Color(0xFFF8F6FC),
-                surfaceVariant = Color(0xFFEDE6F4),
-                surfaceContainerLowest = Color(0xFFF8F6FC),
-                surfaceContainerLow = Color(0xFFF8F6FC),
-                surfaceContainer = Color(0xFFEDE6F4),
-                surfaceContainerHigh = Color(0xFFEDE6F4),
-                surfaceContainerHighest = Color(0xFFEDE6F4),
-            )
-        }
-
-        3 -> {
-            lightColorScheme( // 绿
-                primary = TertiaryLight,
-                onPrimary = OnTertiaryLight,
-                primaryContainer = TertiaryContainerLight,
-                onPrimaryContainer = OnTertiaryContainerLight,
-                secondary = SecondaryLight,
-                onSecondary = OnSecondaryLight,
-                secondaryContainer = SecondaryContainerLight,
-                onSecondaryContainer = OnSecondaryContainerLight,
-                tertiary = PrimaryLight,
-                onTertiary = OnPrimaryLight,
-                tertiaryContainer = PrimaryContainerLight,
-                onTertiaryContainer = OnPrimaryContainerLight,
-                background = Color(0xFFF6FAF8),
-                surface = Color(0xFFF6FAF8),
-                surfaceVariant = Color(0xFFE2EDE6),
-                surfaceContainerLowest = Color(0xFFF6FAF8),
-                surfaceContainerLow = Color(0xFFF6FAF8),
-                surfaceContainer = Color(0xFFE2EDE6),
-                surfaceContainerHigh = Color(0xFFE2EDE6),
-                surfaceContainerHighest = Color(0xFFE2EDE6),
-            )
-        }
-
-        else -> {
-            lightColorScheme( // 蓝
-                primary = PrimaryLight,
-                onPrimary = OnPrimaryLight,
-                primaryContainer = PrimaryContainerLight,
-                onPrimaryContainer = OnPrimaryContainerLight,
-                secondary = SecondaryLight,
-                onSecondary = OnSecondaryLight,
-                secondaryContainer = SecondaryContainerLight,
-                onSecondaryContainer = OnSecondaryContainerLight,
-                tertiary = TertiaryLight,
-                onTertiary = OnTertiaryLight,
-                tertiaryContainer = TertiaryContainerLight,
-                onTertiaryContainer = OnTertiaryContainerLight,
-                background = Color(0xFFF8FAFE),
-                surface = Color(0xFFF8FAFE),
-                surfaceVariant = Color(0xFFE4EAF4),
-                surfaceContainerLowest = Color(0xFFF8FAFE),
-                surfaceContainerLow = Color(0xFFF8FAFE),
-                surfaceContainer = Color(0xFFE4EAF4),
-                surfaceContainerHigh = Color(0xFFE4EAF4),
-                surfaceContainerHighest = Color(0xFFE4EAF4),
-            )
-        }
-    }).withNeutrals(lightNeutrals(v)).withSelectedAccent()
-
-private data class NeutralPalette(
-    val surfaceBright: Color,
-    val surfaceDim: Color,
-    val onSurface: Color,
-    val onSurfaceVariant: Color,
-    val outline: Color,
-    val outlineVariant: Color,
-    val inverseSurface: Color,
-    val inverseOnSurface: Color,
-    val inversePrimary: Color,
+/** Exact primary family kept from the original Catppuccin palettes. */
+private data class AccentPalette(
+    val primary: Color,
+    val onPrimary: Color,
+    val primaryContainer: Color,
+    val onPrimaryContainer: Color,
 )
 
-private fun darkNeutrals(v: Int) =
-    when (v) {
-        2 -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFF3A3446),
-                surfaceDim = Color(0xFF15131D),
-                onSurface = Color(0xFFE9E3F1),
-                onSurfaceVariant = Color(0xFFC5BCD3),
-                outline = Color(0xFF8B8198),
-                outlineVariant = Color(0xFF474050),
-                inverseSurface = Color(0xFFE9E3F1),
-                inverseOnSurface = Color(0xFF2A2533),
-                inversePrimary = SecondaryLight,
-            )
-        }
-
-        3 -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFF313B36),
-                surfaceDim = Color(0xFF121816),
-                onSurface = Color(0xFFE2E9E5),
-                onSurfaceVariant = Color(0xFFB8C5BD),
-                outline = Color(0xFF7E8E85),
-                outlineVariant = Color(0xFF3D4A43),
-                inverseSurface = Color(0xFFE2E9E5),
-                inverseOnSurface = Color(0xFF222A26),
-                inversePrimary = TertiaryLight,
-            )
-        }
-
-        else -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFF323847),
-                surfaceDim = Color(0xFF12151C),
-                onSurface = Color(0xFFE4E7F0),
-                onSurfaceVariant = Color(0xFFB7C0D2),
-                outline = Color(0xFF808AA0),
-                outlineVariant = Color(0xFF3C4557),
-                inverseSurface = Color(0xFFE4E7F0),
-                inverseOnSurface = Color(0xFF232833),
-                inversePrimary = PrimaryLight,
-            )
-        }
+/** Hue/saturation pair from which the neutral and tertiary tones are derived. */
+private data class ThemeSeed(
+    val hue: Float,
+    val saturation: Float,
+    val light: AccentPalette,
+    val dark: AccentPalette,
+) {
+    fun color(
+        lightness: Float,
+        saturationScale: Float = 1f,
+        hueShift: Float = 0f,
+    ): Color {
+        val shiftedHue = ((hue + hueShift) % 360f + 360f) % 360f
+        return Color.hsl(
+            shiftedHue,
+            (saturation * saturationScale).coerceIn(0f, 1f),
+            lightness.coerceIn(0f, 1f),
+        )
     }
 
-private fun lightNeutrals(v: Int) =
-    when (v) {
-        2 -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFFFDFBFF),
-                surfaceDim = Color(0xFFE8E3EE),
-                onSurface = Color(0xFF211B28),
-                onSurfaceVariant = Color(0xFF4F455C),
-                outline = Color(0xFF817689),
-                outlineVariant = Color(0xFFD1C7DB),
-                inverseSurface = Color(0xFF322C3A),
-                inverseOnSurface = Color(0xFFF4EEF9),
-                inversePrimary = SecondaryDark,
-            )
-        }
+    fun neutral(lightness: Float): Color =
+        Color.hsl(hue, 0.06f, lightness.coerceIn(0f, 1f))
+}
 
-        3 -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFFFBFEFC),
-                surfaceDim = Color(0xFFDEE9E3),
-                onSurface = Color(0xFF19211D),
-                onSurfaceVariant = Color(0xFF45544C),
-                outline = Color(0xFF77877E),
-                outlineVariant = Color(0xFFC6D2CA),
-                inverseSurface = Color(0xFF2A332E),
-                inverseOnSurface = Color(0xFFF0F5F2),
-                inversePrimary = TertiaryDark,
-            )
-        }
+private val BLUE_THEME =
+    ThemeSeed(
+        hue = 219.6f,
+        saturation = 0.46f,
+        light =
+            AccentPalette(
+                primary = Color(0xFF5B7EC2),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFD8E2FF),
+                onPrimaryContainer = Color(0xFF001A40),
+            ),
+        dark =
+            AccentPalette(
+                primary = Color(0xFF8AADF4),
+                onPrimary = Color(0xFF001A40),
+                primaryContainer = Color(0xFF2A4A7E),
+                onPrimaryContainer = Color(0xFFD8E2FF),
+            ),
+    )
 
-        else -> {
-            NeutralPalette(
-                surfaceBright = Color(0xFFFCFDFF),
-                surfaceDim = Color(0xFFE1E6F0),
-                onSurface = Color(0xFF1A1D24),
-                onSurfaceVariant = Color(0xFF4B5364),
-                outline = Color(0xFF7A8395),
-                outlineVariant = Color(0xFFC9D1DF),
-                inverseSurface = Color(0xFF2D3038),
-                inverseOnSurface = Color(0xFFF1F2F6),
-                inversePrimary = PrimaryDark,
-            )
-        }
+private val LAVENDER_THEME =
+    ThemeSeed(
+        hue = 270.5f,
+        saturation = 0.24f,
+        light =
+            AccentPalette(
+                primary = Color(0xFF8A6DA6),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFF1DBFF),
+                onPrimaryContainer = Color(0xFF2F174B),
+            ),
+        dark =
+            AccentPalette(
+                primary = Color(0xFFCEB5E4),
+                onPrimary = Color(0xFF341758),
+                primaryContainer = Color(0xFF5B4A73),
+                onPrimaryContainer = Color(0xFFF1DBFF),
+            ),
+    )
+
+private val GREEN_THEME =
+    ThemeSeed(
+        hue = 156.75f,
+        saturation = 0.39f,
+        light =
+            AccentPalette(
+                primary = Color(0xFF3E8E6F),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFC0FAD7),
+                onPrimaryContainer = Color(0xFF002115),
+            ),
+        dark =
+            AccentPalette(
+                primary = Color(0xFF8BD5B0),
+                onPrimary = Color(0xFF003825),
+                primaryContainer = Color(0xFF1E5E47),
+                onPrimaryContainer = Color(0xFFC0FAD7),
+            ),
+    )
+
+/** Values match [me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor]. */
+private fun seedFor(value: Int): ThemeSeed =
+    when (value) {
+        2 -> LAVENDER_THEME
+        3 -> GREEN_THEME
+        else -> BLUE_THEME
     }
 
-private fun ColorScheme.withNeutrals(palette: NeutralPalette) =
-    copy(
-        onBackground = palette.onSurface,
-        onSurface = palette.onSurface,
-        onSurfaceVariant = palette.onSurfaceVariant,
-        surfaceBright = palette.surfaceBright,
-        surfaceDim = palette.surfaceDim,
-        outline = palette.outline,
-        outlineVariant = palette.outlineVariant,
-        inverseSurface = palette.inverseSurface,
-        inverseOnSurface = palette.inverseOnSurface,
-        inversePrimary = palette.inversePrimary,
-        surfaceTint = this.primary,
-    )
+private fun ColorScheme.withAccents(
+    accent: AccentPalette,
+    tertiaryShift: Color,
+): ColorScheme {
+    val tertiary = lerp(accent.primary, tertiaryShift, 0.08f)
+    val tertiaryContainer = lerp(accent.primaryContainer, tertiaryShift, 0.08f)
 
-private fun ColorScheme.withSelectedAccent() =
-    copy(
-        secondary = primary.blend(Color.White, 0.12f),
-        onSecondary = onPrimary,
-        secondaryContainer = primaryContainer.blend(Color.White, 0.12f),
-        onSecondaryContainer = onPrimaryContainer,
-        tertiary = primary.blend(Color.Black, 0.12f),
-        onTertiary = onPrimary,
-        tertiaryContainer = primaryContainer.blend(Color.Black, 0.12f),
-        onTertiaryContainer = onPrimaryContainer,
+    return copy(
+        secondary = accent.primary,
+        onSecondary = accent.onPrimary,
+        secondaryContainer = accent.primaryContainer,
+        onSecondaryContainer = accent.onPrimaryContainer,
+        tertiary = tertiary,
+        onTertiary = accent.onPrimary,
+        tertiaryContainer = tertiaryContainer,
+        onTertiaryContainer = accent.onPrimaryContainer,
+        primaryFixed = accent.primaryContainer,
+        primaryFixedDim = accent.primaryContainer,
+        onPrimaryFixed = accent.onPrimaryContainer,
+        onPrimaryFixedVariant = accent.onPrimaryContainer,
+        secondaryFixed = accent.primaryContainer,
+        secondaryFixedDim = accent.primaryContainer,
+        onSecondaryFixed = accent.onPrimaryContainer,
+        onSecondaryFixedVariant = accent.onPrimaryContainer,
+        tertiaryFixed = tertiaryContainer,
+        tertiaryFixedDim = tertiaryContainer,
+        onTertiaryFixed = accent.onPrimaryContainer,
+        onTertiaryFixedVariant = accent.onPrimaryContainer,
     )
+}
 
-/**
- * AMOLED：页面底色关到底。页面用的是 [ColorScheme.surfaceContainer]、
- * 卡片用 [ColorScheme.surfaceBright]，所以容器色也要一起压黑，页面才会是纯黑
- * （与 KernelSU 的 `amoledBackground()` 一致）。
- */
+private fun lightScheme(seed: ThemeSeed): ColorScheme {
+    val accent = seed.light
+    val surface = seed.neutral(0.98f)
+    val onSurface = seed.neutral(0.10f)
+
+    return lightColorScheme(
+        primary = accent.primary,
+        onPrimary = accent.onPrimary,
+        primaryContainer = accent.primaryContainer,
+        onPrimaryContainer = accent.onPrimaryContainer,
+        inversePrimary = seed.dark.primary,
+        background = surface,
+        onBackground = onSurface,
+        surface = surface,
+        onSurface = onSurface,
+        surfaceVariant = seed.neutral(0.92f),
+        onSurfaceVariant = seed.neutral(0.30f),
+        surfaceTint = accent.primary,
+        inverseSurface = seed.neutral(0.20f),
+        inverseOnSurface = seed.neutral(0.95f),
+        outline = seed.neutral(0.50f),
+        outlineVariant = seed.neutral(0.80f),
+        scrim = Color.Black,
+        surfaceBright = seed.neutral(1.0f),
+        surfaceContainerLowest = seed.neutral(1.0f),
+        surfaceContainerLow = seed.neutral(0.96f),
+        surfaceContainer = seed.neutral(0.94f),
+        surfaceContainerHigh = seed.neutral(0.90f),
+        surfaceContainerHighest = seed.neutral(0.87f),
+        surfaceDim = seed.neutral(0.88f),
+    ).withAccents(accent, Color.Black)
+}
+
+private fun darkScheme(seed: ThemeSeed): ColorScheme {
+    val accent = seed.dark
+    val surface = seed.neutral(0.07f)
+    val onSurface = seed.neutral(0.92f)
+
+    return darkColorScheme(
+        primary = accent.primary,
+        onPrimary = accent.onPrimary,
+        primaryContainer = accent.primaryContainer,
+        onPrimaryContainer = accent.onPrimaryContainer,
+        inversePrimary = seed.light.primary,
+        background = surface,
+        onBackground = onSurface,
+        surface = surface,
+        onSurface = onSurface,
+        surfaceVariant = seed.neutral(0.16f),
+        onSurfaceVariant = seed.neutral(0.78f),
+        surfaceTint = accent.primary,
+        inverseSurface = seed.neutral(0.92f),
+        inverseOnSurface = seed.neutral(0.10f),
+        outline = seed.neutral(0.55f),
+        outlineVariant = seed.neutral(0.28f),
+        scrim = Color.Black,
+        surfaceBright = seed.neutral(0.24f),
+        surfaceContainerLowest = seed.neutral(0.03f),
+        surfaceContainerLow = seed.neutral(0.07f),
+        surfaceContainer = seed.neutral(0.12f),
+        surfaceContainerHigh = seed.neutral(0.16f),
+        surfaceContainerHighest = seed.neutral(0.20f),
+        surfaceDim = seed.neutral(0.03f),
+    ).withAccents(accent, Color.White)
+}
+
+private fun schemeFor(value: Int, dark: Boolean): ColorScheme {
+    val seed = seedFor(value)
+    return if (dark) darkScheme(seed) else lightScheme(seed)
+}
+
+/** Keeps page and container surfaces black while leaving cards readable. */
 private fun ColorScheme.amoledBlack(): ColorScheme =
     copy(
         background = AmoledBlack,
@@ -335,63 +249,42 @@ private fun ColorScheme.amoledBlack(): ColorScheme =
 @Composable
 fun NekosuTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences(AppPreferences.PREF_NAME, android.content.Context.MODE_PRIVATE) }
+    val prefs =
+        remember(context) {
+            context.getSharedPreferences(AppPreferences.PREF_NAME, Context.MODE_PRIVATE)
+        }
 
-    val themePreference by AppPreferences.themeModeFlow(context).collectAsState(initial = prefs.getInt("theme_mode", 0))
+    var themeMode by remember { mutableIntStateOf(prefs.getInt(KEY_THEME_MODE, 0)) }
+    var themeColor by remember { mutableIntStateOf(prefs.getInt(KEY_THEME_COLOR, 0)) }
+    var amoledEnabled by remember { mutableStateOf(prefs.getBoolean(KEY_AMOLED, false)) }
 
-    var themeColorValue by remember { mutableIntStateOf(prefs.getInt("theme_color", 0)) }
     DisposableEffect(prefs) {
         val listener =
-            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                if (key == "theme_color") themeColorValue = prefs.getInt("theme_color", 0)
+            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+                themeMode = prefs.getInt(KEY_THEME_MODE, 0)
+                themeColor = prefs.getInt(KEY_THEME_COLOR, 0)
+                amoledEnabled = prefs.getBoolean(KEY_AMOLED, false)
             }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    var amoledEnabled by remember { mutableStateOf(prefs.getBoolean("amoled_mode", false)) }
-    DisposableEffect(prefs) {
-        val listener =
-            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                if (key == "amoled_mode") amoledEnabled = prefs.getBoolean("amoled_mode", false)
-            }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
-
-    val useDynamicColor = themeColorValue == 0
-    val isDarkTheme =
-        when (themePreference) {
+    val isDark =
+        when (themeMode) {
             1 -> false
             2 -> true
             else -> isSystemInDarkTheme()
         }
 
-    val colorScheme =
-        when {
-            amoledEnabled && isDarkTheme && useDynamicColor -> {
-                dynamicDarkColorScheme(context).amoledBlack()
-            }
-
-            amoledEnabled && isDarkTheme -> {
-                staticDark(themeColorValue).amoledBlack()
-            }
-
-            useDynamicColor -> {
-                if (isDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            }
-
-            isDarkTheme -> {
-                staticDark(themeColorValue)
-            }
-
-            else -> {
-                staticLight(themeColorValue)
-            }
+    val baseScheme =
+        if (themeColor == 0) {
+            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            schemeFor(themeColor, isDark)
         }
+    val colorScheme = if (amoledEnabled && isDark) baseScheme.amoledBlack() else baseScheme
 
-    // Edge-to-Edge 系统栏样式
-    EdgeToEdgeSystemBars(darkMode = isDarkTheme)
+    EdgeToEdgeSystemBars(darkMode = isDark)
 
     MaterialTheme(
         colorScheme = colorScheme,
@@ -400,10 +293,6 @@ fun NekosuTheme(content: @Composable () -> Unit) {
         content = content,
     )
 }
-
-// ============================================================
-// Edge-to-Edge 沉浸式系统栏
-// ============================================================
 
 @Composable
 private fun EdgeToEdgeSystemBars(
@@ -423,16 +312,12 @@ private fun EdgeToEdgeSystemBars(
                 ) { darkMode },
             navigationBarStyle =
                 when {
-                    darkMode -> {
-                        SystemBarStyle.dark(navigationBarScrim.toArgb())
-                    }
-
-                    else -> {
+                    darkMode -> SystemBarStyle.dark(navigationBarScrim.toArgb())
+                    else ->
                         SystemBarStyle.light(
                             navigationBarScrim.toArgb(),
                             navigationBarScrim.toArgb(),
                         )
-                    }
                 },
         )
     }
