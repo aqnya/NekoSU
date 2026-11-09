@@ -181,22 +181,21 @@ static void nksu_fake_status_prepare(void)
 	copy = page_address(page);
 	memcpy(copy, cur, sizeof(*copy));
 
-	if (late_load) {
-		/*
-         * A loader may have reloaded sepolicy before us, so the captured page
-         * is not stock.  Serve what a stock boot ends with instead: the
-         * creation sentinel below 6.10, one load plus one setenforce above.
-         */
+	/*
+	 * The live status page may already include NekoSU's own policy
+	 * publications, so it does not describe the stock boot a hidden caller
+	 * should see.  Normalize the snapshot to what a stock boot ends with:
+	 * the creation sentinel below 6.10, one load plus one setenforce above.
+	 */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
-		copy->sequence = 4;
-		copy->policyload = 1;
+	copy->sequence = 4;
+	copy->policyload = 1;
 #else
-		copy->sequence = 0;
-		copy->policyload = 0;
+	copy->sequence = 0;
+	copy->policyload = 0;
 #endif
-		if (!copy->enforcing)
-			copy->enforcing = 1;
-	}
+	if (!copy->enforcing)
+		copy->enforcing = 1;
 
 	fake_status = page;
 	pr_info("fake status ready: sequence=%u policyload=%u enforcing=%u\n", copy->sequence,
@@ -221,15 +220,24 @@ static int __nocfi nksu_status_open(struct inode *inode, struct file *filp)
 		}
 
 		/*
-         * The status page is allocated lazily by the stock handler on the
-         * first open, which can happen after the feature is enabled.  Run the
-         * original first so the page exists, then snapshot it for the next
-         * call (mirrors KernelSU's fake_status_initialize_key).
-         */
+		 * The status page is allocated lazily by the stock handler on the
+		 * first open, which can happen after the feature is enabled.  Run
+		 * the original first so the page exists, build the normalized
+		 * snapshot, then serve that snapshot to this opener too.  Otherwise
+		 * the first hidden caller would observe the live page and could
+		 * cross-check its policyload against the access handler.
+		 */
 		ret = orig_status_open(inode, filp);
-		if (!ret && static_branch_unlikely(&nksu_fake_status_init_key)) {
-			static_key_disable(&nksu_fake_status_init_key.key);
-			nksu_fake_status_prepare();
+		if (!ret) {
+			if (static_branch_unlikely(&nksu_fake_status_init_key)) {
+				static_key_disable(&nksu_fake_status_init_key.key);
+				nksu_fake_status_prepare();
+			}
+
+			mutex_lock(&NKSU_STATUS_LOCK_OBJ);
+			if (fake_status)
+				filp->private_data = fake_status;
+			mutex_unlock(&NKSU_STATUS_LOCK_OBJ);
 		}
 		return ret;
 	}
@@ -518,10 +526,9 @@ static ssize_t __nocfi nksu_write_access(struct file *file, char *buf, size_t si
 	nksu_clean_compute_av(ssid, tsid, tclass, &avd);
 
 	/*
-	 * Stock reads 1 here (the policy's real load counter).  The clean
-	 * policy still carries that generation, but the status page is a
-	 * lazily allocated snapshot that also sees NekoSU's own publications,
-	 * so the two are not a cross-check that has to agree.
+	 * Stock reads 1 here (the policy's real load counter).  The hidden
+	 * status snapshot is normalized to the same stock generation on 6.10+,
+	 * so the two stay consistent for app callers.
 	 */
 	avd.seqno = 1;
 	length = scnprintf(buf, NKSU_SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x", avd.allowed,
