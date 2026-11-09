@@ -3,7 +3,7 @@ use crate::{
     defs,
     system::utils::{self, umask},
 };
-use anyhow::{Context, Ok, Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use getopts::Options;
 use rustix::{
     process::getuid,

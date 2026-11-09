@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use crate::defs;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use jwalk::{Parallelism::Serial, WalkDir};
 use std::path::Path;
 
-use anyhow::{Context, Ok};
 use extattr::{Flags as XattrFlags, lsetxattr};
 
 pub const SYSTEM_CON: &str = "u:object_r:system_file:s0";

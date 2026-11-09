@@ -12,7 +12,7 @@
  * user-space port of manager/abx.c + manager.c).  There is no fsnotify
  * observer here, so scanning is triggered explicitly via `ncore manager ...`.
  */
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use clap::Parser;
 
 use android_logger::Config;
