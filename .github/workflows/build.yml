@@ -204,7 +204,7 @@ jobs:
         fi
         printf '%s\n' "$SIGNING_KEY" > signing/signing_key.pem
         chmod 600 signing/signing_key.pem
-        
+
     - name: Derive manager cert hash
       id: certhash
       env:
@@ -247,6 +247,13 @@ jobs:
         echo "NKSU_MANAGER_CERTHASH=$hash" >> "$GITHUB_ENV"
         echo "value=$hash" >> "$GITHUB_OUTPUT"
         echo "manager cert hash: $hash"
+
+    - name: Cache neko AAR
+      id: neko-aar-cache
+      uses: actions/cache@v6
+      with:
+        path: neko/build/outputs/aar/neko-release.aar
+        key: neko-aar-v1-${{ runner.os }}-${{ env.NDK_VERSION }}-${{ env.ANDROID_NDK_API_LEVEL }}-${{ steps.certhash.outputs.value }}-${{ hashFiles('neko/**', 'uapi/**', 'manager/app/build.gradle.kts', 'signing/signing_key.pem') }}
 
     - name: Determine version channel
       id: version
@@ -307,7 +314,13 @@ jobs:
         if [ "$VERSION_CHANNEL" != "canary" ]; then
           args+=("-PrequireReleaseSigning=true")
         fi
-        ./gradlew :neko:assembleRelease :app:assembleRelease --no-daemon "${args[@]}"
+        tasks=(:neko:assembleRelease :app:assembleRelease)
+        if [ "${{ steps.neko-aar-cache.outputs.cache-hit }}" = "true" ] \
+          && [ -f ../neko/build/outputs/aar/neko-release.aar ]; then
+          tasks=(:app:assembleRelease)
+          args+=("-PnekoAar=neko/build/outputs/aar/neko-release.aar")
+        fi
+        ./gradlew "${tasks[@]}" --no-daemon "${args[@]}"
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v7
