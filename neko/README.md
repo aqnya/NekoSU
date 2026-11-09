@@ -21,8 +21,22 @@ NekoSU's userspace runtime.
   is built on: AOSP headers via bindgen, block extraction with compression
   detection, a newc `cpio` reader/writer and the vendor_boot repacker.
 
-Both binaries are cross-compiled by Gradle through `cargo-ndk` as part of the
-manager build and shipped as `libncore.so` and `libjni.so`.
+Both binaries are cross-compiled by Gradle with
+`cargo build --target aarch64-linux-android`, then shipped as `libncore.so` and
+`libjni.so`. The Android linker, `CC`/`AR` and bindgen sysroot must be
+configured in the build environment first; CI exports them from the NDK.
+
+The `:neko` module also packages both libraries into
+`neko/build/outputs/aar/neko-release.aar`. To reuse that AAR and skip the
+Rust/native build:
+
+```sh
+cd manager
+./gradlew :app:assembleRelease \
+  -PnekoAar=neko/build/outputs/aar/neko-release.aar
+```
+
+The `nekoAar` path is resolved from the repository root.
 
 Most Rust dependencies come from crates.io or are vendored under `third_party/`
 (`prop-rs`/`prop-rs-android`). The patcher's `bootparse` dependency is pinned to

@@ -11,6 +11,22 @@ plugins {
 // headers, signing material) resolve one level up.
 val repoRoot = rootDir.parentFile
 
+/*
+ * Reuse a previously built neko AAR and skip the Rust/native build:
+ *   ./gradlew assembleRelease -PnekoAar=neko/build/outputs/aar/neko-release.aar
+ * The path is resolved from the repository root. Without this property the
+ * :neko project is built and its AAR is consumed as a project dependency.
+ */
+val nekoAar: File? =
+    providers.gradleProperty("nekoAar")
+        .orNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { repoRoot.resolve(it) }
+if (nekoAar != null) {
+    check(nekoAar.isFile) { "nekoAar does not exist: $nekoAar" }
+}
+
 fun gitCommitCount(): Int =
     ProcessBuilder("git", "rev-list", "--count", "HEAD")
         .directory(repoRoot)
@@ -216,20 +232,15 @@ android {
     }
 }
 
-// ncore and libjni are produced by :neko:buildRust; merge them with the
-// app's native libraries like any other jniLibs directory.
-android.sourceSets.getByName("main").jniLibs.directories.add(
-    project(":neko")
-        .layout.buildDirectory
-        .dir("generated/rust/jniLibs")
-        .get()
-        .toString(),
-)
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
-    dependsOn(":neko:buildRust")
-}
-
+// Native binaries come from the :neko AAR (or a prebuilt AAR passed with
+// -PnekoAar=...). The library exposes them as regular AAR jniLibs.
 dependencies {
+    if (nekoAar != null) {
+        implementation(files(nekoAar))
+    } else {
+        implementation(project(":neko"))
+    }
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

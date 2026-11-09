@@ -127,9 +127,10 @@ jobs:
         mv android-ndk-"$NDK_VERSION" "$ANDROID_NDK_HOME"
         rm -f ndk.zip
 
-    # ncore and libjni live under neko/ and are compiled by Gradle through
-    # cargo-ndk, so the APK always carries a userspace runtime built from the
-    # same checkout. The manager reaches the runtime through libjni.
+    # ncore and libjni live under neko/ and are compiled by Gradle with the
+    # Rust aarch64-linux-android target and the NDK clang wrappers, so the APK
+    # always carries a userspace runtime built from the same checkout. The
+    # manager reaches the runtime through libjni.
     - name: Set up Rust
       run: |
         rustup toolchain install stable --profile minimal
@@ -152,8 +153,26 @@ jobs:
           sudo apt-get install -y --no-install-recommends libclang-dev
         fi
 
-    - name: Install cargo-ndk
-      run: cargo install cargo-ndk --locked
+    - name: Configure Rust Android target
+      run: |
+        set -euo pipefail
+        prebuilt="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+        target=aarch64-linux-android
+        api="$ANDROID_NDK_API_LEVEL"
+        bin="$prebuilt/bin"
+        sysroot="$prebuilt/sysroot"
+        test -x "$bin/${target}${api}-clang"
+        {
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/${target}${api}-clang"
+          echo "CC_aarch64_linux_android=$bin/${target}${api}-clang"
+          echo "CXX_aarch64_linux_android=$bin/${target}${api}-clang++"
+          echo "AR_aarch64_linux_android=$bin/llvm-ar"
+          echo "RANLIB_aarch64_linux_android=$bin/llvm-ranlib"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_AR=$bin/llvm-ar"
+          echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--target=${target}${api} --sysroot=$sysroot -I$sysroot/usr/include/$target"
+          echo "ANDROID_PLATFORM=$api"
+          echo "ANDROID_ABI=arm64-v8a"
+        } >> "$GITHUB_ENV"
 
     - name: Cache Rust build artifacts
       uses: Swatinem/rust-cache@v2
@@ -288,11 +307,18 @@ jobs:
         if [ "$VERSION_CHANNEL" != "canary" ]; then
           args+=("-PrequireReleaseSigning=true")
         fi
-        ./gradlew assembleRelease --no-daemon "${args[@]}"
+        ./gradlew :neko:assembleRelease :app:assembleRelease --no-daemon "${args[@]}"
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v7
       with:
         name: release-${{ steps.version.outputs.channel }}
         path: manager/app/build/outputs/apk/release/*.apk
+        archive: false
+
+    - name: Upload Neko AAR
+      uses: actions/upload-artifact@v7
+      with:
+        name: neko-aar-${{ steps.version.outputs.channel }}
+        path: neko/build/outputs/aar/*.aar
         archive: false
