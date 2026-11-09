@@ -212,6 +212,7 @@ fun MainScreen() {
                             HomeScreen(
                                 viewModel = homeViewModel,
                                 onInstallClick = { navController.navigate(AppRoute.Install) },
+                                onAboutClick = { navController.navigate(AppRoute.About) },
                             )
                         }
 

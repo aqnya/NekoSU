@@ -50,7 +50,7 @@ fun HomeScreenContent(
     isGki: Boolean,
     managerVersion: String,
     onInstallClick: () -> Unit,
-    onAboutClick: () -> Unit = {},
+    onAboutClick: () -> Unit,
 ) {
     val hazeState = rememberHazeState()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -95,8 +95,8 @@ fun HomeScreenContent(
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onAboutClick: () -> Unit = {},
-    onInstallClick: () -> Unit = {},
+    onAboutClick: () -> Unit,
+    onInstallClick: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 

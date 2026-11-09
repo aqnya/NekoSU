@@ -31,7 +31,7 @@ import me.nekosu.aqnya.data.prefs.AppPreferences
 // ============================================================
 
 private fun staticDark(v: Int) =
-    when (v) {
+    (when (v) {
         2 -> {
             darkColorScheme( // 紫
                 primary = SecondaryDark,
@@ -106,10 +106,10 @@ private fun staticDark(v: Int) =
                 surfaceContainerHighest = Color(0xFF262B38),
             )
         }
-    }
+    }).withNeutrals(darkNeutrals(v))
 
 private fun staticLight(v: Int) =
-    when (v) {
+    (when (v) {
         2 -> {
             lightColorScheme( // 紫
                 primary = SecondaryLight,
@@ -184,7 +184,124 @@ private fun staticLight(v: Int) =
                 surfaceContainerHighest = Color(0xFFE4EAF4),
             )
         }
+    }).withNeutrals(lightNeutrals(v))
+
+private data class NeutralPalette(
+    val surfaceBright: Color,
+    val surfaceDim: Color,
+    val onSurface: Color,
+    val onSurfaceVariant: Color,
+    val outline: Color,
+    val outlineVariant: Color,
+    val inverseSurface: Color,
+    val inverseOnSurface: Color,
+    val inversePrimary: Color,
+)
+
+private fun darkNeutrals(v: Int) =
+    when (v) {
+        2 -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFF3A3446),
+                surfaceDim = Color(0xFF15131D),
+                onSurface = Color(0xFFE9E3F1),
+                onSurfaceVariant = Color(0xFFC5BCD3),
+                outline = Color(0xFF8B8198),
+                outlineVariant = Color(0xFF474050),
+                inverseSurface = Color(0xFFE9E3F1),
+                inverseOnSurface = Color(0xFF2A2533),
+                inversePrimary = SecondaryLight,
+            )
+        }
+
+        3 -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFF313B36),
+                surfaceDim = Color(0xFF121816),
+                onSurface = Color(0xFFE2E9E5),
+                onSurfaceVariant = Color(0xFFB8C5BD),
+                outline = Color(0xFF7E8E85),
+                outlineVariant = Color(0xFF3D4A43),
+                inverseSurface = Color(0xFFE2E9E5),
+                inverseOnSurface = Color(0xFF222A26),
+                inversePrimary = TertiaryLight,
+            )
+        }
+
+        else -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFF323847),
+                surfaceDim = Color(0xFF12151C),
+                onSurface = Color(0xFFE4E7F0),
+                onSurfaceVariant = Color(0xFFB7C0D2),
+                outline = Color(0xFF808AA0),
+                outlineVariant = Color(0xFF3C4557),
+                inverseSurface = Color(0xFFE4E7F0),
+                inverseOnSurface = Color(0xFF232833),
+                inversePrimary = PrimaryLight,
+            )
+        }
     }
+
+private fun lightNeutrals(v: Int) =
+    when (v) {
+        2 -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFFFDFBFF),
+                surfaceDim = Color(0xFFE8E3EE),
+                onSurface = Color(0xFF211B28),
+                onSurfaceVariant = Color(0xFF4F455C),
+                outline = Color(0xFF817689),
+                outlineVariant = Color(0xFFD1C7DB),
+                inverseSurface = Color(0xFF322C3A),
+                inverseOnSurface = Color(0xFFF4EEF9),
+                inversePrimary = SecondaryDark,
+            )
+        }
+
+        3 -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFFFBFEFC),
+                surfaceDim = Color(0xFFDEE9E3),
+                onSurface = Color(0xFF19211D),
+                onSurfaceVariant = Color(0xFF45544C),
+                outline = Color(0xFF77877E),
+                outlineVariant = Color(0xFFC6D2CA),
+                inverseSurface = Color(0xFF2A332E),
+                inverseOnSurface = Color(0xFFF0F5F2),
+                inversePrimary = TertiaryDark,
+            )
+        }
+
+        else -> {
+            NeutralPalette(
+                surfaceBright = Color(0xFFFCFDFF),
+                surfaceDim = Color(0xFFE1E6F0),
+                onSurface = Color(0xFF1A1D24),
+                onSurfaceVariant = Color(0xFF4B5364),
+                outline = Color(0xFF7A8395),
+                outlineVariant = Color(0xFFC9D1DF),
+                inverseSurface = Color(0xFF2D3038),
+                inverseOnSurface = Color(0xFFF1F2F6),
+                inversePrimary = PrimaryDark,
+            )
+        }
+    }
+
+private fun ColorScheme.withNeutrals(palette: NeutralPalette) =
+    copy(
+        onBackground = palette.onSurface,
+        onSurface = palette.onSurface,
+        onSurfaceVariant = palette.onSurfaceVariant,
+        surfaceBright = palette.surfaceBright,
+        surfaceDim = palette.surfaceDim,
+        outline = palette.outline,
+        outlineVariant = palette.outlineVariant,
+        inverseSurface = palette.inverseSurface,
+        inverseOnSurface = palette.inverseOnSurface,
+        inversePrimary = palette.inversePrimary,
+        surfaceTint = this.primary,
+    )
 
 /**
  * AMOLED：页面底色关到底。页面用的是 [ColorScheme.surfaceContainer]、
