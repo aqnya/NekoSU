@@ -62,6 +62,20 @@ fn jboolean_is_true(value: jboolean) -> bool {
 
 const PR_GET_SHM_FD: libc::c_int = 201;
 const PR_GET_CTL_FD: libc::c_int = 203;
+const FMAC_SHM_NAME: &str = "[fmac_shm]";
+const FMAC_CTL_NAME: &str = "[fmac_ctl]";
+
+/// prctl() only attaches the anon fd; the tracepoint path does not rewrite the
+/// syscall return value, so success is detected from `/proc/self/fd`.
+fn anon_fd_present(name: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc/self/fd") else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        std::fs::read_link(entry.path())
+            .is_ok_and(|target| target.to_string_lossy().ends_with(name))
+    })
+}
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
@@ -69,13 +83,19 @@ pub extern "system" fn Java_me_nekosu_aqnya_core_Ncore_ctl(
     _this: JObject,
     value: jint,
 ) -> jint {
-    let cmd = match value {
-        1 => PR_GET_SHM_FD,
-        3 => PR_GET_CTL_FD,
+    let (cmd, fd_name) = match value {
+        1 => (PR_GET_SHM_FD, FMAC_SHM_NAME),
+        3 => (PR_GET_CTL_FD, FMAC_CTL_NAME),
         _ => return -1,
     };
+
     unsafe { libc::prctl(cmd, 0, 0, 0, 0) };
-    0
+    if anon_fd_present(fd_name) {
+        0
+    } else {
+        log::debug!("ctl({value}) did not attach {fd_name}");
+        -1
+    }
 }
 
 #[unsafe(no_mangle)]

@@ -169,6 +169,7 @@ object Ncore {
     @JvmName("helloLogApi")
     fun helloLog(): Unit = runJni { nativeHelloLog() }
 
+    /** Returns 0 when the kernel control channel is available, -1 otherwise. */
     @JvmName("ctlApi")
     fun ctl(value: Int): Int = runJni { nativeCtl(value) }
 
