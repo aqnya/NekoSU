@@ -16,7 +16,7 @@ android {
         minSdk = 31
     }
     sourceSets.getByName("main").jniLibs.srcDir(
-        layout.buildDirectory.dir("generated/rust/jniLibs"),
+        layout.buildDirectory.dir("generated/rust/jniLibs").get().asFile,
     )
     packaging {
         jniLibs {
