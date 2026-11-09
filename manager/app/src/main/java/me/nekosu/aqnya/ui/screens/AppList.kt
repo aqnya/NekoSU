@@ -594,7 +594,7 @@ fun AppListScreen(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LoadingState() {
-    LoadingIndicator(modifier = Modifier.size(36.dp))
+    LoadingIndicator()
 }
 
 @Composable
