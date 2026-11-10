@@ -406,20 +406,21 @@ static DEFINE_MUTEX(nksu_mount_layout_lock);
 /* Resolve struct mount offsets from the running kernel's BTF. */
 static int nksu_mount_layout_resolve(void)
 {
-	u32 off;
+	struct nksu_btf_field fields[] = {
+		{ .name = "mnt_id", .kind = BTF_KIND_INT, .size = sizeof(int) },
+		{ .name = "mnt", .kind = BTF_KIND_STRUCT, .size = sizeof(struct vfsmount) },
+	};
+	int ret;
 
 	if (READ_ONCE(nksu_mount_layout_resolved))
 		return 0;
 
-	off = nksu_btf_resolve_field_off("mount", "mnt_id", BTF_KIND_INT, sizeof(int));
-	if (off == (u32)-1)
-		return -ENOENT;
-	nksu_mnt_id_off = off;
+	ret = nksu_btf_resolve_fields("mount", fields, ARRAY_SIZE(fields));
+	if (ret)
+		return ret;
 
-	off = nksu_btf_resolve_field_off("mount", "mnt", BTF_KIND_STRUCT, sizeof(struct vfsmount));
-	if (off == (u32)-1)
-		return -ENOENT;
-	nksu_mnt_off = off;
+	nksu_mnt_id_off = fields[0].offset;
+	nksu_mnt_off = fields[1].offset;
 
 	WRITE_ONCE(nksu_mount_layout_resolved, true);
 	pr_info("resolved mount layout from BTF (mnt_id@%u, mnt@%u)\n", nksu_mnt_id_off,

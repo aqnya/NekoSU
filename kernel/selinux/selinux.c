@@ -18,8 +18,10 @@
 #include "ss/services.h"
 #include "objsec.h"
 
+#include <linux/btf.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
+#include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/string.h>
@@ -75,20 +77,21 @@ static u32 nksu_lbs_inode_off;
 
 static int nksu_blob_sizes_resolve(void)
 {
-	u32 off;
+	struct nksu_btf_field fields[] = {
+		{ .name = "lbs_cred", .kind = BTF_KIND_INT, .size = sizeof(int) },
+		{ .name = "lbs_inode", .kind = BTF_KIND_INT, .size = sizeof(int) },
+	};
+	int ret;
 
 	if (READ_ONCE(nksu_blob_sizes_resolved))
 		return 0;
 
-	off = nksu_btf_resolve_field_off("lsm_blob_sizes", "lbs_cred", BTF_KIND_INT, sizeof(int));
-	if (off == (u32)-1)
-		return -ENOENT;
-	nksu_lbs_cred_off = off;
+	ret = nksu_btf_resolve_fields("lsm_blob_sizes", fields, ARRAY_SIZE(fields));
+	if (ret)
+		return ret;
 
-	off = nksu_btf_resolve_field_off("lsm_blob_sizes", "lbs_inode", BTF_KIND_INT, sizeof(int));
-	if (off == (u32)-1)
-		return -ENOENT;
-	nksu_lbs_inode_off = off;
+	nksu_lbs_cred_off = fields[0].offset;
+	nksu_lbs_inode_off = fields[1].offset;
 
 	WRITE_ONCE(nksu_blob_sizes_resolved, true);
 	pr_info("resolved lsm_blob_sizes layout from BTF (lbs_cred@%u, lbs_inode@%u)\n",
