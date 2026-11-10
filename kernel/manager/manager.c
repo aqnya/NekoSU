@@ -46,7 +46,7 @@
 #include <fmac.h>
 #include "hook/handle.h"
 
-/* Last: redirects vfs_mkdir/lookup_one_len to the resolved-symbol pointers. */
+/* Last: redirects vfs_mkdir/vfs_unlink/lookup_one_len to their __nocfi wrappers. */
 #include "symbol/symbol_compat.h"
 
 #define PKGWATCH_DIR "/data/system"

@@ -331,6 +331,45 @@ NKSU_SYMBOL_VOID_FN(switch_task_namespaces, (struct task_struct * p, struct nspr
 NKSU_SYMBOL_FN(struct file *, filp_open, (const char *filename, int flags, umode_t mode),
 	       (filename, flags, mode))
 NKSU_SYMBOL_FN(int, iterate_dir, (struct file * file, struct dir_context *ctx), (file, ctx))
+/*
+ * VFS helpers for the ncore bootstrap (manager/manager.c).  Like the rest,
+ * these must not be called through the raw pointer: the module's CFI type
+ * hash for a symbol resolved by kallsyms need not match the one vmlinux
+ * emitted, and the checked indirect call then panics the boot:
+ *
+ *     CFI failure (target: lookup_one_len+0x0/0x1ac)
+ *      kdir_mkdir_p+0x23c/0x2e0 [nksu]
+ *
+ * vfs_mkdir()/vfs_unlink() gained the mount-namespace argument in 5.12 and
+ * the mnt_idmap argument in 6.3; the call sites in manager.c use the same
+ * three variants.
+ */
+NKSU_SYMBOL_FN(struct dentry *, lookup_one_len, (const char *name, struct dentry *base, int len),
+	       (name, base, len))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+NKSU_SYMBOL_FN(int, vfs_mkdir,
+	       (struct mnt_idmap * idmap, struct inode *dir, struct dentry *dentry, umode_t mode),
+	       (idmap, dir, dentry, mode))
+NKSU_SYMBOL_FN(int, vfs_unlink,
+	       (struct mnt_idmap * idmap, struct inode *dir, struct dentry *dentry,
+		struct inode **delegated_inode),
+	       (idmap, dir, dentry, delegated_inode))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+NKSU_SYMBOL_FN(int, vfs_mkdir,
+	       (struct user_namespace * mnt_userns, struct inode *dir, struct dentry *dentry,
+		umode_t mode),
+	       (mnt_userns, dir, dentry, mode))
+NKSU_SYMBOL_FN(int, vfs_unlink,
+	       (struct user_namespace * mnt_userns, struct inode *dir, struct dentry *dentry,
+		struct inode **delegated_inode),
+	       (mnt_userns, dir, dentry, delegated_inode))
+#else
+NKSU_SYMBOL_FN(int, vfs_mkdir, (struct inode * dir, struct dentry *dentry, umode_t mode),
+	       (dir, dentry, mode))
+NKSU_SYMBOL_FN(int, vfs_unlink,
+	       (struct inode * dir, struct dentry *dentry, struct inode **delegated_inode),
+	       (dir, dentry, delegated_inode))
+#endif
 NKSU_SYMBOL_FN(struct task_struct *, find_task_by_vpid, (pid_t nr), (nr))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 NKSU_SYMBOL_FN(int, task_work_add,
@@ -538,9 +577,9 @@ NKSU_SYMBOL_FN(const struct btf_type *, btf_type_skip_modifiers,
 #define security_context_str_to_sid nksu_security_context_str_to_sid
 #define security_compute_av_user nksu_security_compute_av_user_fn
 #endif
-#define vfs_mkdir nksu_vfs_mkdir
-#define vfs_unlink nksu_vfs_unlink
-#define lookup_one_len nksu_lookup_one_len
+#define vfs_mkdir nksu_vfs_mkdir_fn
+#define vfs_unlink nksu_vfs_unlink_fn
+#define lookup_one_len nksu_lookup_one_len_fn
 #define iterate_dir nksu_iterate_dir_fn
 #define __vfs_setxattr_noperm nksu___vfs_setxattr_noperm_fn
 #define task_work_add nksu_task_work_add_fn
