@@ -143,26 +143,7 @@ fun SettingsSwitchEntry(
                     role = Role.Switch,
                     onValueChange = onCheckedChange,
                 ),
-        icon = {
-            SettingsIcon(
-                icon = icon,
-                containerColor =
-                    if (checked) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                contentColor =
-                    if (checked) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    },
-                tileSize = 48.dp,
-                iconSize = 24.dp,
-                cornerRadius = 16.dp,
-            )
-        },
+        icon = { SettingsEntryIcon(icon) },
         headline = { SettingsEntryTitle(title) },
         supporting = { SettingsEntrySummary(summary) },
         trailing = { AppSwitch(checked = checked, onCheckedChange = null, enabled = enabled) },
