@@ -65,10 +65,13 @@ bool getenforce(void)
  * directly would create a relocation against the unexported
  * selinux_blob_sizes and the module would fail to load.
  *
- * Prefer resolving the lsm_blob_sizes field offsets from BTF, which yields
- * plain integers and no relocation.  If BTF is unavailable, fall back to the
- * compat layer's resolved selinux_blob_sizes symbol and add the offsets
- * ourselves.
+ * lbs_cred/lbs_inode are values, not structure layouts: the LSM core
+ * rewrites them at boot with each module's offset inside the combined blob
+ * (and reserves an rcu_head before the first inode blob, so lbs_inode is not
+ * 0).  BTF only tells us where the field sits inside struct lsm_blob_sizes,
+ * so read the value stored there through the resolved symbol.  Using the BTF
+ * field offset as the blob offset corrupts the neighbouring object; for
+ * inode_security_struct that means writing ->sid into ->list.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 static bool nksu_blob_sizes_resolved;
@@ -77,25 +80,50 @@ static u32 nksu_lbs_inode_off;
 
 static int nksu_blob_sizes_resolve(void)
 {
+	const struct lsm_blob_sizes *blobs = nksu_selinux_blob_sizes;
 	struct nksu_btf_field fields[] = {
 		{ .name = "lbs_cred", .kind = BTF_KIND_INT, .size = sizeof(int) },
 		{ .name = "lbs_inode", .kind = BTF_KIND_INT, .size = sizeof(int) },
 	};
+	u32 cred_off, inode_off;
 	int ret;
 
 	if (READ_ONCE(nksu_blob_sizes_resolved))
 		return 0;
 
-	ret = nksu_btf_resolve_fields("lsm_blob_sizes", fields, ARRAY_SIZE(fields));
-	if (ret)
-		return ret;
+	if (!blobs) {
+		pr_err("selinux_blob_sizes is unresolved\n");
+		return -ENOENT;
+	}
 
-	nksu_lbs_cred_off = fields[0].offset;
-	nksu_lbs_inode_off = fields[1].offset;
+	ret = nksu_btf_resolve_fields("lsm_blob_sizes", fields, ARRAY_SIZE(fields));
+	if (ret) {
+		/* No BTF: fall back to the layout from the module's headers. */
+		pr_warn("cannot look up lsm_blob_sizes in BTF: %d, using header layout\n", ret);
+		cred_off = blobs->lbs_cred;
+		inode_off = blobs->lbs_inode;
+	} else {
+		cred_off = *(const int *)((const char *)blobs + fields[0].offset);
+		inode_off = *(const int *)((const char *)blobs + fields[1].offset);
+	}
+
+	/* The core assigns small, naturally aligned offsets. */
+	if (cred_off > 4096 || inode_off > 4096 || (cred_off & 3) || (inode_off & 3)) {
+		pr_err("implausible LSM blob offsets (cred=%u, inode=%u)\n", cred_off,
+		       inode_off);
+		return -EINVAL;
+	}
+
+	nksu_lbs_cred_off = cred_off;
+	nksu_lbs_inode_off = inode_off;
 
 	WRITE_ONCE(nksu_blob_sizes_resolved, true);
-	pr_info("resolved lsm_blob_sizes layout from BTF (lbs_cred@%u, lbs_inode@%u)\n",
-		nksu_lbs_cred_off, nksu_lbs_inode_off);
+	if (ret)
+		pr_info("SELinux blob offsets: cred=%u inode=%u (header layout)\n", cred_off,
+			inode_off);
+	else
+		pr_info("SELinux blob offsets: cred=%u inode=%u (BTF fields at %u/%u)\n",
+			cred_off, inode_off, fields[0].offset, fields[1].offset);
 	return 0;
 }
 
