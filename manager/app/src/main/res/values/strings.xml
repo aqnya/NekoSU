@@ -5,6 +5,8 @@
     <string name="not_installed">Not Installed</string>
     <string name="update_available">Update</string>
     <string name="running">Running</string>
+    <string name="home_active_subtitle">Systemless root is active</string>
+    <string name="home_reboot_subtitle">Reboot to finish applying the update</string>
     <string name="click_to_install">Click to install</string>
     <string name="superuser">SuperUser</string>
     <string name="fmac_rules">FMAC Rules</string>
