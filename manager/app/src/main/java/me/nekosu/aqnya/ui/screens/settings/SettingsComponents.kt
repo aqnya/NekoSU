@@ -12,12 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
@@ -36,15 +37,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
 
 /** One entry of [SettingsSegmentedControl]. Built in composition so callers can resolve strings. */
 data class SegmentOption<T>(
@@ -222,14 +225,8 @@ fun <T> SettingsSegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .clip(ContinuousCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                .selectableGroup()
-                .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         options.forEach { option ->
             val isSelected = option.value == selected
@@ -238,7 +235,7 @@ fun <T> SettingsSegmentedControl(
                     if (isSelected) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.Transparent
+                        MaterialTheme.colorScheme.surfaceContainerHighest
                     },
                 animationSpec = tween(durationMillis = 220),
                 label = "segmentBackground",
@@ -253,37 +250,25 @@ fun <T> SettingsSegmentedControl(
                 animationSpec = tween(durationMillis = 220),
                 label = "segmentForeground",
             )
-            Column(
+            Box(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .heightIn(min = 56.dp)
-                        .clip(ContinuousCornerShape(18.dp))
+                        .height(64.dp)
+                        .clip(CircleShape)
                         .background(background)
                         .selectable(
                             selected = isSelected,
                             role = Role.RadioButton,
                             onClick = { onSelected(option.value) },
-                        )
-                        .padding(horizontal = 6.dp, vertical = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = option.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    contentDescription = option.label,
+                    modifier = Modifier.size(24.dp),
                     tint = foreground,
-                )
-                Text(
-                    text = option.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = foreground,
-                    textAlign = TextAlign.Center,
-                    minLines = 2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -345,69 +330,70 @@ fun SettingsChoiceRow(
     }
 }
 
-/** Circular color target with a contrast-aware check mark when selected. */
+/** Large palette preview used by the theme color picker. */
 @Composable
-fun SettingsColorSwatch(
-    color: Color,
+fun SettingsThemeSwatch(
+    colors: ThemeSwatchColors,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val shape = ContinuousCornerShape(24.dp)
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(durationMillis = 220),
+        label = "swatchBorder",
+    )
+
+    Box(
         modifier =
             modifier
-                .widthIn(min = 64.dp)
-                .clip(ContinuousCornerShape(18.dp))
+                .width(88.dp)
+                .height(76.dp)
+                .clip(shape)
                 .selectable(
                     selected = selected,
                     role = Role.RadioButton,
                     onClick = onClick,
                 )
-                .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+                .semantics { contentDescription = label }
+                .border(width = 3.dp, color = borderColor, shape = shape)
+                .padding(4.dp),
     ) {
         Box(
             modifier =
                 Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(
-                        width = if (selected) 3.dp else 1.dp,
-                        color =
-                            if (selected) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.outlineVariant
-                            },
-                        shape = CircleShape,
-                    ),
+                    .fillMaxSize()
+                    .clip(ContinuousCornerShape(20.dp))
+                    .background(Brush.verticalGradient(listOf(colors.top, colors.bottom))),
             contentAlignment = Alignment.Center,
         ) {
             if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = if (color.luminance() > 0.55f) Color.Black else Color.White,
-                )
+                Box(
+                    modifier =
+                        Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(width = 2.dp, color = colors.accent, shape = CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = colors.accent,
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.size(36.dp).clip(CircleShape),
+                ) {
+                    Box(Modifier.weight(1f).fillMaxWidth().background(colors.accent))
+                    Box(Modifier.weight(1f).fillMaxWidth().background(colors.accentVariant))
+                }
             }
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color =
-                if (selected) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            textAlign = TextAlign.Center,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }

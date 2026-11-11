@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.screens.settings
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.BrightnessAuto
@@ -28,17 +29,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
-import me.nekosu.aqnya.ui.theme.themeColorPreview
+import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
+import me.nekosu.aqnya.ui.theme.themeSwatchColors
 
 @Composable
 fun AppearanceSection(
@@ -63,53 +68,78 @@ fun AppearanceSection(
                 icon = mode.icon(),
             )
         }
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         SettingsCard {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                modifier = Modifier.padding(vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.settings_theme_mode),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SettingsSegmentedControl(
-                    options = themeModeOptions,
-                    selected = currentThemeMode,
-                    onSelected = onThemeChange,
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                Text(
-                    text = stringResource(R.string.settings_theme_color),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().selectableGroup(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Text(
+                        text = stringResource(R.string.settings_theme_mode),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SettingsSegmentedControl(
+                        options = themeModeOptions,
+                        selected = currentThemeMode,
+                        onSelected = onThemeChange,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_theme_color),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = currentThemeColor.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Spacer(Modifier.width(16.dp))
                     ThemeColor.entries.forEach { color ->
-                        SettingsColorSwatch(
-                            color =
-                                if (color == ThemeColor.MATERIAL_YOU) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    themeColorPreview(color.value)
-                                },
+                        val swatchColors =
+                            if (color == ThemeColor.MATERIAL_YOU) {
+                                ThemeSwatchColors(
+                                    top = MaterialTheme.colorScheme.primaryContainer,
+                                    bottom = MaterialTheme.colorScheme.tertiaryContainer,
+                                    accent = MaterialTheme.colorScheme.primary,
+                                    accentVariant = MaterialTheme.colorScheme.secondary,
+                                )
+                            } else {
+                                themeSwatchColors(color.value, isDark)
+                            }
+                        SettingsThemeSwatch(
+                            colors = swatchColors,
                             label = color.label,
                             selected = currentThemeColor == color,
                             onClick = { onThemeColorChange(color) },
-                            modifier = Modifier.weight(1f),
                         )
                     }
+                    Spacer(Modifier.width(16.dp))
                 }
             }
         }
