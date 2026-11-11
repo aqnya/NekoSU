@@ -11,11 +11,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,11 +24,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.nekosu.aqnya.ui.component.AppSwitch
+import me.nekosu.aqnya.ui.component.ListRow
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
 
@@ -72,14 +70,6 @@ fun SettingsCard(
     ) {
         Column(content = content)
     }
-}
-
-@Composable
-fun SettingsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 18.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-    )
 }
 
 /** Tonal icon tile used by every settings row. */
@@ -110,114 +100,148 @@ fun SettingsIcon(
     }
 }
 
-/** A switch row that owns the whole tap target and tints its icon when active. */
 @Composable
-fun SettingsSwitchRow(
+fun SettingsActionEntry(
+    icon: ImageVector,
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    ListRow(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        icon = { SettingsEntryIcon(icon) },
+        headline = { SettingsEntryTitle(title) },
+        supporting = { SettingsEntrySummary(summary) },
+        trailing = {
+            if (trailing != null) {
+                trailing()
+            } else {
+                SettingsEntryChevron()
+            }
+        },
+    )
+}
+
+@Composable
+fun SettingsSwitchEntry(
     icon: ImageVector,
     title: String,
     summary: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Row(
+    ListRow(
         modifier =
-            modifier
+            Modifier
                 .fillMaxWidth()
                 .toggleable(
                     value = checked,
                     enabled = enabled,
                     role = Role.Switch,
                     onValueChange = onCheckedChange,
-                )
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingsIcon(
-            icon = icon,
-            containerColor =
-                if (checked) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.secondaryContainer
-                },
-            contentColor =
-                if (checked) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                },
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                ),
+        icon = {
+            SettingsIcon(
+                icon = icon,
+                containerColor =
+                    if (checked) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    },
+                contentColor =
+                    if (checked) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    },
+                tileSize = 48.dp,
+                iconSize = 24.dp,
+                cornerRadius = 16.dp,
             )
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
-    }
+        },
+        headline = { SettingsEntryTitle(title) },
+        supporting = { SettingsEntrySummary(summary) },
+        trailing = { AppSwitch(checked = checked, onCheckedChange = null, enabled = enabled) },
+    )
 }
 
-/** A clickable row ending in a chevron or a caller-supplied trailing control. */
 @Composable
-fun SettingsActionRow(
+fun SettingsChoiceEntry(
     icon: ImageVector,
     title: String,
+    selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    summary: String? = null,
-    trailing: @Composable (() -> Unit)? = null,
 ) {
-    Row(
+    ListRow(
         modifier =
-            modifier
+            Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingsIcon(icon)
-        Spacer(Modifier.width(14.dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+                .selectable(
+                    selected = selected,
+                    role = Role.RadioButton,
+                    onClick = onClick,
+                ),
+        icon = { SettingsEntryIcon(icon) },
+        headline = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             )
-            if (summary != null) {
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        },
+        trailing = {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
-        }
-        Spacer(Modifier.width(8.dp))
-        if (trailing != null) {
-            trailing()
-        } else {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+        },
+    )
+}
+
+@Composable
+private fun SettingsEntryIcon(icon: ImageVector) {
+    SettingsIcon(
+        icon = icon,
+        tileSize = 48.dp,
+        iconSize = 24.dp,
+        cornerRadius = 16.dp,
+    )
+}
+
+@Composable
+private fun SettingsEntryTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun SettingsEntrySummary(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun SettingsEntryChevron() {
+    Icon(
+        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** Pill-shaped floating control using the expressive container hierarchy. */
@@ -275,61 +299,6 @@ fun <T> SettingsSegmentedControl(
                     tint = foreground,
                 )
             }
-        }
-    }
-}
-
-/** Compact tonal label used next to section headings and links. */
-@Composable
-fun SettingsValuePill(text: String) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** A single-choice row used by list-style settings pages such as Language. */
-@Composable
-fun SettingsChoiceRow(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .selectable(
-                    selected = selected,
-                    role = Role.RadioButton,
-                    onClick = onClick,
-                )
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
-        if (selected) {
-            Icon(
-                imageVector = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }

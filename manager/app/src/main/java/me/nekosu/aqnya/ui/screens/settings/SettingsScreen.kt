@@ -1,42 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.screens.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import dev.chrisbanes.haze.hazeSource
@@ -46,7 +38,6 @@ import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
 import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.HazeTopAppBar
-import me.nekosu.aqnya.ui.component.ListRow
 import me.nekosu.aqnya.ui.navigation.LocalBottomBarClearance
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
@@ -107,7 +98,7 @@ fun SettingsScreen(navController: NavController) {
         ) {
             CardGroup {
                 item {
-                    SettingsGroupEntry(
+                    SettingsActionEntry(
                         icon = Icons.Rounded.Palette,
                         title = stringResource(R.string.theme_title),
                         summary = appearanceSummary,
@@ -115,7 +106,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
                 item {
-                    SettingsGroupEntry(
+                    SettingsActionEntry(
                         icon = Icons.Rounded.Tune,
                         title = stringResource(R.string.settings_section_kernel),
                         summary = stringResource(R.string.settings_group_kernel_summary),
@@ -123,7 +114,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
                 item {
-                    SettingsGroupEntry(
+                    SettingsActionEntry(
                         icon = Icons.Rounded.Build,
                         title = stringResource(R.string.settings_section_tools),
                         summary = stringResource(R.string.settings_group_tools_summary),
@@ -131,7 +122,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
                 item {
-                    SettingsGroupEntry(
+                    SettingsActionEntry(
                         icon = Icons.Rounded.Translate,
                         title = stringResource(R.string.language_title),
                         summary = currentLangLabel,
@@ -139,7 +130,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
                 item {
-                    SettingsGroupEntry(
+                    SettingsActionEntry(
                         icon = Icons.Rounded.Info,
                         title = stringResource(R.string.about),
                         summary = stringResource(R.string.settings_about_summary),
@@ -149,40 +140,4 @@ fun SettingsScreen(navController: NavController) {
             }
         }
     }
-}
-
-@Composable
-private fun SettingsGroupEntry(
-    icon: ImageVector,
-    title: String,
-    summary: String,
-    onClick: () -> Unit,
-) {
-    ListRow(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        icon = { SettingsIcon(icon, tileSize = 48.dp, iconSize = 24.dp, cornerRadius = 16.dp) },
-        headline = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        },
-        supporting = {
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        trailing = {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-    )
 }

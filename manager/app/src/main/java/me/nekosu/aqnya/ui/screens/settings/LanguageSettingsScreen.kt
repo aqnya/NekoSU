@@ -2,16 +2,17 @@
 package me.nekosu.aqnya.ui.screens.settings
 
 import android.app.Activity
-import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.util.LocaleHelper
 
 @Composable
@@ -23,18 +24,20 @@ fun LanguageSettingsScreen(onBack: () -> Unit) {
         title = stringResource(R.string.language_title),
         onBack = onBack,
     ) {
-        SettingsCard(modifier = Modifier.selectableGroup()) {
-            LocaleHelper.availableLanguages.forEachIndexed { index, language ->
-                if (index > 0) SettingsDivider()
-                SettingsChoiceRow(
-                    title = stringResource(language.labelRes),
-                    selected = language.tag == selectedTag,
-                    onClick = {
-                        selectedTag = language.tag
-                        LocaleHelper.saveLanguageTag(context, language.tag)
-                        (context as? Activity)?.let { LocaleHelper.applyLanguage(it) }
-                    },
-                )
+        CardGroup {
+            LocaleHelper.availableLanguages.forEach { language ->
+                item {
+                    SettingsChoiceEntry(
+                        icon = Icons.Rounded.Translate,
+                        title = stringResource(language.labelRes),
+                        selected = language.tag == selectedTag,
+                        onClick = {
+                            selectedTag = language.tag
+                            LocaleHelper.saveLanguageTag(context, language.tag)
+                            (context as? Activity)?.let { LocaleHelper.applyLanguage(it) }
+                        },
+                    )
+                }
             }
         }
     }

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
@@ -144,66 +145,70 @@ fun AppearanceSection(
             }
         }
 
-        SettingsCard {
-            Box {
-                SettingsActionRow(
-                    icon = Icons.Rounded.ViewAgenda,
-                    title = stringResource(R.string.settings_nav_bar_style),
-                    summary = stringResource(currentNavBarStyle.titleRes),
-                    onClick = { navBarMenuExpanded = true },
-                )
-                DropdownMenu(
-                    expanded = navBarMenuExpanded,
-                    onDismissRequest = { navBarMenuExpanded = false },
-                    shape = ContinuousCornerShape(20.dp),
-                ) {
-                    NavBarStyle.entries.forEach { style ->
-                        val selected = style == currentNavBarStyle
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = stringResource(style.titleRes),
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = style.icon(),
-                                    contentDescription = null,
-                                )
-                            },
-                            trailingIcon = {
-                                if (selected) {
+        CardGroup {
+            item {
+                Box {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.ViewAgenda,
+                        title = stringResource(R.string.settings_nav_bar_style),
+                        summary = stringResource(currentNavBarStyle.titleRes),
+                        onClick = { navBarMenuExpanded = true },
+                    )
+                    DropdownMenu(
+                        expanded = navBarMenuExpanded,
+                        onDismissRequest = { navBarMenuExpanded = false },
+                        shape = ContinuousCornerShape(20.dp),
+                    ) {
+                        NavBarStyle.entries.forEach { style ->
+                            val selected = style == currentNavBarStyle
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(style.titleRes),
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                },
+                                leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Rounded.Check,
+                                        imageVector = style.icon(),
                                         contentDescription = null,
                                     )
-                                }
-                            },
-                            onClick = {
-                                navBarMenuExpanded = false
-                                onNavBarStyleChange(style)
-                            },
-                        )
+                                },
+                                trailingIcon = {
+                                    if (selected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    navBarMenuExpanded = false
+                                    onNavBarStyleChange(style)
+                                },
+                            )
+                        }
                     }
                 }
             }
-            SettingsDivider()
-            SettingsSwitchRow(
-                icon = Icons.Rounded.PhoneAndroid,
-                title = stringResource(R.string.settings_amoled_black),
-                summary = stringResource(R.string.settings_amoled_black_summary),
-                checked = amoledEnabled,
-                onCheckedChange = onAmoledChange,
-            )
-            SettingsDivider()
-            SettingsSwitchRow(
-                icon = Icons.Rounded.BlurOn,
-                title = stringResource(R.string.settings_blur),
-                summary = stringResource(R.string.settings_blur_summary),
-                checked = blurEnabled,
-                onCheckedChange = onBlurChange,
-            )
+            item {
+                SettingsSwitchEntry(
+                    icon = Icons.Rounded.PhoneAndroid,
+                    title = stringResource(R.string.settings_amoled_black),
+                    summary = stringResource(R.string.settings_amoled_black_summary),
+                    checked = amoledEnabled,
+                    onCheckedChange = onAmoledChange,
+                )
+            }
+            item {
+                SettingsSwitchEntry(
+                    icon = Icons.Rounded.BlurOn,
+                    title = stringResource(R.string.settings_blur),
+                    summary = stringResource(R.string.settings_blur_summary),
+                    checked = blurEnabled,
+                    onCheckedChange = onBlurChange,
+                )
+            }
         }
     }
 }

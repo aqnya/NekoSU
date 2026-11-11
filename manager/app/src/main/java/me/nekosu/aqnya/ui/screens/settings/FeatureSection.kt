@@ -3,7 +3,6 @@ package me.nekosu.aqnya.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -30,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.data.kernel.KernelFeature
+import me.nekosu.aqnya.ui.component.CardGroup
 
 /**
  * 内核 feature 开关：列表与状态都由内核给出（IOC_FEATURE_LIST/SET），管理器只
@@ -46,8 +46,8 @@ fun FeatureSection() {
     }
     LaunchedEffect(Unit) { reload() }
 
-    SettingsCard {
-        if (features.isEmpty()) {
+    if (features.isEmpty()) {
+        SettingsCard {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -69,27 +69,30 @@ fun FeatureSection() {
                     textAlign = TextAlign.Center,
                 )
             }
-        } else {
-            features.forEachIndexed { index, feature ->
-                if (index > 0) SettingsDivider()
-                SettingsSwitchRow(
-                    icon = feature.icon(),
-                    title = featureLabel(feature),
-                    summary = featureSummary(feature),
-                    checked = feature.enabled,
-                    enabled = !busy,
-                    onCheckedChange = { checked ->
-                        scope.launch {
-                            busy = true
-                            val ok =
-                                withContext(Dispatchers.IO) {
-                                    KernelFeature.set(feature.id, checked)
-                                }
-                            busy = false
-                            if (ok) reload()
-                        }
-                    },
-                )
+        }
+    } else {
+        CardGroup {
+            features.forEach { feature ->
+                item {
+                    SettingsSwitchEntry(
+                        icon = feature.icon(),
+                        title = featureLabel(feature),
+                        summary = featureSummary(feature),
+                        checked = feature.enabled,
+                        enabled = !busy,
+                        onCheckedChange = { checked ->
+                            scope.launch {
+                                busy = true
+                                val ok =
+                                    withContext(Dispatchers.IO) {
+                                        KernelFeature.set(feature.id, checked)
+                                    }
+                                busy = false
+                                if (ok) reload()
+                            }
+                        },
+                    )
+                }
             }
         }
     }
