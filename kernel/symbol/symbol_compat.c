@@ -3,16 +3,16 @@
  * Implementation of the unexported-symbol indirection layer.
  *
  * Defines all symbol pointers and fills them with real addresses at runtime
- * via nksu_ksym_lookup(). See symbol_compat.h.
+ * via nksu_ksym_lookup(). See symbol_compat_decls.h.
  */
 
-/* Use the real types to declare the pointers so macros cannot rewrite them */
-#define NKSU_SYMBOL_COMPAT_NO_MACROS
+/* Use the real names and types to declare the pointers: include the
+ * declarations header, which does not redirect any symbol name. */
 #include "klog.h"
 #include <linux/errno.h>
 #include <fmac.h>
 #include "symbol/symbol.h"
-#include "symbol/symbol_compat.h"
+#include "symbol/symbol_compat_decls.h"
 
 /* definitions */
 typeof(alloc_uid) *nksu_alloc_uid;
