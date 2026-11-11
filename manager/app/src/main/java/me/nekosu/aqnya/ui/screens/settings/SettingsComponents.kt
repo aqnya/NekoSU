@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
@@ -88,19 +89,22 @@ fun SettingsIcon(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.secondaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
+    tileSize: Dp = 42.dp,
+    iconSize: Dp = 21.dp,
+    cornerRadius: Dp = 15.dp,
 ) {
     Box(
         modifier =
             modifier
-                .size(42.dp)
-                .clip(ContinuousCornerShape(15.dp))
+                .size(tileSize)
+                .clip(ContinuousCornerShape(cornerRadius))
                 .background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(iconSize),
             tint = contentColor,
         )
     }
