@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
@@ -26,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -36,6 +39,8 @@ import dev.chrisbanes.haze.rememberHazeState
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
+import me.nekosu.aqnya.ui.component.AppListItem
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.HazeTopAppBar
 import me.nekosu.aqnya.ui.navigation.LocalBottomBarClearance
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
@@ -95,42 +100,71 @@ fun SettingsScreen(navController: NavController) {
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SettingsCard {
-                SettingsActionRow(
-                    icon = Icons.Rounded.Palette,
-                    title = stringResource(R.string.theme_title),
-                    summary = appearanceSummary,
-                    onClick = { navController.navigate(AppRoute.SettingsAppearance) },
-                )
-                SettingsDivider()
-                SettingsActionRow(
-                    icon = Icons.Rounded.Tune,
-                    title = stringResource(R.string.settings_section_kernel),
-                    summary = stringResource(R.string.settings_group_kernel_summary),
-                    onClick = { navController.navigate(AppRoute.SettingsFeatures) },
-                )
-                SettingsDivider()
-                SettingsActionRow(
-                    icon = Icons.Rounded.Build,
-                    title = stringResource(R.string.settings_section_tools),
-                    summary = stringResource(R.string.settings_group_tools_summary),
-                    onClick = { navController.navigate(AppRoute.SettingsTools) },
-                )
-                SettingsDivider()
-                SettingsActionRow(
-                    icon = Icons.Rounded.Translate,
-                    title = stringResource(R.string.language_title),
-                    summary = currentLangLabel,
-                    onClick = { navController.navigate(AppRoute.SettingsLanguage) },
-                )
-                SettingsDivider()
-                SettingsActionRow(
-                    icon = Icons.Rounded.Info,
-                    title = stringResource(R.string.about),
-                    summary = stringResource(R.string.settings_about_summary),
-                    onClick = { navController.navigate(AppRoute.About) },
-                )
+            CardGroup {
+                item {
+                    SettingsGroupEntry(
+                        icon = Icons.Rounded.Palette,
+                        title = stringResource(R.string.theme_title),
+                        summary = appearanceSummary,
+                        onClick = { navController.navigate(AppRoute.SettingsAppearance) },
+                    )
+                }
+                item {
+                    SettingsGroupEntry(
+                        icon = Icons.Rounded.Tune,
+                        title = stringResource(R.string.settings_section_kernel),
+                        summary = stringResource(R.string.settings_group_kernel_summary),
+                        onClick = { navController.navigate(AppRoute.SettingsFeatures) },
+                    )
+                }
+                item {
+                    SettingsGroupEntry(
+                        icon = Icons.Rounded.Build,
+                        title = stringResource(R.string.settings_section_tools),
+                        summary = stringResource(R.string.settings_group_tools_summary),
+                        onClick = { navController.navigate(AppRoute.SettingsTools) },
+                    )
+                }
+                item {
+                    SettingsGroupEntry(
+                        icon = Icons.Rounded.Translate,
+                        title = stringResource(R.string.language_title),
+                        summary = currentLangLabel,
+                        onClick = { navController.navigate(AppRoute.SettingsLanguage) },
+                    )
+                }
+                item {
+                    SettingsGroupEntry(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.about),
+                        summary = stringResource(R.string.settings_about_summary),
+                        onClick = { navController.navigate(AppRoute.About) },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SettingsGroupEntry(
+    icon: ImageVector,
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+) {
+    AppListItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = title,
+        summary = summary,
+        leading = { Icon(icon, contentDescription = null) },
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        onClick = onClick,
+    )
 }
