@@ -16,9 +16,15 @@ object AppPreferences {
 
     fun themeModeFlow(context: Context): Flow<Int> = context.prefsFlow { getInt("theme_mode", 0) }
 
+    fun themeMode(context: Context): Int = getPrefs(context).getInt("theme_mode", 0)
+
     fun themeColorFlow(context: Context): Flow<Int> = context.prefsFlow { getInt("theme_color", 0) }
 
+    fun themeColor(context: Context): Int = getPrefs(context).getInt("theme_color", 0)
+
     fun amoledFlow(context: Context): Flow<Boolean> = context.prefsFlow { getBoolean("amoled_mode", false) }
+
+    fun isAmoledEnabled(context: Context): Boolean = getPrefs(context).getBoolean("amoled_mode", false)
 
     fun isBlurEnabled(context: Context): Boolean = getPrefs(context).getBoolean("blur", false)
 
