@@ -70,19 +70,6 @@ fun FeatureSection() {
                 )
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_features_enabled),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                SettingsValuePill("${features.count { it.enabled }}/${features.size}")
-            }
-            SettingsDivider()
             features.forEachIndexed { index, feature ->
                 if (index > 0) SettingsDivider()
                 SettingsSwitchRow(
