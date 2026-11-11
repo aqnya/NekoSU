@@ -64,6 +64,7 @@
     <string name="language_en">English</string>
 
     <!-- 设置 — 主题 -->
+    <string name="settings_theme_mode">Theme mode</string>
     <string name="settings_theme_color">Theme Color</string>
     <string name="settings_amoled_black">AMOLED Pure Black</string>
     <string name="settings_amoled_black_summary">Use pure black background in dark mode</string>
@@ -74,6 +75,12 @@
     <string name="settings_nav_bar_style">Navigation bar style</string>
     <string name="nav_bar_style_standard">Standard</string>
     <string name="nav_bar_style_glass">Liquid glass</string>
+    <string name="settings_section_kernel">Kernel features</string>
+    <string name="settings_group_kernel_summary">SELinux and mount hiding</string>
+    <string name="settings_features_enabled">Enabled</string>
+    <string name="settings_section_tools">Tools</string>
+    <string name="settings_group_tools_summary">Symbol verification and logs</string>
+    <string name="settings_about_summary">Version, licenses and source code</string>
 
     <!-- Setting — debug -->
     <string name="settings_debug">Debug Settings</string>
