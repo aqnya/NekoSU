@@ -727,7 +727,34 @@ static int nksu_app_install_ncore(const char *dst)
  */
 static DEFINE_MUTEX(bootstrap_mutex);
 
+/* Set when this boot installed the image; drives the manager-scan retry. */
+static bool ncore_installed;
+static bool manager_scan_done;
+
 static void pkgwatch_observer_exit(void);
+
+/*
+ * init's `on post-fs-data` exec of /data/adb/ncore is what runs the manager
+ * scan on a normal boot, and it has already run (and failed) by the time a
+ * fresh install gets here.  Spawn just that scan so the manager is authorized
+ * on this boot instead of the next one.  nksu_spawn() re-verifies the image
+ * before executing it, exactly like init's exec would have.
+ */
+static int spawn_manager_scan(void)
+{
+	char *argv[] = { (char *)NKSU_DAEMON_BOOT_PATH, (char *)"manager", (char *)"scan", NULL };
+	char *envp[] = { (char *)"PATH=/sbin:/system/sbin:/system/bin:/system/xbin", NULL };
+	const struct nksu_spawn_args args = {
+		.path = NKSU_DAEMON_BOOT_PATH,
+		.argv = argv,
+		.envp = envp,
+		.domain = DOMAIN_CTX,
+		.wait = NKSU_SPAWN_WAIT_PROC,
+	};
+
+	return nksu_spawn(&args);
+}
+
 /*
  * Install /data/adb/ncore from the signed libncore.so PackageManager extracted
  * under /data/app.  The image is only trusted after its appended signature
@@ -753,6 +780,16 @@ static int ncore_bootstrap(void)
 		WRITE_ONCE(daemon_ready, true);
 		WRITE_ONCE(pkgwatch_shutdown, true);
 		pkgwatch_observer_exit();
+
+		/*
+		 * The image may have been installed earlier in this boot,
+		 * before PackageManagerService wrote packages.xml.  The
+		 * observer has just fired on that write, so the manager is
+		 * discoverable now: retry the scan the install could not
+		 * complete.
+		 */
+		if (ncore_installed && !manager_scan_done)
+			manager_scan_done = spawn_manager_scan() == 0;
 		goto out;
 	}
 
@@ -769,6 +806,19 @@ static int ncore_bootstrap(void)
 	/* Label it nksu_file so init's injected init.rc can exec it. */
 	nksu_relabel_path(NKSU_DAEMON_BOOT_PATH);
 	WRITE_ONCE(daemon_ready, true);
+
+	/*
+	 * init's post-fs-data exec ran before the image existed, so the
+	 * manager was never authorized on this boot.  Run the scan now: it
+	 * only needs packages.xml, and the observer retries if that file was
+	 * not ready yet.
+	 */
+	ncore_installed = true;
+	manager_scan_done = spawn_manager_scan() == 0;
+	if (manager_scan_done)
+		pr_info("manager authorized for this boot\n");
+	else
+		pr_warn("manager scan after install failed, will retry on the next packages.xml write\n");
 
 out:
 	nksu_borrow_creds_end(old);
