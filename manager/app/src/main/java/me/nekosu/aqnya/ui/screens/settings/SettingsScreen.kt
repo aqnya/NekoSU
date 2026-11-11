@@ -77,6 +77,7 @@ fun SettingsScreen(navController: NavController) {
                 state = hazeState,
                 title = stringResource(R.string.settings_title),
                 scrollBehavior = scrollBehavior,
+                titleStyle = MaterialTheme.typography.headlineMedium,
             )
         },
         contentWindowInsets =
