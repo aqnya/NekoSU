@@ -12,6 +12,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 
 /** 顶栏（支持副标题）。 */
@@ -24,6 +25,7 @@ fun AppTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
+    titleStyle: TextStyle? = null,
     colors: TopAppBarColors =
         TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -33,11 +35,12 @@ fun AppTopAppBar(
     TopAppBar(
         title = {
             if (subtitle.isBlank()) {
-                Text(title)
+                Text(title, style = titleStyle ?: MaterialTheme.typography.titleLarge)
             } else {
                 Column {
                     Text(
                         text = title,
+                        style = titleStyle ?: MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
