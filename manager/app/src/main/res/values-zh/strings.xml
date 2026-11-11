@@ -74,7 +74,10 @@
     <string name="nav_bar_style_standard">标准</string>
     <string name="nav_bar_style_glass">液态玻璃</string>
     <string name="settings_section_kernel">内核功能</string>
+    <string name="settings_group_kernel_summary">SELinux 与挂载隐藏</string>
+    <string name="settings_features_enabled">已启用</string>
     <string name="settings_section_tools">工具</string>
+    <string name="settings_group_tools_summary">符号校验与日志</string>
     <string name="settings_about_summary">版本、许可证与源代码</string>
 
     <!-- 设置 — 开发者 -->

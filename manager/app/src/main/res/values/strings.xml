@@ -76,7 +76,10 @@
     <string name="nav_bar_style_standard">Standard</string>
     <string name="nav_bar_style_glass">Liquid glass</string>
     <string name="settings_section_kernel">Kernel features</string>
+    <string name="settings_group_kernel_summary">SELinux and mount hiding</string>
+    <string name="settings_features_enabled">Enabled</string>
     <string name="settings_section_tools">Tools</string>
+    <string name="settings_group_tools_summary">Symbol verification and logs</string>
     <string name="settings_about_summary">Version, licenses and source code</string>
 
     <!-- Setting — debug -->

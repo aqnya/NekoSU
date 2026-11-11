@@ -3,6 +3,7 @@ package me.nekosu.aqnya.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -45,60 +46,63 @@ fun FeatureSection() {
     }
     LaunchedEffect(Unit) { reload() }
 
-    SettingsSection(
-        title = stringResource(R.string.settings_section_kernel),
-        icon = Icons.Rounded.Tune,
-        trailing = {
-            if (features.isNotEmpty()) {
+    SettingsCard {
+        if (features.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SettingsIcon(
+                    icon = Icons.Rounded.Tune,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.feature_empty),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(R.string.feature_empty_describe),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_features_enabled),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
                 SettingsValuePill("${features.count { it.enabled }}/${features.size}")
             }
-        },
-    ) {
-        SettingsCard {
-            if (features.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SettingsIcon(
-                        icon = Icons.Rounded.Tune,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.feature_empty),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = stringResource(R.string.feature_empty_describe),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            } else {
-                features.forEachIndexed { index, feature ->
-                    if (index > 0) SettingsDivider()
-                    SettingsSwitchRow(
-                        icon = feature.icon(),
-                        title = featureLabel(feature),
-                        summary = featureSummary(feature),
-                        checked = feature.enabled,
-                        enabled = !busy,
-                        onCheckedChange = { checked ->
-                            scope.launch {
-                                busy = true
-                                val ok =
-                                    withContext(Dispatchers.IO) {
-                                        KernelFeature.set(feature.id, checked)
-                                    }
-                                busy = false
-                                if (ok) reload()
-                            }
-                        },
-                    )
-                }
+            SettingsDivider()
+            features.forEachIndexed { index, feature ->
+                if (index > 0) SettingsDivider()
+                SettingsSwitchRow(
+                    icon = feature.icon(),
+                    title = featureLabel(feature),
+                    summary = featureSummary(feature),
+                    checked = feature.enabled,
+                    enabled = !busy,
+                    onCheckedChange = { checked ->
+                        scope.launch {
+                            busy = true
+                            val ok =
+                                withContext(Dispatchers.IO) {
+                                    KernelFeature.set(feature.id, checked)
+                                }
+                            busy = false
+                            if (ok) reload()
+                        }
+                    },
+                )
             }
         }
     }
