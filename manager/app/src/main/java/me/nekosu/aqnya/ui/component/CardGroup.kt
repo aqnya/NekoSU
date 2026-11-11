@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -145,6 +146,7 @@ fun ListRow(
         // otherwise spill over the square corners.
         modifier = Modifier.clip(shapes.shape).then(modifier),
         shapes = shapes,
+        verticalAlignment = Alignment.CenterVertically,
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
         leadingContent = icon,
         supportingContent = supporting,
