@@ -63,6 +63,9 @@ private fun seedFor(value: Int): ThemeSeed =
         else -> ThemeSeed(219.6f, 0.46f)
     }
 
+/** Solid seed preview used by the settings theme swatches. */
+fun themeColorPreview(value: Int): Color = seedFor(value).color(0.58f)
+
 private fun ColorScheme.withFixedColors(seed: ThemeSeed): ColorScheme =
     copy(
         primaryFixed = seed.color(0.90f),

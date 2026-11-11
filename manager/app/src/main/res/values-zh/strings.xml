@@ -62,6 +62,7 @@
     <string name="language_en">English</string>
 
     <!-- 设置 — 主题 -->
+    <string name="settings_theme_mode">主题模式</string>
     <string name="settings_theme_color">主题色</string>
     <string name="settings_amoled_black">AMOLED 纯黑</string>
     <string name="settings_amoled_black_summary">深色模式下使用纯黑色背景</string>
@@ -72,6 +73,9 @@
     <string name="settings_nav_bar_style">底栏样式</string>
     <string name="nav_bar_style_standard">标准</string>
     <string name="nav_bar_style_glass">液态玻璃</string>
+    <string name="settings_section_kernel">内核功能</string>
+    <string name="settings_section_tools">工具</string>
+    <string name="settings_about_summary">版本、许可证与源代码</string>
 
     <!-- 设置 — 开发者 -->
     <string name="settings_debug">开发者调试</string>

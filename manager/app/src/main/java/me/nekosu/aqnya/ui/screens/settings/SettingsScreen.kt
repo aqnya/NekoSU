@@ -110,19 +110,11 @@ fun SettingsScreen(navController: NavController) {
                     .hazeSource(hazeState)
                     .verticalScroll(rememberScrollState())
                     .padding(innerPadding)
-                    .padding(top = 16.dp)
+                    .padding(top = 20.dp)
                     .padding(bottom = LocalBottomBarClearance.current)
                     .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(26.dp),
         ) {
-            LanguageSection(
-                currentLangLabel = currentLangLabel,
-                onLanguageChange = { tag ->
-                    LocaleHelper.saveLanguageTag(mContext, tag)
-                    (mContext as? Activity)?.let { LocaleHelper.applyLanguage(it) }
-                },
-            )
-
             AppearanceSection(
                 currentThemeMode = currentThemeMode,
                 currentThemeColor = currentThemeColor,
@@ -154,6 +146,14 @@ fun SettingsScreen(navController: NavController) {
                 verifyKernelSymbols = verifyKernelSymbols,
                 onVerifyKernelSymbolsChange = { enabled ->
                     AppPreferences.setVerifyKernelSymbols(mContext, enabled)
+                },
+            )
+
+            LanguageSection(
+                currentLangLabel = currentLangLabel,
+                onLanguageChange = { tag ->
+                    LocaleHelper.saveLanguageTag(mContext, tag)
+                    (mContext as? Activity)?.let { LocaleHelper.applyLanguage(it) }
                 },
             )
 

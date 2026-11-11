@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.screens.settings
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,16 +18,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.data.kernel.KernelFeature
-import me.nekosu.aqnya.ui.component.AppSwitch
-import me.nekosu.aqnya.ui.component.CardGroup
-import me.nekosu.aqnya.ui.component.ListRow
 
 /**
  * 内核 feature 开关：列表与状态都由内核给出（IOC_FEATURE_LIST/SET），管理器只
@@ -40,38 +45,57 @@ fun FeatureSection() {
     }
     LaunchedEffect(Unit) { reload() }
 
-    CardGroup {
-        if (features.isEmpty()) {
-            item {
-                ListRow(
-                    icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-                    headline = { Text(stringResource(R.string.feature_empty)) },
-                    supporting = { Text(stringResource(R.string.feature_empty_describe)) },
-                )
+    SettingsSection(
+        title = stringResource(R.string.settings_section_kernel),
+        icon = Icons.Rounded.Tune,
+        trailing = {
+            if (features.isNotEmpty()) {
+                SettingsValuePill("${features.count { it.enabled }}/${features.size}")
             }
-        } else {
-            features.forEach { feature ->
-                item {
-                    ListRow(
-                        icon = { Icon(feature.icon(), contentDescription = null) },
-                        headline = { Text(featureLabel(feature)) },
-                        supporting = { Text(featureSummary(feature)) },
-                        trailing = {
-                            AppSwitch(
-                                checked = feature.enabled,
-                                enabled = !busy,
-                                onCheckedChange = { checked ->
-                                    scope.launch {
-                                        busy = true
-                                        val ok =
-                                            withContext(Dispatchers.IO) {
-                                                KernelFeature.set(feature.id, checked)
-                                            }
-                                        busy = false
-                                        if (ok) reload()
+        },
+    ) {
+        SettingsCard {
+            if (features.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SettingsIcon(
+                        icon = Icons.Rounded.Tune,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.feature_empty),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.feature_empty_describe),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                features.forEachIndexed { index, feature ->
+                    if (index > 0) SettingsDivider()
+                    SettingsSwitchRow(
+                        icon = feature.icon(),
+                        title = featureLabel(feature),
+                        summary = featureSummary(feature),
+                        checked = feature.enabled,
+                        enabled = !busy,
+                        onCheckedChange = { checked ->
+                            scope.launch {
+                                busy = true
+                                val ok =
+                                    withContext(Dispatchers.IO) {
+                                        KernelFeature.set(feature.id, checked)
                                     }
-                                },
-                            )
+                                busy = false
+                                if (ok) reload()
+                            }
                         },
                     )
                 }
