@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 
+private val CardGroupOuterRadius = 28.dp
+private val CardGroupInnerRadius = 8.dp
+
 val LocalListItemShapes = compositionLocalOf<ListItemShapes?> { null }
 
 @Composable
@@ -74,6 +77,21 @@ class CardGroupScope internal constructor() {
     }
 }
 
+private fun segmentedShapes(
+    index: Int,
+    count: Int,
+): ListItemShapes {
+    val shape = groupShape(index, count, radius = CardGroupOuterRadius, innerRadius = CardGroupInnerRadius)
+    return ListItemShapes(
+        shape = shape,
+        selectedShape = shape,
+        pressedShape = shape,
+        focusedShape = shape,
+        hoveredShape = shape,
+        draggedShape = shape,
+    )
+}
+
 @Composable
 fun CardGroup(
     modifier: Modifier = Modifier,
@@ -88,7 +106,7 @@ fun CardGroup(
     ) {
         entries.forEachIndexed { index, entry ->
             CompositionLocalProvider(
-                LocalListItemShapes provides ListItemDefaults.segmentedShapes(index = index, count = entries.size),
+                LocalListItemShapes provides segmentedShapes(index = index, count = entries.size),
             ) {
                 entry.content()
             }
