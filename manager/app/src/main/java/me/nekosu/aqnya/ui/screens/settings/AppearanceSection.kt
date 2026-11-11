@@ -51,15 +51,6 @@ fun AppearanceSection(
                 icon = mode.icon(),
             )
         }
-    val navBarStyleOptions =
-        NavBarStyle.entries.map { style ->
-            SegmentOption(
-                value = style,
-                label = stringResource(style.titleRes),
-                icon = style.icon(),
-            )
-        }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -112,25 +103,16 @@ fun AppearanceSection(
         }
 
         SettingsCard {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_nav_bar_style),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SettingsSegmentedControl(
-                    options = navBarStyleOptions,
-                    selected = currentNavBarStyle,
-                    onSelected = onNavBarStyleChange,
-                )
-            }
-        }
-
-        SettingsCard {
+            SettingsSwitchRow(
+                icon = Icons.Rounded.ViewAgenda,
+                title = stringResource(R.string.settings_nav_bar_style),
+                summary = stringResource(currentNavBarStyle.titleRes),
+                checked = currentNavBarStyle == NavBarStyle.GLASS,
+                onCheckedChange = { enabled ->
+                    onNavBarStyleChange(if (enabled) NavBarStyle.GLASS else NavBarStyle.STANDARD)
+                },
+            )
+            SettingsDivider()
             SettingsSwitchRow(
                 icon = Icons.Rounded.PhoneAndroid,
                 title = stringResource(R.string.settings_amoled_black),
@@ -155,10 +137,4 @@ private fun ThemeMode.icon(): ImageVector =
         ThemeMode.SYSTEM -> Icons.Rounded.BrightnessAuto
         ThemeMode.LIGHT -> Icons.Rounded.LightMode
         ThemeMode.DARK -> Icons.Rounded.DarkMode
-    }
-
-private fun NavBarStyle.icon(): ImageVector =
-    when (this) {
-        NavBarStyle.STANDARD -> Icons.Rounded.ViewAgenda
-        NavBarStyle.GLASS -> Icons.Rounded.BlurOn
     }
