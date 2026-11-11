@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.screens.settings
 
-import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,19 +11,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -33,58 +33,40 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.HazeTopAppBar
 import me.nekosu.aqnya.ui.navigation.LocalBottomBarClearance
-import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
 import me.nekosu.aqnya.util.LocaleHelper
-import me.nekosu.aqnya.util.LogUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
-    val mContext = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
-    val themeValue by AppPreferences.themeModeFlow(mContext).collectAsState(initial = 0)
-    val currentThemeMode = ThemeMode.fromValue(themeValue)
+    val themeModeValue by AppPreferences.themeModeFlow(context).collectAsState(
+        initial = AppPreferences.themeMode(context),
+    )
+    val currentThemeMode = ThemeMode.fromValue(themeModeValue)
 
-    val themeColorValue by AppPreferences.themeColorFlow(mContext).collectAsState(initial = 0)
+    val themeColorValue by AppPreferences.themeColorFlow(context).collectAsState(
+        initial = AppPreferences.themeColor(context),
+    )
     val currentThemeColor = ThemeColor.fromValue(themeColorValue)
 
-    val amoledEnabled by AppPreferences.amoledFlow(mContext).collectAsState(initial = false)
-    var blurEnabled by remember(mContext) {
-        mutableStateOf(AppPreferences.isBlurEnabled(mContext))
-    }
-    LaunchedEffect(mContext) {
-        AppPreferences.blurFlow(mContext).collect { blurEnabled = it }
-    }
-
-    val navBarStyleValue by AppPreferences.navBarStyleFlow(mContext).collectAsState(
-        initial = AppPreferences.navBarStyle(mContext),
-    )
-    val currentNavBarStyle = NavBarStyle.fromValue(navBarStyleValue)
-
-    val verifyKernelSymbols by AppPreferences.verifyKernelSymbolsFlow(mContext).collectAsState(
-        initial = AppPreferences.verifyKernelSymbols(mContext),
-    )
-
-    val currentLang =
-        LocaleHelper
-            .savedLanguageTag(mContext)
-            .ifBlank { "" }
+    val currentLang = LocaleHelper.savedLanguageTag(context)
     val currentLangLabel =
         LocaleHelper.availableLanguages
             .find { it.tag == currentLang }
             ?.let { stringResource(it.labelRes) }
             ?: stringResource(R.string.language_system)
+
+    val appearanceSummary = "${stringResource(currentThemeMode.titleRes)} · ${currentThemeColor.label}"
 
     val hazeState = rememberHazeState()
     Scaffold(
@@ -95,7 +77,7 @@ fun SettingsScreen(navController: NavController) {
                 state = hazeState,
                 title = stringResource(R.string.settings_title),
                 scrollBehavior = scrollBehavior,
-                blurEnabled = blurEnabled,
+                titleStyle = MaterialTheme.typography.headlineMedium,
             )
         },
         contentWindowInsets =
@@ -110,56 +92,53 @@ fun SettingsScreen(navController: NavController) {
                     .hazeSource(hazeState)
                     .verticalScroll(rememberScrollState())
                     .padding(innerPadding)
-                    .padding(top = 16.dp)
+                    .padding(top = 20.dp)
                     .padding(bottom = LocalBottomBarClearance.current)
                     .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            LanguageSection(
-                currentLangLabel = currentLangLabel,
-                onLanguageChange = { tag ->
-                    LocaleHelper.saveLanguageTag(mContext, tag)
-                    (mContext as? Activity)?.let { LocaleHelper.applyLanguage(it) }
-                },
-            )
-
-            AppearanceSection(
-                currentThemeMode = currentThemeMode,
-                currentThemeColor = currentThemeColor,
-                amoledEnabled = amoledEnabled,
-                blurEnabled = blurEnabled,
-                currentNavBarStyle = currentNavBarStyle,
-                onThemeChange = { mode ->
-                    scope.launch { AppPreferences.setThemeMode(mContext, mode.value) }
-                },
-                onThemeColorChange = { color ->
-                    scope.launch { AppPreferences.setThemeColor(mContext, color.value) }
-                },
-                onAmoledChange = { enabled ->
-                    scope.launch { AppPreferences.setAmoled(mContext, enabled) }
-                },
-                onBlurChange = { enabled ->
-                    blurEnabled = enabled
-                    AppPreferences.setBlur(mContext, enabled)
-                },
-                onNavBarStyleChange = { style ->
-                    scope.launch { AppPreferences.setNavBarStyle(mContext, style.value) }
-                },
-            )
-
-            FeatureSection()
-
-            ToolsSection(
-                onExportLog = { LogUtils.exportLogs(mContext) },
-                verifyKernelSymbols = verifyKernelSymbols,
-                onVerifyKernelSymbolsChange = { enabled ->
-                    AppPreferences.setVerifyKernelSymbols(mContext, enabled)
-                },
-            )
-
-            AboutSection(
-                onAboutClick = { navController.navigate(AppRoute.About) },
-            )
+            CardGroup {
+                item {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.Palette,
+                        title = stringResource(R.string.theme_title),
+                        summary = appearanceSummary,
+                        onClick = { navController.navigate(AppRoute.SettingsAppearance) },
+                    )
+                }
+                item {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.Tune,
+                        title = stringResource(R.string.settings_section_kernel),
+                        summary = stringResource(R.string.settings_group_kernel_summary),
+                        onClick = { navController.navigate(AppRoute.SettingsFeatures) },
+                    )
+                }
+                item {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.Build,
+                        title = stringResource(R.string.settings_section_tools),
+                        summary = stringResource(R.string.settings_group_tools_summary),
+                        onClick = { navController.navigate(AppRoute.SettingsTools) },
+                    )
+                }
+                item {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.Translate,
+                        title = stringResource(R.string.language_title),
+                        summary = currentLangLabel,
+                        onClick = { navController.navigate(AppRoute.SettingsLanguage) },
+                    )
+                }
+                item {
+                    SettingsActionEntry(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.about),
+                        summary = stringResource(R.string.settings_about_summary),
+                        onClick = { navController.navigate(AppRoute.About) },
+                    )
+                }
+            }
         }
     }
 }

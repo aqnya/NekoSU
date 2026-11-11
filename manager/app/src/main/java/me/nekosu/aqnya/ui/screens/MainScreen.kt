@@ -63,7 +63,11 @@ import me.nekosu.aqnya.ui.permission.MiuiPermissionUtils
 import me.nekosu.aqnya.ui.permission.rememberPermissionState
 import me.nekosu.aqnya.ui.screens.install.InstallScreen
 import me.nekosu.aqnya.ui.screens.modules.ModuleScreen
+import me.nekosu.aqnya.ui.screens.settings.AppearanceSettingsScreen
+import me.nekosu.aqnya.ui.screens.settings.FeatureSettingsScreen
+import me.nekosu.aqnya.ui.screens.settings.LanguageSettingsScreen
 import me.nekosu.aqnya.ui.screens.settings.SettingsScreen
+import me.nekosu.aqnya.ui.screens.settings.ToolsSettingsScreen
 import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 
 // Flutter's tab switcher cross-fades the page content over 70 ms. Routes that
@@ -247,6 +251,30 @@ fun MainScreen() {
                             popExitTransition = tabTransitionPopExit(navItems),
                         ) {
                             SettingsScreen(navController)
+                        }
+
+                        composable(
+                            route = AppRoute.SettingsAppearance,
+                        ) {
+                            AppearanceSettingsScreen(onBack = { navController.popBackStack() })
+                        }
+
+                        composable(
+                            route = AppRoute.SettingsFeatures,
+                        ) {
+                            FeatureSettingsScreen(onBack = { navController.popBackStack() })
+                        }
+
+                        composable(
+                            route = AppRoute.SettingsTools,
+                        ) {
+                            ToolsSettingsScreen(onBack = { navController.popBackStack() })
+                        }
+
+                        composable(
+                            route = AppRoute.SettingsLanguage,
+                        ) {
+                            LanguageSettingsScreen(onBack = { navController.popBackStack() })
                         }
 
                         composable(

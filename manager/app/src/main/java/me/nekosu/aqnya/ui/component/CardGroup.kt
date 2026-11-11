@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.component
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -19,6 +21,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
+
+private val CardGroupOuterRadius = 28.dp
+private val CardGroupInnerRadius = 8.dp
 
 val LocalListItemShapes = compositionLocalOf<ListItemShapes?> { null }
 
@@ -74,6 +79,22 @@ class CardGroupScope internal constructor() {
     }
 }
 
+private fun segmentedShapes(
+    index: Int,
+    count: Int,
+): ListItemShapes {
+    val shape = groupShape(index, count, radius = CardGroupOuterRadius, innerRadius = CardGroupInnerRadius)
+    val pressedShape = ContinuousCornerShape(20.dp)
+    return ListItemShapes(
+        shape = shape,
+        selectedShape = shape,
+        pressedShape = pressedShape,
+        focusedShape = shape,
+        hoveredShape = shape,
+        draggedShape = shape,
+    )
+}
+
 @Composable
 fun CardGroup(
     modifier: Modifier = Modifier,
@@ -88,7 +109,7 @@ fun CardGroup(
     ) {
         entries.forEachIndexed { index, entry ->
             CompositionLocalProvider(
-                LocalListItemShapes provides ListItemDefaults.segmentedShapes(index = index, count = entries.size),
+                LocalListItemShapes provides segmentedShapes(index = index, count = entries.size),
             ) {
                 entry.content()
             }
@@ -118,19 +139,89 @@ fun ListRow(
     headline: @Composable () -> Unit,
     supporting: @Composable (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
+    onClick: (() -> Unit)? = null,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+    selected: Boolean? = null,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val shapes = currentListItemShapes()
-    SegmentedListItem(
-        // Clip to the segmented shape first: callers attach clickable()/
-        // toggleable() through `modifier`, and the item's Surface applies its
-        // rounded shape only inside this chain -- so the press ripple would
-        // otherwise spill over the square corners.
-        modifier = Modifier.clip(shapes.shape).then(modifier),
-        shapes = shapes,
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
-        leadingContent = icon,
-        supportingContent = supporting,
-        trailingContent = trailing,
-        content = headline,
-    )
+    val colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright)
+    // Selection is conveyed by the trailing control, not by recoloring the row.
+    val selectedColors =
+        colors.copy(
+            selectedContainerColor = colors.containerColor,
+            selectedContentColor = colors.contentColor,
+            selectedLeadingContentColor = colors.leadingContentColor,
+            selectedTrailingContentColor = colors.trailingContentColor,
+            selectedOverlineContentColor = colors.overlineContentColor,
+            selectedSupportingContentColor = colors.supportingContentColor,
+        )
+
+    when {
+        checked != null && onCheckedChange != null -> {
+            SegmentedListItem(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = selectedColors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        selected != null && onClick != null -> {
+            SegmentedListItem(
+                selected = selected,
+                onClick = onClick,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = selectedColors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        onClick != null -> {
+            SegmentedListItem(
+                onClick = onClick,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = colors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        else -> {
+            SegmentedListItem(
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = colors,
+                content = headline,
+            )
+        }
+    }
 }

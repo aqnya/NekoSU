@@ -170,6 +170,28 @@ private fun schemeFor(value: Int, dark: Boolean): ColorScheme {
     return if (dark) darkScheme(seed) else lightScheme(seed)
 }
 
+/** The three-tone palette shown by the large theme swatches in Settings. */
+data class ThemeSwatchColors(
+    val top: Color,
+    val bottom: Color,
+    val accent: Color,
+    val accentVariant: Color,
+)
+
+/** Static palette preview for a fixed theme seed; Material You uses the live scheme instead. */
+fun themeSwatchColors(
+    value: Int,
+    dark: Boolean,
+): ThemeSwatchColors {
+    val scheme = schemeFor(value, dark)
+    return ThemeSwatchColors(
+        top = scheme.primaryContainer,
+        bottom = scheme.tertiaryContainer,
+        accent = scheme.primary,
+        accentVariant = scheme.secondary,
+    )
+}
+
 /** Keeps page and container surfaces black while leaving cards readable. */
 private fun ColorScheme.amoledBlack(): ColorScheme =
     copy(
