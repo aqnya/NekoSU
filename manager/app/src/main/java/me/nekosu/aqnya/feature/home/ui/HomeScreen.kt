@@ -2,6 +2,7 @@
 package me.nekosu.aqnya.feature.home.ui
 
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Smartphone
@@ -33,6 +35,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -55,6 +59,8 @@ private data class DeviceInfo(
     val icon: ImageVector,
     val label: String,
     val value: String,
+    val iconContainer: Color,
+    val iconContent: Color,
     val monospace: Boolean = false,
 )
 
@@ -88,7 +94,7 @@ fun HomeScreenContent(
                         .padding(horizontal = 16.dp)
                         .padding(top = 16.dp)
                         .padding(bottom = LocalBottomBarClearance.current),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(22.dp),
             ) {
                 StatusCard(
                     state = installStatus,
@@ -98,12 +104,18 @@ fun HomeScreenContent(
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HomeSectionTitle(stringResource(R.string.install_device_info))
+                    HomeSectionTitle(
+                        icon = Icons.Rounded.Smartphone,
+                        title = stringResource(R.string.install_device_info),
+                    )
                     DeviceInfoCard()
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HomeSectionTitle(stringResource(R.string.about))
+                    HomeSectionTitle(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.about),
+                    )
                     AboutCard(onClick = onAboutClick)
                 }
             }
@@ -136,14 +148,28 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 4.dp),
-    )
+private fun HomeSectionTitle(
+    icon: ImageVector,
+    title: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable
@@ -154,21 +180,29 @@ private fun DeviceInfoCard() {
                 icon = Icons.Rounded.Android,
                 label = stringResource(R.string.android_version),
                 value = Build.VERSION.RELEASE,
+                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                iconContent = MaterialTheme.colorScheme.onPrimaryContainer,
             ),
             DeviceInfo(
                 icon = Icons.Rounded.Memory,
                 label = stringResource(R.string.kernel_version),
                 value = System.getProperty("os.version") ?: "Unavailable",
+                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                iconContent = MaterialTheme.colorScheme.onTertiaryContainer,
             ),
             DeviceInfo(
                 icon = Icons.Rounded.Smartphone,
                 label = stringResource(R.string.device_model),
                 value = "${Build.MANUFACTURER} ${Build.MODEL}",
+                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                iconContent = MaterialTheme.colorScheme.onSecondaryContainer,
             ),
             DeviceInfo(
                 icon = Icons.Rounded.Fingerprint,
                 label = stringResource(R.string.finger_print),
                 value = Build.FINGERPRINT,
+                iconContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
+                iconContent = MaterialTheme.colorScheme.onSurfaceVariant,
                 monospace = true,
             ),
         )
@@ -197,14 +231,23 @@ private fun DeviceInfoRow(entry: DeviceInfo) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = entry.icon,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Box(
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .clip(ContinuousCornerShape(14.dp))
+                    .background(entry.iconContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = entry.icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = entry.iconContent,
+            )
+        }
 
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
 
         Column(
             modifier = Modifier.weight(1f),
@@ -232,23 +275,35 @@ private fun DeviceInfoRow(entry: DeviceInfo) {
 
 @Composable
 private fun AboutCard(onClick: () -> Unit) {
+    val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+
     AppCard(
         onClick = onClick,
         shape = ContinuousCornerShape(28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceBright,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = contentColor,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.School,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(ContinuousCornerShape(16.dp))
+                        .background(contentColor.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.School,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = contentColor,
+                )
+            }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -262,7 +317,7 @@ private fun AboutCard(onClick: () -> Unit) {
                 Text(
                     text = stringResource(R.string.about_card_description),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = contentColor.copy(alpha = 0.78f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -273,7 +328,7 @@ private fun AboutCard(onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = contentColor,
             )
         }
     }
