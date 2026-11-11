@@ -5,7 +5,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -110,7 +108,7 @@ fun SettingsActionEntry(
     trailing: @Composable (() -> Unit)? = null,
 ) {
     ListRow(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth(),
         icon = { SettingsEntryIcon(icon) },
         headline = { SettingsEntryTitle(title) },
         supporting = { SettingsEntrySummary(summary) },
@@ -121,6 +119,7 @@ fun SettingsActionEntry(
                 SettingsEntryChevron()
             }
         },
+        onClick = onClick,
     )
 }
 
@@ -134,19 +133,14 @@ fun SettingsSwitchEntry(
     enabled: Boolean = true,
 ) {
     ListRow(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .toggleable(
-                    value = checked,
-                    enabled = enabled,
-                    role = Role.Switch,
-                    onValueChange = onCheckedChange,
-                ),
+        modifier = Modifier.fillMaxWidth(),
         icon = { SettingsEntryIcon(icon) },
         headline = { SettingsEntryTitle(title) },
         supporting = { SettingsEntrySummary(summary) },
         trailing = { AppSwitch(checked = checked, onCheckedChange = null, enabled = enabled) },
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        enabled = enabled,
     )
 }
 
@@ -158,14 +152,7 @@ fun SettingsChoiceEntry(
     onClick: () -> Unit,
 ) {
     ListRow(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .selectable(
-                    selected = selected,
-                    role = Role.RadioButton,
-                    onClick = onClick,
-                ),
+        modifier = Modifier.fillMaxWidth(),
         icon = { SettingsEntryIcon(icon) },
         headline = {
             Text(
@@ -183,6 +170,8 @@ fun SettingsChoiceEntry(
                 )
             }
         },
+        selected = selected,
+        onClick = onClick,
     )
 }
 

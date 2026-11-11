@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.component
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -83,10 +84,11 @@ private fun segmentedShapes(
     count: Int,
 ): ListItemShapes {
     val shape = groupShape(index, count, radius = CardGroupOuterRadius, innerRadius = CardGroupInnerRadius)
+    val pressedShape = ContinuousCornerShape(20.dp)
     return ListItemShapes(
         shape = shape,
         selectedShape = shape,
-        pressedShape = shape,
+        pressedShape = pressedShape,
         focusedShape = shape,
         hoveredShape = shape,
         draggedShape = shape,
@@ -137,20 +139,89 @@ fun ListRow(
     headline: @Composable () -> Unit,
     supporting: @Composable (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
+    onClick: (() -> Unit)? = null,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+    selected: Boolean? = null,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val shapes = currentListItemShapes()
-    SegmentedListItem(
-        // Clip to the segmented shape first: callers attach clickable()/
-        // toggleable() through `modifier`, and the item's Surface applies its
-        // rounded shape only inside this chain -- so the press ripple would
-        // otherwise spill over the square corners.
-        modifier = Modifier.clip(shapes.shape).then(modifier),
-        shapes = shapes,
-        verticalAlignment = Alignment.CenterVertically,
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
-        leadingContent = icon,
-        supportingContent = supporting,
-        trailingContent = trailing,
-        content = headline,
-    )
+    val colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright)
+    // Selection is conveyed by the trailing control, not by recoloring the row.
+    val selectedColors =
+        colors.copy(
+            selectedContainerColor = colors.containerColor,
+            selectedContentColor = colors.contentColor,
+            selectedLeadingContentColor = colors.leadingContentColor,
+            selectedTrailingContentColor = colors.trailingContentColor,
+            selectedOverlineContentColor = colors.overlineContentColor,
+            selectedSupportingContentColor = colors.supportingContentColor,
+        )
+
+    when {
+        checked != null && onCheckedChange != null -> {
+            SegmentedListItem(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = selectedColors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        selected != null && onClick != null -> {
+            SegmentedListItem(
+                selected = selected,
+                onClick = onClick,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = selectedColors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        onClick != null -> {
+            SegmentedListItem(
+                onClick = onClick,
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = colors,
+                interactionSource = interactionSource,
+                content = headline,
+            )
+        }
+
+        else -> {
+            SegmentedListItem(
+                shapes = shapes,
+                modifier = modifier.fillMaxWidth(),
+                enabled = enabled,
+                leadingContent = icon,
+                trailingContent = trailing,
+                supportingContent = supporting,
+                verticalAlignment = Alignment.CenterVertically,
+                colors = colors,
+                content = headline,
+            )
+        }
+    }
 }
