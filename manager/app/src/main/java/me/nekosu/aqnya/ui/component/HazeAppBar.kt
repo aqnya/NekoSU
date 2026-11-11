@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazePerformanceMode
@@ -75,12 +74,11 @@ fun HazeTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
     blurEnabled: Boolean? = null,
-    titleStyle: TextStyle? = null,
 ) {
     val enabled = blurEnabled ?: rememberBlurEnabled()
     val style = rememberHazeAppBarStyle(enabled)
     TopAppBar(
-        title = { Text(title, style = titleStyle ?: MaterialTheme.typography.titleLarge) },
+        title = { Text(title) },
         modifier =
             modifier
                 .background(
