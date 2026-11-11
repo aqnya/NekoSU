@@ -53,6 +53,7 @@ fun SettingsDetailScaffold(
                     }
                 },
                 scrollBehavior = scrollBehavior,
+                titleStyle = MaterialTheme.typography.headlineMedium,
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
