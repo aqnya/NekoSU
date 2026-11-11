@@ -74,23 +74,54 @@ class CardGroupScope internal constructor() {
     }
 }
 
+/** How [CardGroup] arranges its entries. */
+enum class CardGroupStyle {
+    /** One segmented list surface, shared by the entries. */
+    Segmented,
+
+    /** One large expressive card per entry. */
+    Cards,
+}
+
 @Composable
 fun CardGroup(
     modifier: Modifier = Modifier,
+    style: CardGroupStyle = CardGroupStyle.Segmented,
     content: CardGroupScope.() -> Unit,
 ) {
     val entries = CardGroupScope().apply(content).entries
     if (entries.isEmpty()) return
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
-    ) {
-        entries.forEachIndexed { index, entry ->
-            CompositionLocalProvider(
-                LocalListItemShapes provides ListItemDefaults.segmentedShapes(index = index, count = entries.size),
+    when (style) {
+        CardGroupStyle.Segmented -> {
+            Column(
+                modifier = modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
-                entry.content()
+                entries.forEachIndexed { index, entry ->
+                    CompositionLocalProvider(
+                        LocalListItemShapes provides
+                            ListItemDefaults.segmentedShapes(
+                                index = index,
+                                count = entries.size,
+                            ),
+                    ) {
+                        entry.content()
+                    }
+                }
+            }
+        }
+
+        CardGroupStyle.Cards -> {
+            Column(
+                modifier = modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                entries.forEach { entry ->
+                    CardItem(shape = ContinuousCornerShape(28.dp)) {
+                        entry.content()
+                    }
+                }
             }
         }
     }
