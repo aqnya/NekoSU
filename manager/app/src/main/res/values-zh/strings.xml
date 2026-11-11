@@ -5,8 +5,6 @@
     <string name="not_installed">未安装</string>
     <string name="update_available">可更新</string>
     <string name="running">运行中</string>
-    <string name="home_active_subtitle">系统级 Root 已激活</string>
-    <string name="home_reboot_subtitle">重启以完成更新</string>
     <string name="click_to_install">点击安装</string>
     <string name="superuser">超级用户</string>
     <string name="fmac_rules">FMAC 规则</string>
