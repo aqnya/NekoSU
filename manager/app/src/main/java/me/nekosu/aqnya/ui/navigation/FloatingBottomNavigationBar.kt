@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,8 +64,8 @@ private val FloatingDockInnerPadding = 8.dp
 /**
  * Floating Material 3 navigation dock.
  *
- * An opaque, rounded surface that floats above the content with a tonal
- * selection pill behind the whole tab. Unlike the liquid-glass bar it keeps a
+ * An opaque capsule that floats above the content with a tonal selection
+ * pill behind the whole tab. Unlike the liquid-glass bar it keeps a
  * stable dock: no backdrop sampling, no drag pill and no rubber-band
  * overscroll. The selection pill slides between tabs with a spring from the
  * theme's motion scheme.
@@ -88,8 +89,7 @@ fun FloatingBottomNavigationBar(
             animationSpec = motionScheme.defaultSpatialSpec<Float>(),
             label = "floatingDockIndicator",
         )
-    val shape = MaterialTheme.shapes.extraLarge
-    val indicatorShape = MaterialTheme.shapes.large
+    val shape = CircleShape
 
     Box(
         modifier =
@@ -113,7 +113,7 @@ fun FloatingBottomNavigationBar(
                         .graphicsLayer {
                             translationX =
                                 (if (isLtr) indicatorProgress else -indicatorProgress) * size.width
-                        }.background(scheme.secondaryContainer, indicatorShape),
+                        }.background(scheme.secondaryContainer, shape),
             )
 
             Row(
