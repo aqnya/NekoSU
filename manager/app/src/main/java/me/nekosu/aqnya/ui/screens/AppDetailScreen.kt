@@ -9,7 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -57,8 +56,11 @@ import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.R
 import me.nekosu.aqnya.ui.component.AppDialog
 import me.nekosu.aqnya.ui.component.AppTopAppBar
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.ExpressiveTextField
+import me.nekosu.aqnya.ui.component.ListRow
 import me.nekosu.aqnya.ui.component.ModeLabel
+import me.nekosu.aqnya.ui.component.currentListItemShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -661,11 +663,11 @@ fun AppDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
             ) {
-                AppHeaderCard(app = app)
+                AppIdentityGroup(app = app)
                 Spacer(Modifier.height(24.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SectionHeader(stringResource(R.string.app_authorization_section))
-                    AuthorizationCard(
+                    AuthorizationGroup(
                         allowed = allowed,
                         onToggle = onToggleAuthorization,
                     )
@@ -687,7 +689,7 @@ fun AppDetailScreen(
                         Spacer(Modifier.height(24.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             SectionHeader(stringResource(R.string.app_root_configuration))
-                            ConfigurationCard(
+                            ConfigurationGroup(
                                 rootUidText = rootUidText,
                                 capsSelected = caps.size,
                                 domain = domain,
@@ -706,65 +708,63 @@ fun AppDetailScreen(
 }
 
 @Composable
-private fun AppHeaderCard(app: AppInfo) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceBright,
-            ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIcon(
-                packageName = app.packageName,
-                modifier = Modifier.size(56.dp),
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = app.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = app.packageName,
-                    style =
-                        MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = FontFamily.Monospace,
-                        ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ModeLabel(
-                        label = stringResource(R.string.app_uid_tag, app.uid),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+private fun AppIdentityGroup(app: AppInfo) {
+    CardGroup {
+        item {
+            SegmentedListItem(
+                shapes = currentListItemShapes(),
+                colors =
+                    ListItemDefaults.segmentedColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceBright,
+                    ),
+                leadingContent = {
+                    AppIcon(
+                        packageName = app.packageName,
+                        modifier = Modifier.size(56.dp),
                     )
-                    if (app.isSystem) {
-                        ModeLabel(
-                            label = stringResource(R.string.app_tag_system),
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                },
+                content = {
+                    Text(
+                        text = app.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                supportingContent = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = app.packageName,
+                            style =
+                                MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ModeLabel(
+                                label = stringResource(R.string.app_uid_tag, app.uid),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            )
+                            if (app.isSystem) {
+                                ModeLabel(
+                                    label = stringResource(R.string.app_tag_system),
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                )
+                            }
+                        }
                     }
-                }
-            }
+                },
+            )
         }
     }
 }
@@ -779,7 +779,7 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun AuthorizationCard(
+private fun AuthorizationGroup(
     allowed: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
@@ -840,79 +840,79 @@ private fun AuthorizationCard(
             label = "authorizationIconContentColor",
         )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = containerColor,
-                contentColor = contentColor,
-            ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = allowed,
-                        role = Role.Switch,
-                        onValueChange = onToggle,
-                    ).padding(horizontal = 16.dp, vertical = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = MaterialTheme.shapes.large,
-                color = iconContainerColor,
-                contentColor = iconContentColor,
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Crossfade(
-                        targetState = allowed,
-                        animationSpec = motionScheme.defaultEffectsSpec(),
-                        label = "authorizationLockIcon",
-                    ) { isAllowed ->
-                        Icon(
-                            imageVector =
-                                if (isAllowed) {
-                                    Icons.Rounded.LockOpen
-                                } else {
-                                    Icons.Rounded.Lock
-                                },
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                        )
+    CardGroup {
+        item {
+            val shapes = currentListItemShapes()
+            SegmentedListItem(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shapes.shape)
+                        .toggleable(
+                            value = allowed,
+                            role = Role.Switch,
+                            onValueChange = onToggle,
+                        ),
+                shapes = shapes,
+                colors =
+                    ListItemDefaults.segmentedColors(
+                        containerColor = containerColor,
+                        contentColor = contentColor,
+                        supportingContentColor = supportingColor,
+                    ),
+                leadingContent = {
+                    Surface(
+                        modifier = Modifier.size(42.dp),
+                        shape = MaterialTheme.shapes.large,
+                        color = iconContainerColor,
+                        contentColor = iconContentColor,
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Crossfade(
+                                targetState = allowed,
+                                animationSpec = motionScheme.defaultEffectsSpec(),
+                                label = "authorizationLockIcon",
+                            ) { isAllowed ->
+                                Icon(
+                                    imageVector =
+                                        if (isAllowed) {
+                                            Icons.Rounded.LockOpen
+                                        } else {
+                                            Icons.Rounded.Lock
+                                        },
+                                    contentDescription = null,
+                                    modifier = Modifier.size(21.dp),
+                                )
+                            }
+                        }
                     }
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.app_allow_root),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = stringResource(R.string.app_root_access_summary),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = supportingColor,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Switch(
-                checked = allowed,
-                onCheckedChange = null,
-                modifier = Modifier.clearAndSetSemantics { },
+                },
+                content = {
+                    Text(
+                        text = stringResource(R.string.app_allow_root),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = stringResource(R.string.app_root_access_summary),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = allowed,
+                        onCheckedChange = null,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                },
             )
         }
     }
 }
 
 @Composable
-private fun ConfigurationCard(
+private fun ConfigurationGroup(
     rootUidText: String,
     capsSelected: Int,
     domain: String,
@@ -922,16 +922,8 @@ private fun ConfigurationCard(
     onDomainClick: () -> Unit,
     onNamespaceClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceBright,
-            ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column {
+    CardGroup {
+        item {
             ConfigurationRow(
                 title = stringResource(R.string.app_root_uid),
                 summary = rootUidText,
@@ -939,7 +931,8 @@ private fun ConfigurationCard(
                 monospace = true,
                 onClick = onUidClick,
             )
-            ConfigurationDivider()
+        }
+        item {
             ConfigurationRow(
                 title = stringResource(R.string.app_capabilities),
                 summary =
@@ -951,7 +944,8 @@ private fun ConfigurationCard(
                 icon = Icons.Rounded.Tune,
                 onClick = onCapsClick,
             )
-            ConfigurationDivider()
+        }
+        item {
             ConfigurationRow(
                 title = stringResource(R.string.app_selinux_domain),
                 summary = domain,
@@ -959,7 +953,8 @@ private fun ConfigurationCard(
                 monospace = true,
                 onClick = onDomainClick,
             )
-            ConfigurationDivider()
+        }
+        item {
             ConfigurationRow(
                 title = stringResource(R.string.app_mount_namespace),
                 summary = stringResource(namespace.labelRes),
@@ -971,14 +966,6 @@ private fun ConfigurationCard(
 }
 
 @Composable
-private fun ConfigurationDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 74.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    )
-}
-
-@Composable
 private fun ConfigurationRow(
     title: String,
     summary: String,
@@ -986,51 +973,37 @@ private fun ConfigurationRow(
     onClick: () -> Unit,
     monospace: Boolean = false,
 ) {
-    ListItem(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(
-                    role = Role.Button,
-                    onClick = onClick,
-                ),
-        leadingContent = {
+    ListRow(
+        icon = {
             IconBadge(
                 icon = icon,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         },
-        content = {
+        headline = {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
             )
         },
-        supportingContent = {
+        supporting = {
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        trailingContent = {
+        trailing = {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
-        colors =
-            ListItemDefaults.colors(
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+        onClick = onClick,
     )
 }
 
