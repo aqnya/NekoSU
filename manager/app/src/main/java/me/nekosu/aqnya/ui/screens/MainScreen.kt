@@ -40,8 +40,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
 import me.nekosu.aqnya.core.navigation.AppRoute
 import me.nekosu.aqnya.data.prefs.AppPreferences
@@ -51,6 +49,10 @@ import me.nekosu.aqnya.feature.home.ui.HomeScreen
 import me.nekosu.aqnya.ui.animation.PageTransitions
 import me.nekosu.aqnya.ui.component.NonProductionRibbon
 import me.nekosu.aqnya.ui.navigation.BottomNavItem
+import me.nekosu.aqnya.ui.navigation.FloatingBottomBarContentPadding
+import me.nekosu.aqnya.ui.navigation.FloatingBottomBarHorizontalPadding
+import me.nekosu.aqnya.ui.navigation.FloatingBottomBarVerticalPadding
+import me.nekosu.aqnya.ui.navigation.FloatingBottomNavigationBar
 import me.nekosu.aqnya.ui.navigation.GlassBottomBarContentPadding
 import me.nekosu.aqnya.ui.navigation.GlassBottomBarHorizontalPadding
 import me.nekosu.aqnya.ui.navigation.GlassBottomBarVerticalPadding
@@ -72,7 +74,7 @@ import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 
 // Flutter's tab switcher cross-fades the page content over 70 ms. Routes that
 // leave the tab set use the same Cupertino-style slide as pushed pages.
-private const val TabFadeMillis = 70
+private const val TAB_FADE_MILLIS = 70
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(navItems: List<BottomNavItem>): Boolean {
     val routes = navItems.map { it.route }
@@ -82,7 +84,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(navIte
 private fun tabTransitionEnter(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
     {
         if (isTabSwitch(navItems)) {
-            fadeIn(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
+            fadeIn(animationSpec = tween(TAB_FADE_MILLIS, easing = LinearEasing))
         } else {
             PageTransitions.enter()
         }
@@ -91,7 +93,7 @@ private fun tabTransitionEnter(navItems: List<BottomNavItem>): AnimatedContentTr
 private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     {
         if (isTabSwitch(navItems)) {
-            fadeOut(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
+            fadeOut(animationSpec = tween(TAB_FADE_MILLIS, easing = LinearEasing))
         } else {
             PageTransitions.exit()
         }
@@ -100,7 +102,7 @@ private fun tabTransitionExit(navItems: List<BottomNavItem>): AnimatedContentTra
 private fun tabTransitionPopEnter(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
     {
         if (isTabSwitch(navItems)) {
-            fadeIn(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
+            fadeIn(animationSpec = tween(TAB_FADE_MILLIS, easing = LinearEasing))
         } else {
             PageTransitions.popEnter()
         }
@@ -109,7 +111,7 @@ private fun tabTransitionPopEnter(navItems: List<BottomNavItem>): AnimatedConten
 private fun tabTransitionPopExit(navItems: List<BottomNavItem>): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     {
         if (isTabSwitch(navItems)) {
-            fadeOut(animationSpec = tween(TabFadeMillis, easing = LinearEasing))
+            fadeOut(animationSpec = tween(TAB_FADE_MILLIS, easing = LinearEasing))
         } else {
             PageTransitions.popExit()
         }
@@ -125,12 +127,12 @@ fun MainScreen() {
         initial = AppPreferences.navBarStyle(context),
     )
     val navBarStyle = NavBarStyle.fromValue(navBarStyleValue)
-    val glassStyle = navBarStyle == NavBarStyle.GLASS
+    val usesBackdrop = navBarStyle != NavBarStyle.STANDARD
     val bottomBarClearance =
-        if (navBarStyle == NavBarStyle.STANDARD) {
-            StandardBottomBarContentPadding
-        } else {
-            GlassBottomBarContentPadding
+        when (navBarStyle) {
+            NavBarStyle.STANDARD -> StandardBottomBarContentPadding
+            NavBarStyle.GLASS -> GlassBottomBarContentPadding
+            NavBarStyle.FLOATING -> FloatingBottomBarContentPadding
         }
 
     val homeViewModel: HomeViewModel =
@@ -177,7 +179,6 @@ fun MainScreen() {
         }
     }
 
-    val hazeState = rememberHazeState()
     val backdrop = rememberLayerBackdrop()
 
     CompositionLocalProvider(LocalBottomBarClearance provides bottomBarClearance) {
@@ -194,8 +195,7 @@ fun MainScreen() {
                         Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
-                            .then(if (glassStyle) Modifier.hazeSource(hazeState) else Modifier)
-                            .then(if (glassStyle) Modifier.layerBackdrop(backdrop) else Modifier),
+                            .then(if (usesBackdrop) Modifier.layerBackdrop(backdrop) else Modifier),
                 ) {
                     NavHost(
                         navController = navController,
@@ -361,6 +361,24 @@ fun MainScreen() {
                                     ).padding(
                                         horizontal = GlassBottomBarHorizontalPadding,
                                         vertical = GlassBottomBarVerticalPadding,
+                                    ),
+                        )
+                    }
+
+                    NavBarStyle.FLOATING -> {
+                        FloatingBottomNavigationBar(
+                            backdrop = backdrop,
+                            items = navItems,
+                            selectedIndex = selectedIndex,
+                            onTabClick = onTabClick,
+                            modifier =
+                                Modifier
+                                    .navigationBarsPadding()
+                                    .windowInsetsPadding(
+                                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
+                                    ).padding(
+                                        horizontal = FloatingBottomBarHorizontalPadding,
+                                        vertical = FloatingBottomBarVerticalPadding,
                                     ),
                         )
                     }

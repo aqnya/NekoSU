@@ -75,6 +75,7 @@
     <string name="settings_nav_bar_style">Navigation bar style</string>
     <string name="nav_bar_style_standard">Standard</string>
     <string name="nav_bar_style_glass">Liquid glass</string>
+    <string name="nav_bar_style_floating">Floating</string>
     <string name="settings_section_kernel">Kernel features</string>
     <string name="settings_group_kernel_summary">SELinux and mount hiding</string>
     <string name="settings_features_enabled">Enabled</string>
