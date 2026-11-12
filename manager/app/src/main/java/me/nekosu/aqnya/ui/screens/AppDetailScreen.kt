@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package me.nekosu.aqnya.ui.screens
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -651,51 +653,50 @@ fun AppDetailScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             contentAlignment = Alignment.TopCenter,
         ) {
-            LazyColumn(
-                modifier = Modifier.widthIn(max = 840.dp).fillMaxSize(),
-                contentPadding =
-                    PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+            Column(
+                modifier =
+                    Modifier
+                        .widthIn(max = 840.dp)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
             ) {
-                item { AppHeaderCard(app = app) }
-
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeader(stringResource(R.string.app_authorization_section))
-                        AuthorizationCard(
-                            allowed = allowed,
-                            onToggle = onToggleAuthorization,
-                        )
-                    }
+                AppHeaderCard(app = app)
+                Spacer(Modifier.height(24.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionHeader(stringResource(R.string.app_authorization_section))
+                    AuthorizationCard(
+                        allowed = allowed,
+                        onToggle = onToggleAuthorization,
+                    )
                 }
-
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeader(stringResource(R.string.app_root_configuration))
-                        AnimatedContent(
-                            targetState = allowed,
-                            transitionSpec = {
-                                (
-                                    fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                                        fadeOut(motionScheme.fastEffectsSpec())
-                                ).using(SizeTransform(clip = false))
-                            },
-                            label = "rootConfiguration",
-                        ) { isAllowed ->
-                            if (isAllowed) {
-                                ConfigurationCard(
-                                    rootUidText = rootUidText,
-                                    capsSelected = caps.size,
-                                    domain = domain,
-                                    namespace = ns,
-                                    onUidClick = { showUidDialog = true },
-                                    onCapsClick = { showCapsSheet = true },
-                                    onDomainClick = { showDomainDialog = true },
-                                    onNamespaceClick = { showNsDialog = true },
-                                )
-                            } else {
-                                LockedConfigurationCard()
-                            }
+                AnimatedVisibility(
+                    visible = allowed,
+                    enter =
+                        expandVertically(
+                            animationSpec = motionScheme.defaultSpatialSpec(),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+                    exit =
+                        shrinkVertically(
+                            animationSpec = motionScheme.fastSpatialSpec(),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(24.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SectionHeader(stringResource(R.string.app_root_configuration))
+                            ConfigurationCard(
+                                rootUidText = rootUidText,
+                                capsSelected = caps.size,
+                                domain = domain,
+                                namespace = ns,
+                                onUidClick = { showUidDialog = true },
+                                onCapsClick = { showCapsSheet = true },
+                                onDomainClick = { showDomainDialog = true },
+                                onNamespaceClick = { showNsDialog = true },
+                            )
                         }
                     }
                 }
@@ -1031,47 +1032,6 @@ private fun ConfigurationRow(
                 supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ),
     )
-}
-
-@Composable
-private fun LockedConfigurationCard() {
-    OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.outlinedCardColors(
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(20.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            IconBadge(
-                icon = Icons.Rounded.Lock,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
-                iconSize = 24.dp,
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.app_config_locked_title),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = stringResource(R.string.app_config_locked_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
 }
 
 @Composable
