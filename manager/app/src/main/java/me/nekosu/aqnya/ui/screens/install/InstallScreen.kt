@@ -316,12 +316,14 @@ private fun InstallMethodSection(
 
         // The boot image is only needed for the optional kernel symbol check.
         item(visible = state.method == InstallMethod.FILE && state.verifyKernelSymbols) {
+            val shapes = currentListItemShapes()
             SegmentedListItem(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clip(shapes.shape)
                         .clickable(enabled = !state.running) { onPickBoot() },
-                shapes = currentListItemShapes(),
+                shapes = shapes,
                 colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
                 leadingContent = {
                     Icon(Icons.AutoMirrored.Rounded.InsertDriveFile, contentDescription = null)
@@ -352,10 +354,12 @@ private fun InstallMethodRow(
     onSelectMethod: (InstallMethod) -> Unit,
 ) {
     val selected = state.method == option
+    val shapes = currentListItemShapes()
     SegmentedListItem(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .clip(shapes.shape)
                 .clickable(enabled = !state.running) {
                     when (option) {
                         InstallMethod.FILE ->
@@ -363,7 +367,7 @@ private fun InstallMethodRow(
                         else -> onSelectMethod(option)
                     }
                 },
-        shapes = currentListItemShapes(),
+        shapes = shapes,
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
         leadingContent = {
             AppRadioButton(selected = selected, onClick = { onSelectMethod(option) })
@@ -416,12 +420,14 @@ private fun KernelModuleSection(
         CardGroup {
             if (kmis.isNotEmpty()) {
                 item {
+                    val shapes = currentListItemShapes()
                     SegmentedListItem(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
+                                .clip(shapes.shape)
                                 .clickable(enabled = !state.running) { onSelectKmi() },
-                        shapes = currentListItemShapes(),
+                        shapes = shapes,
                         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
                         leadingContent = {
                             Icon(Icons.Rounded.Memory, contentDescription = null)
@@ -456,12 +462,14 @@ private fun KernelModuleSection(
             }
 
             item {
+                val shapes = currentListItemShapes()
                 SegmentedListItem(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .clip(shapes.shape)
                             .clickable(enabled = !state.running) { onPickLocal() },
-                    shapes = currentListItemShapes(),
+                    shapes = shapes,
                     colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
                     leadingContent = {
                         Icon(Icons.AutoMirrored.Rounded.InsertDriveFile, contentDescription = null)
