@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.ViewWeek
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -38,9 +39,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.nekosu.aqnya.R
+import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.screens.settings.enums.NavBarStyle
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeColor
-import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.screens.settings.enums.ThemeMode
 import me.nekosu.aqnya.ui.theme.ContinuousCornerShape
 import me.nekosu.aqnya.ui.theme.ThemeSwatchColors
@@ -224,4 +225,5 @@ private fun NavBarStyle.icon(): ImageVector =
     when (this) {
         NavBarStyle.STANDARD -> Icons.Rounded.ViewAgenda
         NavBarStyle.GLASS -> Icons.Rounded.BlurOn
+        NavBarStyle.FLOATING -> Icons.Rounded.ViewWeek
     }
