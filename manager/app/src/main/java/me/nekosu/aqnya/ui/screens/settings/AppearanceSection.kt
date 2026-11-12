@@ -16,10 +16,10 @@ import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.ViewWeek
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -225,5 +225,5 @@ private fun NavBarStyle.icon(): ImageVector =
     when (this) {
         NavBarStyle.STANDARD -> Icons.Rounded.ViewAgenda
         NavBarStyle.GLASS -> Icons.Rounded.BlurOn
-        NavBarStyle.FLOATING -> Icons.Rounded.Layers
+        NavBarStyle.FLOATING -> Icons.Rounded.ViewWeek
     }

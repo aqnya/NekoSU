@@ -4,8 +4,11 @@ package me.nekosu.aqnya.ui.navigation
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.unit.dp
 
-/** Shared height of the compact, floating navigation capsules. */
-val LiquidBottomBarHeight = 64.dp
+/** Height of the compact liquid-glass capsule. */
+val GlassBottomBarHeight = 64.dp
+
+/** Height of the Material 3 floating dock. */
+val FloatingBottomBarHeight = 72.dp
 
 /** Horizontal breathing room around the compact glass capsule. */
 val GlassBottomBarHorizontalPadding = 28.dp
@@ -13,7 +16,7 @@ val GlassBottomBarHorizontalPadding = 28.dp
 /** Vertical gap between the glass capsule and the system navigation bar. */
 val GlassBottomBarVerticalPadding = 10.dp
 
-/** Horizontal breathing room around the BakaSU-style floating dock. */
+/** Horizontal breathing room around the Material 3 floating dock. */
 val FloatingBottomBarHorizontalPadding = 16.dp
 
 /** Vertical gap between the floating dock and the system navigation bar. */
@@ -25,7 +28,7 @@ val FloatingBottomBarVerticalPadding = 12.dp
  */
 val GlassBottomBarContentPadding = 116.dp
 
-/** The floating dock shares the glass capsule's height and bottom gap. */
+/** Bottom scroll clearance for the taller Material 3 floating dock. */
 val FloatingBottomBarContentPadding = 116.dp
 
 /** Clearance for the stock Material 3 navigation bar (80 dp) plus a 16 dp gap. */

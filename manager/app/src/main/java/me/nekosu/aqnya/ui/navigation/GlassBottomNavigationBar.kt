@@ -9,12 +9,8 @@ import com.kyant.backdrop.Backdrop
  * NekoSU's compact liquid-glass bar.
  *
  * The selected tab carries the accent directly, the selection pill is a
- * neutral 10% glass fill, and the bar is draggable across its whole width. The
- * shared implementation keeps the page backdrop, drag physics, and adaptive
- * width in one place with the floating dock.
- *
- * The caller must record the page behind the bar with
- * `Modifier.layerBackdrop(backdrop)`.
+ * neutral 10% glass fill, and the bar is draggable from the pill. The caller
+ * must record the page behind the bar with `Modifier.layerBackdrop(backdrop)`.
  */
 @Composable
 fun GlassBottomNavigationBar(
@@ -24,8 +20,7 @@ fun GlassBottomNavigationBar(
     onTabClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LiquidBottomNavigationBar(
-        variant = LiquidBarVariant.GLASS,
+    GlassBottomBar(
         backdrop = backdrop,
         items = items,
         selectedIndex = selectedIndex,

@@ -127,7 +127,7 @@ fun MainScreen() {
         initial = AppPreferences.navBarStyle(context),
     )
     val navBarStyle = NavBarStyle.fromValue(navBarStyleValue)
-    val usesBackdrop = navBarStyle != NavBarStyle.STANDARD
+    val usesBackdrop = navBarStyle == NavBarStyle.GLASS
     val bottomBarClearance =
         when (navBarStyle) {
             NavBarStyle.STANDARD -> StandardBottomBarContentPadding
@@ -367,7 +367,6 @@ fun MainScreen() {
 
                     NavBarStyle.FLOATING -> {
                         FloatingBottomNavigationBar(
-                            backdrop = backdrop,
                             items = navItems,
                             selectedIndex = selectedIndex,
                             onTabClick = onTabClick,
