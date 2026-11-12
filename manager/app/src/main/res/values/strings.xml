@@ -130,8 +130,6 @@
     <string name="app_selinux_domain_input">Domain context</string>
     <string name="app_selinux_domain_desc">SELinux context used by processes after elevation</string>
     <string name="app_mount_namespace">Mount Namespace</string>
-    <string name="app_config_locked_title">Root settings locked</string>
-    <string name="app_config_locked_desc">Enable access above to configure UID, capabilities, SELinux domain and mount namespace.</string>
 
     <!-- 通用对话框 -->
     <string name="dialog_select_all">Select All</string>
