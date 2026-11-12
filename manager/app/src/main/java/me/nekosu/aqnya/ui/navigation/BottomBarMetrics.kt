@@ -8,7 +8,7 @@ import androidx.compose.ui.unit.dp
 val GlassBottomBarHeight = 64.dp
 
 /** Height of the Material 3 floating dock. */
-val FloatingBottomBarHeight = 72.dp
+val FloatingBottomBarHeight = 64.dp
 
 /** Horizontal breathing room around the compact glass capsule. */
 val GlassBottomBarHorizontalPadding = 28.dp

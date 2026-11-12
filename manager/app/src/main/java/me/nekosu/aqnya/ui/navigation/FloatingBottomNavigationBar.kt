@@ -39,16 +39,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 private val FloatingBarInnerPadding = 6.dp
+private val FloatingPillVerticalPadding = 4.dp
 private val FloatingTabIdealWidth = 80.dp
-private val FloatingIndicatorWidth = 56.dp
-private val FloatingIndicatorHeight = 32.dp
 
 /**
  * Material 3 floating navigation bar.
  *
- * Unlike the liquid-glass bar this is an opaque, tonal Material surface: it
- * uses the theme's surface and secondary-container roles, a per-tab selection
- * indicator, and no backdrop blur, refraction, or drag gesture.
+ * Unlike the liquid-glass bar this is an opaque, tonal Material surface. The
+ * selected tab gets a full-tab secondary-container pill, using the same tab
+ * rhythm as BakaSU's dock without any blur, refraction, or drag gesture.
  */
 @Composable
 fun FloatingBottomNavigationBar(
@@ -125,7 +124,7 @@ private fun RowScope.FloatingBarTab(
             animationSpec = spring(dampingRatio = 0.8f, stiffness = 600f),
             label = "floatingTabIndicator",
         )
-    val iconColor by
+    val contentColor by
         animateColorAsState(
             targetValue =
                 if (selected) {
@@ -134,21 +133,10 @@ private fun RowScope.FloatingBarTab(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             animationSpec = tween(180),
-            label = "floatingTabIconColor",
-        )
-    val labelColor by
-        animateColorAsState(
-            targetValue =
-                if (selected) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            animationSpec = tween(180),
-            label = "floatingTabLabelColor",
+            label = "floatingTabContentColor",
         )
 
-    Column(
+    Box(
         modifier =
             Modifier
                 .selectable(
@@ -157,29 +145,31 @@ private fun RowScope.FloatingBarTab(
                     onClick = onSelect,
                 ).fillMaxHeight()
                 .weight(1f),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        contentAlignment = Alignment.Center,
     ) {
+        // The pill spans the whole tab, so icon and label read as one target.
+        // Its background animates while the content stays visible.
         Box(
-            modifier = Modifier.size(width = FloatingIndicatorWidth, height = FloatingIndicatorHeight),
-            contentAlignment = Alignment.Center,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(vertical = FloatingPillVerticalPadding)
+                    .graphicsLayer {
+                        val scale = 0.92f + 0.08f * indicatorProgress
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = indicatorProgress
+                    }.background(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.extraLarge,
+                    ),
+        )
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
         ) {
-            // Keep the background separate from the icon: the indicator fades
-            // and scales, while unselected icons must stay visible.
-            Box(
-                modifier =
-                    Modifier
-                        .matchParentSize()
-                        .graphicsLayer {
-                            val scale = 0.82f + 0.18f * indicatorProgress
-                            scaleX = scale
-                            scaleY = scale
-                            alpha = indicatorProgress
-                        }.background(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.large,
-                        ),
-            )
             Crossfade(
                 targetState = selected,
                 animationSpec = tween(180),
@@ -188,20 +178,20 @@ private fun RowScope.FloatingBarTab(
                 Icon(
                     imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                     contentDescription = stringResource(item.titleRes),
-                    tint = iconColor,
+                    tint = contentColor,
                     modifier = Modifier.size(24.dp),
                 )
             }
-        }
 
-        Text(
-            text = stringResource(item.titleRes),
-            color = labelColor,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-        )
+            Text(
+                text = stringResource(item.titleRes),
+                color = contentColor,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
