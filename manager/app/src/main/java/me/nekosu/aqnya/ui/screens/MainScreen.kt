@@ -49,10 +49,13 @@ import me.nekosu.aqnya.feature.home.ui.HomeScreen
 import me.nekosu.aqnya.ui.animation.PageTransitions
 import me.nekosu.aqnya.ui.component.NonProductionRibbon
 import me.nekosu.aqnya.ui.navigation.BottomNavItem
-import me.nekosu.aqnya.ui.navigation.FloatingBottomBarContentPadding
-import me.nekosu.aqnya.ui.navigation.FloatingBottomBarHorizontalPadding
-import me.nekosu.aqnya.ui.navigation.FloatingBottomBarVerticalPadding
 import me.nekosu.aqnya.ui.navigation.FloatingBottomNavigationBar
+import me.nekosu.aqnya.ui.navigation.FloatingDockContentPadding
+import me.nekosu.aqnya.ui.navigation.FloatingDockHorizontalPadding
+import me.nekosu.aqnya.ui.navigation.FloatingDockVerticalPadding
+import me.nekosu.aqnya.ui.navigation.GlassBottomBarContentPadding
+import me.nekosu.aqnya.ui.navigation.GlassBottomBarHorizontalPadding
+import me.nekosu.aqnya.ui.navigation.GlassBottomBarVerticalPadding
 import me.nekosu.aqnya.ui.navigation.GlassBottomNavigationBar
 import me.nekosu.aqnya.ui.navigation.LocalBottomBarClearance
 import me.nekosu.aqnya.ui.navigation.NormalBottomNavigationBar
@@ -128,7 +131,8 @@ fun MainScreen() {
     val bottomBarClearance =
         when (navBarStyle) {
             NavBarStyle.STANDARD -> StandardBottomBarContentPadding
-            NavBarStyle.GLASS, NavBarStyle.FLOATING -> FloatingBottomBarContentPadding
+            NavBarStyle.GLASS -> GlassBottomBarContentPadding
+            NavBarStyle.FLOATING -> FloatingDockContentPadding
         }
 
     val homeViewModel: HomeViewModel =
@@ -176,14 +180,20 @@ fun MainScreen() {
     }
 
     val backdrop = rememberLayerBackdrop()
-    val floatingBarModifier =
+    val barInsetsModifier =
         Modifier
             .navigationBarsPadding()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-            .padding(
-                horizontal = FloatingBottomBarHorizontalPadding,
-                vertical = FloatingBottomBarVerticalPadding,
-            )
+    val glassBarModifier =
+        barInsetsModifier.padding(
+            horizontal = GlassBottomBarHorizontalPadding,
+            vertical = GlassBottomBarVerticalPadding,
+        )
+    val floatingBarModifier =
+        barInsetsModifier.padding(
+            horizontal = FloatingDockHorizontalPadding,
+            vertical = FloatingDockVerticalPadding,
+        )
 
     CompositionLocalProvider(LocalBottomBarClearance provides bottomBarClearance) {
         Box(Modifier.fillMaxSize()) {
@@ -357,7 +367,7 @@ fun MainScreen() {
                             items = navItems,
                             selectedIndex = selectedIndex,
                             onTabClick = onTabClick,
-                            modifier = floatingBarModifier,
+                            modifier = glassBarModifier,
                         )
                     }
 
