@@ -6,6 +6,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +41,7 @@ import androidx.compose.ui.unit.dp
 
 private val FloatingBarInnerPadding = 6.dp
 private val FloatingTabIdealWidth = 80.dp
-private val FloatingIndicatorWidth = 48.dp
+private val FloatingIndicatorWidth = 56.dp
 private val FloatingIndicatorHeight = 32.dp
 
 /**
@@ -58,6 +61,17 @@ fun FloatingBottomNavigationBar(
     require(items.isNotEmpty()) { "The floating bottom bar needs at least one tab" }
 
     val selected = selectedIndex.coerceIn(0, items.lastIndex)
+    val isDark = MaterialTheme.colorScheme.surfaceContainer.luminance() < 0.5f
+    // A floating surface should read as elevated in both schemes: use the
+    // brighter container role in light mode and the lighter high role in dark.
+    val containerColor =
+        if (isDark) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLowest
+        }
+    val borderColor =
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.6f else 0.5f)
 
     BoxWithConstraints(
         modifier = modifier,
@@ -74,10 +88,11 @@ fun FloatingBottomNavigationBar(
                     .width(barWidth)
                     .height(FloatingBottomBarHeight),
             shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 3.dp,
-            shadowElevation = 6.dp,
+            tonalElevation = 2.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, borderColor),
         ) {
             Row(
                 modifier =
@@ -147,20 +162,25 @@ private fun RowScope.FloatingBarTab(
         verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
     ) {
         Box(
-            modifier =
-                Modifier
-                    .size(width = FloatingIndicatorWidth, height = FloatingIndicatorHeight)
-                    .graphicsLayer {
-                        val scale = 0.82f + 0.18f * indicatorProgress
-                        scaleX = scale
-                        scaleY = scale
-                        alpha = indicatorProgress
-                    }.background(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.large,
-                    ),
+            modifier = Modifier.size(width = FloatingIndicatorWidth, height = FloatingIndicatorHeight),
             contentAlignment = Alignment.Center,
         ) {
+            // Keep the background separate from the icon: the indicator fades
+            // and scales, while unselected icons must stay visible.
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            val scale = 0.82f + 0.18f * indicatorProgress
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = indicatorProgress
+                        }.background(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.large,
+                        ),
+            )
             Crossfade(
                 targetState = selected,
                 animationSpec = tween(180),
@@ -179,7 +199,7 @@ private fun RowScope.FloatingBarTab(
             text = stringResource(item.titleRes),
             color = labelColor,
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
