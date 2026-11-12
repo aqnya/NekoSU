@@ -10,6 +10,7 @@ enum class NavBarStyle(
 ) {
     STANDARD(R.string.nav_bar_style_standard, 0),
     GLASS(R.string.nav_bar_style_glass, 1),
+    FLOATING(R.string.nav_bar_style_floating, 2),
     ;
 
     companion object {
