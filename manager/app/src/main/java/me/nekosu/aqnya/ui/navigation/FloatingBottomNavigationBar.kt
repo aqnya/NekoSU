@@ -42,22 +42,22 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 /** Height of the floating, opaque navigation dock. */
-val FloatingDockHeight = 72.dp
+val FloatingDockHeight = 64.dp
 
 /** Horizontal breathing room around the dock. */
-val FloatingDockHorizontalPadding = 16.dp
+val FloatingDockHorizontalPadding = 20.dp
 
 /** Vertical gap between the dock and the system navigation bar. */
-val FloatingDockVerticalPadding = 12.dp
+val FloatingDockVerticalPadding = 10.dp
 
 /**
  * Bottom scroll clearance for tab content: dock height + vertical padding on
  * both sides + the floating gap between content and the dock.
  */
-val FloatingDockContentPadding = 120.dp
+val FloatingDockContentPadding = 108.dp
 
 /** The dock stays a comfortable control even on expanded windows. */
-private val FloatingDockMaxWidth = 560.dp
+private val FloatingDockMaxWidth = 480.dp
 
 private val FloatingDockInnerPadding = 8.dp
 
@@ -97,7 +97,7 @@ fun FloatingBottomNavigationBar(
                 .widthIn(max = FloatingDockMaxWidth)
                 .fillMaxWidth()
                 .height(FloatingDockHeight)
-                .shadow(elevation = 8.dp, shape = shape, clip = false)
+                .shadow(elevation = 6.dp, shape = shape, clip = false)
                 .background(scheme.surfaceBright, shape)
                 .clip(shape)
                 .padding(FloatingDockInnerPadding),
@@ -175,7 +175,7 @@ private fun FloatingDockItem(
                 imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                 contentDescription = stringResource(item.titleRes),
                 tint = contentColor,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
 
@@ -194,7 +194,7 @@ private fun FloatingDockItem(
 @Composable
 private fun FloatingBottomNavigationBarPreview() {
     MaterialTheme {
-        Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             FloatingBottomNavigationBar(
                 items = BottomNavItem.items(showRules = true),
                 selectedIndex = 0,
