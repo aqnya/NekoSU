@@ -60,7 +60,6 @@ import me.nekosu.aqnya.ui.component.CardGroup
 import me.nekosu.aqnya.ui.component.ExpressiveTextField
 import me.nekosu.aqnya.ui.component.ListRow
 import me.nekosu.aqnya.ui.component.ModeLabel
-import me.nekosu.aqnya.ui.component.currentListItemShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -663,11 +662,11 @@ fun AppDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
             ) {
-                AppIdentityGroup(app = app)
+                AppHeaderCard(app = app)
                 Spacer(Modifier.height(24.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SectionHeader(stringResource(R.string.app_authorization_section))
-                    AuthorizationGroup(
+                    AuthorizationCard(
                         allowed = allowed,
                         onToggle = onToggleAuthorization,
                     )
@@ -708,63 +707,65 @@ fun AppDetailScreen(
 }
 
 @Composable
-private fun AppIdentityGroup(app: AppInfo) {
-    CardGroup {
-        item {
-            SegmentedListItem(
-                shapes = currentListItemShapes(),
-                colors =
-                    ListItemDefaults.segmentedColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceBright,
-                    ),
-                leadingContent = {
-                    AppIcon(
-                        packageName = app.packageName,
-                        modifier = Modifier.size(56.dp),
-                    )
-                },
-                content = {
-                    Text(
-                        text = app.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                supportingContent = {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = app.packageName,
-                            style =
-                                MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ModeLabel(
-                                label = stringResource(R.string.app_uid_tag, app.uid),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            )
-                            if (app.isSystem) {
-                                ModeLabel(
-                                    label = stringResource(R.string.app_tag_system),
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                )
-                            }
-                        }
-                    }
-                },
+private fun AppHeaderCard(app: AppInfo) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceBright,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppIcon(
+                packageName = app.packageName,
+                modifier = Modifier.size(56.dp),
             )
+            Spacer(Modifier.width(16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = app.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = app.packageName,
+                    style =
+                        MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                        ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ModeLabel(
+                        label = stringResource(R.string.app_uid_tag, app.uid),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    )
+                    if (app.isSystem) {
+                        ModeLabel(
+                            label = stringResource(R.string.app_tag_system),
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -779,7 +780,7 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun AuthorizationGroup(
+private fun AuthorizationCard(
     allowed: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
@@ -840,72 +841,72 @@ private fun AuthorizationGroup(
             label = "authorizationIconContentColor",
         )
 
-    CardGroup {
-        item {
-            val shapes = currentListItemShapes()
-            SegmentedListItem(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(shapes.shape)
-                        .toggleable(
-                            value = allowed,
-                            role = Role.Switch,
-                            onValueChange = onToggle,
-                        ),
-                shapes = shapes,
-                colors =
-                    ListItemDefaults.segmentedColors(
-                        containerColor = containerColor,
-                        contentColor = contentColor,
-                        supportingContentColor = supportingColor,
-                    ),
-                leadingContent = {
-                    Surface(
-                        modifier = Modifier.size(42.dp),
-                        shape = MaterialTheme.shapes.large,
-                        color = iconContainerColor,
-                        contentColor = iconContentColor,
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Crossfade(
-                                targetState = allowed,
-                                animationSpec = motionScheme.defaultEffectsSpec(),
-                                label = "authorizationLockIcon",
-                            ) { isAllowed ->
-                                Icon(
-                                    imageVector =
-                                        if (isAllowed) {
-                                            Icons.Rounded.LockOpen
-                                        } else {
-                                            Icons.Rounded.Lock
-                                        },
-                                    contentDescription = null,
-                                    modifier = Modifier.size(21.dp),
-                                )
-                            }
-                        }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = containerColor,
+                contentColor = contentColor,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = allowed,
+                        role = Role.Switch,
+                        onValueChange = onToggle,
+                    ).padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = MaterialTheme.shapes.large,
+                color = iconContainerColor,
+                contentColor = iconContentColor,
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Crossfade(
+                        targetState = allowed,
+                        animationSpec = motionScheme.defaultEffectsSpec(),
+                        label = "authorizationLockIcon",
+                    ) { isAllowed ->
+                        Icon(
+                            imageVector =
+                                if (isAllowed) {
+                                    Icons.Rounded.LockOpen
+                                } else {
+                                    Icons.Rounded.Lock
+                                },
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
-                },
-                content = {
-                    Text(
-                        text = stringResource(R.string.app_allow_root),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        text = stringResource(R.string.app_root_access_summary),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                trailingContent = {
-                    Switch(
-                        checked = allowed,
-                        onCheckedChange = null,
-                        modifier = Modifier.clearAndSetSemantics { },
-                    )
-                },
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.app_allow_root),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.app_root_access_summary),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = supportingColor,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = allowed,
+                onCheckedChange = null,
+                modifier = Modifier.clearAndSetSemantics { },
             )
         }
     }
