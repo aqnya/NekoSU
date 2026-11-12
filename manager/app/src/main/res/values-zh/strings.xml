@@ -131,7 +131,6 @@
     <string name="app_mount_namespace">Mount 命名空间</string>
     <string name="app_config_locked_title">Root 配置已锁定</string>
     <string name="app_config_locked_desc">开启上方授权后，即可配置 UID、Capabilities、SELinux Domain 与 Mount 命名空间。</string>
-    <string name="app_changes_saved_immediately">更改会立即保存</string>
 
     <!-- 通用对话框 -->
     <string name="dialog_select_all">全选</string>
